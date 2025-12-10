@@ -2,7 +2,8 @@
 import gerarRelatorioPDF from "./utils/gerarRelatorioPDF";
 import React, { useState, useEffect } from 'react';
 import { Calendar, Clock, DollarSign, User, FileText, Plus, Edit2, Trash2, Filter } from 'lucide-react';
-import supabase from './services/supabase'; // ✅ Importamos nossa conexão nova
+import supabase from './services/supabase'; // 
+import StatusCard from './components/StatusCard';
 
 const App = () => {
   // --- ESTADOS ---
@@ -429,35 +430,28 @@ const App = () => {
                 </div>
               </div>
             </div>
-
-            {/* Dashboard Colorido e Responsivo */}
-            <div className="bg-white p-6 rounded-lg shadow">
-              <h3 className="text-lg font-semibold mb-4">Serviços por Status</h3>
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4">
-                {Object.entries(stats.porStatus || {}).map(([status, dados]) => {
-                  const config = statusConfig[status] || statusConfig['Pendente'];
-                  return (
-                    <div 
-                      key={status} 
-                      className={`flex flex-col justify-between p-4 rounded-lg border shadow-sm transition-transform hover:scale-105 ${config.color}`}
-                    >
-                      <div className="flex justify-between items-start">
-                        <div className="text-3xl">{config.icon}</div>
-                        <p className="text-2xl font-bold font-mono">{dados.count}</p>
-                      </div>
-                      <div className="mt-4">
-                        <p className="text-xs font-bold uppercase tracking-wide opacity-90">
-                          {status}
-                        </p>
-                        <p className="text-sm font-medium opacity-80 mt-1 border-t border-black/10 pt-2">
-                          R$ {dados.valor.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                        </p>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
+          {/* Dashboard Colorido e Responsivo */}
+          <div className="bg-white p-6 rounded-lg shadow">
+            <h3 className="text-lg font-semibold mb-4">Serviços por Status</h3>
+            
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4">
+              {Object.entries(stats.porStatus || {}).map(([status, dados]) => {
+                // Pega a configuração da cor
+                const config = statusConfig[status] || statusConfig['Pendente'];
+                
+                return (
+                  <StatusCard 
+                    key={status}
+                    status={status}
+                    count={dados.count}
+                    valor={dados.valor}
+                    color={config.color}
+                    icon={config.icon}
+                  />
+                );
+              })}
             </div>
+          </div>
           </div>
         ) : activeTab === 'servicos' ? (
           <div className="space-y-4">
