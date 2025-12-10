@@ -1,102 +1,11 @@
 /* eslint-disable no-restricted-globals */
 import gerarRelatorioPDF from "./utils/gerarRelatorioPDF";
 import React, { useState, useEffect } from 'react';
-import { Calendar, Clock, DollarSign, User, FileText, TrendingUp, Plus, Edit2, Trash2, Filter, Download, CheckCircle } from 'lucide-react';
-
-// ⚠️ CONFIGURAÇÃO DO SUPABASE - PREENCHA COM SUAS CREDENCIAIS
-const SUPABASE_URL = 'https://ubwutmslwlefviiabysc.supabase.co';
-const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVid3V0bXNsd2xlZnZpaWFieXNjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjUyMjQ4MTgsImV4cCI6MjA4MDgwMDgxOH0.lTlvqtu0hKtYDQXJB55BG9ueZ-MdtbCtBvSNQMII2b8';
+import { Calendar, Clock, DollarSign, User, FileText, Plus, Edit2, Trash2, Filter } from 'lucide-react';
+import supabase from './services/supabase'; // ✅ Importamos nossa conexão nova
 
 const App = () => {
-  const handleGerarPDF = () => {
-  const servicosFiltrados = servicos.filter((servico) => {
-    const clienteOK =
-      !filtros.cliente || servico.cliente === filtros.cliente;
-
-    const statusOK =
-      !filtros.status || servico.status === filtros.status;
-
-    const dataServico = new Date(servico.data);
-    const dataInicio = filtros.dataInicio ? new Date(filtros.dataInicio) : null;
-    const dataFim = filtros.dataFim ? new Date(filtros.dataFim) : null;
-
-    const dataOK =
-      (!dataInicio || dataServico >= dataInicio) &&
-      (!dataFim || dataServico <= dataFim);
-
-    return clienteOK && statusOK && dataOK;
-  });
-
-  // ✅ Agora captura o PDF como Blob
-  const pdfBlob = gerarRelatorioPDF(servicosFiltrados, filtros);
-
-  // ✅ Força download automático
-  const url = URL.createObjectURL(pdfBlob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = "relatorio-servicos.pdf";
-  a.click();
-  URL.revokeObjectURL(url);
-};
-const handleEnviarEmail = async () => {
-  if (!filtros.cliente) {
-    alert("Selecione um cliente antes de enviar o e-mail!");
-    return;
-  }
-
-  // Busca os dados do cliente selecionado
-  const clienteSelecionado = clientes.find(c => c.nome === filtros.cliente);
-  if (!clienteSelecionado || !clienteSelecionado.email) {
-    alert("O cliente selecionado não possui e-mail cadastrado!");
-    return;
-  }
-
-  const servicosFiltrados = servicos.filter((servico) => {
-    const clienteOK =
-      !filtros.cliente || servico.cliente === filtros.cliente;
-
-    const statusOK =
-      !filtros.status || servico.status === filtros.status;
-
-    const dataServico = new Date(servico.data);
-    const dataInicio = filtros.dataInicio ? new Date(filtros.dataInicio) : null;
-    const dataFim = filtros.dataFim ? new Date(filtros.dataFim) : null;
-
-    const dataOK =
-      (!dataInicio || dataServico >= dataInicio) &&
-      (!dataFim || dataServico <= dataFim);
-
-    return clienteOK && statusOK && dataOK;
-  });
-
-  const pdfBlob = gerarRelatorioPDF(servicosFiltrados, filtros);
-
-  // Prepara FormData para enviar ao servidor
-  const formData = new FormData();
-  formData.append("pdf", pdfBlob, "relatorio-servicos.pdf");
-  formData.append("email", clienteSelecionado.email);       // ⚡ e-mail do cliente
-  formData.append("nomeCliente", clienteSelecionado.nome);  // ⚡ nome do cliente
-
-  try {
-    const response = await fetch("http://localhost:3333/enviar-pdf", { // ⚡ rota correta
-      method: "POST",
-      body: formData
-    });
-
-    if (response.ok) {
-      setToast({ visivel: true, mensagem: "Email enviado com sucesso! 📧" });
-    } else {
-      const error = await response.text();
-      setToast({ visivel: true, mensagem: "Erro ao enviar email: " + error });
-    }
-
-
-  } catch (error) {
-    console.error("Erro ao enviar email:", error);
-    alert("Erro ao enviar email! Confira se o servidor está rodando.");
-  }
-};
-
+  // --- ESTADOS ---
   const [servicos, setServicos] = useState([]);
   const [clientes, setClientes] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -108,6 +17,7 @@ const handleEnviarEmail = async () => {
   const [showClienteModal, setShowClienteModal] = useState(false);
   const [editingService, setEditingService] = useState(null);
   const [editingCliente, setEditingCliente] = useState(null);
+  
   const [filtros, setFiltros] = useState({
     cliente: '',
     status: '',
@@ -135,71 +45,82 @@ const handleEnviarEmail = async () => {
     ativo: true
   });
 
+  // --- CONFIGURAÇÃO DE CORES DOS STATUS ---
+  const statusConfig = {
+    'Pendente': { color: 'bg-gray-100 text-gray-800 border-gray-200', icon: '⏳', label: 'Pendente' },
+    'Em aprovação': { color: 'bg-orange-100 text-orange-800 border-orange-200', icon: '⏱️', label: 'Em Aprovação' },
+    'Aprovado': { color: 'bg-yellow-100 text-yellow-800 border-yellow-200', icon: '✅', label: 'Aprovado' },
+    'NF Emitida': { color: 'bg-blue-100 text-blue-800 border-blue-200', icon: '📄', label: 'NF Emitida' },
+    'Pago': { color: 'bg-green-100 text-green-800 border-green-200', icon: '💰', label: 'Pago' }
+  };
+
+  // --- FUNÇÕES DE BANCO DE DADOS (SUPABASE V2) ---
+
   const carregarDados = async () => {
     try {
       setLoading(true);
       
-      const resServicos = await fetch(`${SUPABASE_URL}/rest/v1/servicos_prestados?select=*&order=data.desc`, {
-        headers: {
-          'apikey': SUPABASE_KEY,
-          'Authorization': `Bearer ${SUPABASE_KEY}`
-        }
-      });
-      const dataServicos = await resServicos.json();
+      // 1. Buscar Serviços (Ordenado por data decrescente)
+      const { data: dataServicos, error: errorServicos } = await supabase
+        .from('servicos_prestados')
+        .select('*')
+        .order('data', { ascending: false });
+
+      if (errorServicos) throw errorServicos;
       setServicos(dataServicos);
 
-      const resClientes = await fetch(`${SUPABASE_URL}/rest/v1/clientes?select=*&order=nome`, {
-        headers: {
-          'apikey': SUPABASE_KEY,
-          'Authorization': `Bearer ${SUPABASE_KEY}`
-        }
-      });
-      const dataClientes = await resClientes.json();
+      // 2. Buscar Clientes (Ordenado por nome)
+      const { data: dataClientes, error: errorClientes } = await supabase
+        .from('clientes')
+        .select('*')
+        .order('nome', { ascending: true });
+
+      if (errorClientes) throw errorClientes;
       setClientes(dataClientes);
       
-      setLoading(false);
     } catch (error) {
       console.error('Erro ao carregar dados:', error);
-      alert('Erro ao conectar com o Supabase. Verifique suas credenciais!');
-      setTimeout(() => setLoading(false), 600);
+      alert('Erro ao carregar dados do sistema.');
+    } finally {
+      setLoading(false);
     }
   };
 
+  // Carrega dados ao abrir o app
   useEffect(() => {
-    if (SUPABASE_URL !== 'SEU_PROJECT_URL_AQUI') {
-      carregarDados();
-    }
+    carregarDados();
   }, []);
 
   const salvarServico = async () => {
     try {
-      const url = editingService 
-        ? `${SUPABASE_URL}/rest/v1/servicos_prestados?id=eq.${editingService.id}`
-        : `${SUPABASE_URL}/rest/v1/servicos_prestados`;
+      let error;
       
-      const method = editingService ? 'PATCH' : 'POST';
-      
-      const response = await fetch(url, {
-        method,
-        headers: {
-          'apikey': SUPABASE_KEY,
-          'Authorization': `Bearer ${SUPABASE_KEY}`,
-          'Content-Type': 'application/json',
-          'Prefer': 'return=representation'
-        },
-        body: JSON.stringify(formData)
-      });
-
-      if (response.ok) {
-        alert(editingService ? 'Serviço atualizado!' : 'Serviço cadastrado!');
-        setShowModal(false);
-        setEditingService(null);
-        resetForm();
-        carregarDados();
+      if (editingService) {
+        // ATUALIZAR (UPDATE)
+        const { error: updateError } = await supabase
+          .from('servicos_prestados')
+          .update(formData)
+          .eq('id', editingService.id);
+        error = updateError;
+      } else {
+        // CRIAR NOVO (INSERT)
+        const { error: insertError } = await supabase
+          .from('servicos_prestados')
+          .insert([formData]);
+        error = insertError;
       }
+
+      if (error) throw error;
+
+      alert(editingService ? 'Serviço atualizado!' : 'Serviço cadastrado!');
+      setShowModal(false);
+      setEditingService(null);
+      resetForm();
+      carregarDados();
+
     } catch (error) {
       console.error('Erro ao salvar:', error);
-      alert('Erro ao salvar serviço!');
+      alert('Erro ao salvar serviço: ' + error.message);
     }
   };
 
@@ -207,13 +128,12 @@ const handleEnviarEmail = async () => {
     if (!confirm('Tem certeza que deseja excluir este serviço?')) return;
     
     try {
-      await fetch(`${SUPABASE_URL}/rest/v1/servicos_prestados?id=eq.${id}`, {
-        method: 'DELETE',
-        headers: {
-          'apikey': SUPABASE_KEY,
-          'Authorization': `Bearer ${SUPABASE_KEY}`
-        }
-      });
+      const { error } = await supabase
+        .from('servicos_prestados')
+        .delete()
+        .eq('id', id);
+
+      if (error) throw error;
       
       alert('Serviço excluído!');
       carregarDados();
@@ -225,20 +145,13 @@ const handleEnviarEmail = async () => {
 
   const alterarStatusRapido = async (id, novoStatus) => {
     try {
-      const response = await fetch(`${SUPABASE_URL}/rest/v1/servicos_prestados?id=eq.${id}`, {
-        method: 'PATCH',
-        headers: {
-          'apikey': SUPABASE_KEY,
-          'Authorization': `Bearer ${SUPABASE_KEY}`,
-          'Content-Type': 'application/json',
-          'Prefer': 'return=representation'
-        },
-        body: JSON.stringify({ status: novoStatus })
-      });
+      const { error } = await supabase
+        .from('servicos_prestados')
+        .update({ status: novoStatus })
+        .eq('id', id);
 
-      if (response.ok) {
-        carregarDados();
-      }
+      if (error) throw error;
+      carregarDados();
     } catch (error) {
       console.error('Erro ao alterar status:', error);
       alert('Erro ao alterar status!');
@@ -252,33 +165,31 @@ const handleEnviarEmail = async () => {
     }
 
     try {
-      const url = editingCliente 
-        ? `${SUPABASE_URL}/rest/v1/clientes?id=eq.${editingCliente.id}`
-        : `${SUPABASE_URL}/rest/v1/clientes`;
-      
-      const method = editingCliente ? 'PATCH' : 'POST';
-      
-      const response = await fetch(url, {
-        method,
-        headers: {
-          'apikey': SUPABASE_KEY,
-          'Authorization': `Bearer ${SUPABASE_KEY}`,
-          'Content-Type': 'application/json',
-          'Prefer': 'return=representation'
-        },
-        body: JSON.stringify(clienteFormData)
-      });
+      let error;
 
-      if (response.ok) {
-        alert(editingCliente ? 'Cliente atualizado!' : 'Cliente cadastrado!');
-        setShowClienteModal(false);
-        setEditingCliente(null);
-        resetClienteForm();
-        carregarDados();
+      if (editingCliente) {
+        // ATUALIZAR CLIENTE
+        const { error: updateError } = await supabase
+          .from('clientes')
+          .update(clienteFormData)
+          .eq('id', editingCliente.id);
+        error = updateError;
       } else {
-        const error = await response.json();
-        alert('Erro ao salvar: ' + (error.message || 'Verifique os dados'));
+        // CRIAR CLIENTE
+        const { error: insertError } = await supabase
+          .from('clientes')
+          .insert([clienteFormData]);
+        error = insertError;
       }
+
+      if (error) throw error;
+
+      alert(editingCliente ? 'Cliente atualizado!' : 'Cliente cadastrado!');
+      setShowClienteModal(false);
+      setEditingCliente(null);
+      resetClienteForm();
+      carregarDados();
+
     } catch (error) {
       console.error('Erro ao salvar cliente:', error);
       alert('Erro ao salvar cliente!');
@@ -289,19 +200,61 @@ const handleEnviarEmail = async () => {
     if (!confirm('Tem certeza que deseja excluir este cliente?')) return;
     
     try {
-      await fetch(`${SUPABASE_URL}/rest/v1/clientes?id=eq.${id}`, {
-        method: 'DELETE',
-        headers: {
-          'apikey': SUPABASE_KEY,
-          'Authorization': `Bearer ${SUPABASE_KEY}`
-        }
-      });
+      const { error } = await supabase
+        .from('clientes')
+        .delete()
+        .eq('id', id);
+
+      if (error) throw error;
       
       alert('Cliente excluído!');
       carregarDados();
     } catch (error) {
       console.error('Erro ao deletar:', error);
       alert('Erro ao excluir cliente!');
+    }
+  };
+
+  // --- FUNÇÕES DE FORMULÁRIO E UTILITÁRIOS ---
+
+  const handleGerarPDF = () => {
+    const dadosParaRelatorio = servicosFiltrados(); // Usa a função de filtro
+    const pdfBlob = gerarRelatorioPDF(dadosParaRelatorio, filtros);
+    const url = URL.createObjectURL(pdfBlob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "relatorio-servicos.pdf";
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const handleEnviarEmail = async () => {
+    if (!filtros.cliente) {
+      alert("Selecione um cliente antes de enviar o e-mail!");
+      return;
+    }
+    const clienteSelecionado = clientes.find(c => c.nome === filtros.cliente);
+    if (!clienteSelecionado || !clienteSelecionado.email) {
+      alert("O cliente selecionado não possui e-mail cadastrado!");
+      return;
+    }
+    const dadosParaRelatorio = servicosFiltrados();
+    const pdfBlob = gerarRelatorioPDF(dadosParaRelatorio, filtros);
+    const formDataEmail = new FormData();
+    formDataEmail.append("pdf", pdfBlob, "relatorio-servicos.pdf");
+    formDataEmail.append("email", clienteSelecionado.email);
+    formDataEmail.append("nomeCliente", clienteSelecionado.nome);
+
+    const response = await fetch("http://localhost:3333/enviar-pdf", {
+      method: "POST",
+      body: formDataEmail
+    });
+
+    if (response.ok) {
+      setToast({ visivel: true, mensagem: "Email enviado com sucesso! 📧", tipo: "sucesso" });
+    } else {
+      const errorText = await response.text();
+      setToast({ visivel: true, mensagem: "Erro ao enviar email: " + errorText, tipo: "erro" });
     }
   };
 
@@ -357,19 +310,25 @@ const handleEnviarEmail = async () => {
     setShowClienteModal(true);
   };
 
-  const servicosFiltrados = servicos.filter(s => {
-    if (filtros.cliente && s.cliente !== filtros.cliente) return false;
-    if (filtros.status && s.status !== filtros.status) return false;
-    if (filtros.dataInicio && s.data < filtros.dataInicio) return false;
-    if (filtros.dataFim && s.data > filtros.dataFim) return false;
-    return true;
-  });
+  // Função auxiliar para filtrar (usada no render e no PDF)
+  const servicosFiltrados = () => {
+    return servicos.filter(s => {
+      if (filtros.cliente && s.cliente !== filtros.cliente) return false;
+      if (filtros.status && s.status !== filtros.status) return false;
+      if (filtros.dataInicio && s.data < filtros.dataInicio) return false;
+      if (filtros.dataFim && s.data > filtros.dataFim) return false;
+      return true;
+    });
+  };
 
+  const servicosFiltradosData = servicosFiltrados(); // Executa o filtro para usar na tela
+
+  // Cálculos do Dashboard
   const stats = {
-    totalHoras: servicosFiltrados.reduce((sum, s) => sum + parseFloat(s.qtd_horas || 0), 0),
-    totalValor: servicosFiltrados.reduce((sum, s) => sum + parseFloat(s.valor_total || 0), 0),
-    totalServicos: servicosFiltrados.length,
-    porStatus: servicosFiltrados.reduce((acc, s) => {
+    totalHoras: servicosFiltradosData.reduce((sum, s) => sum + parseFloat(s.qtd_horas || 0), 0),
+    totalValor: servicosFiltradosData.reduce((sum, s) => sum + parseFloat(s.valor_total || 0), 0),
+    totalServicos: servicosFiltradosData.length,
+    porStatus: servicosFiltradosData.reduce((acc, s) => {
       if (!acc[s.status]) {
         acc[s.status] = { count: 0, valor: 0 };
       }
@@ -379,34 +338,7 @@ const handleEnviarEmail = async () => {
     }, {})
   };
 
-  const statusConfig = {
-    'Pendente': { color: 'bg-gray-100 text-gray-800 border-gray-200', icon: '⏳', label: 'Pendente' },
-    'Em aprovação': { color: 'bg-orange-100 text-orange-800 border-orange-200', icon: '⏱️', label: 'Em Aprovação' },
-    'Aprovado': { color: 'bg-yellow-100 text-yellow-800 border-yellow-200', icon: '✅', label: 'Aprovado' },
-    'NF Emitida': { color: 'bg-blue-100 text-blue-800 border-blue-200', icon: '📄', label: 'NF Emitida' },
-    'Pago': { color: 'bg-green-100 text-green-800 border-green-200', icon: '💰', label: 'Pago' }
-  };
-
-  if (SUPABASE_URL === 'SEU_PROJECT_URL_AQUI') {
-    return (
-      <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center p-4">
-        <div className="bg-white rounded-lg shadow-xl p-8 max-w-2xl">
-          <h1 className="text-3xl font-bold text-gray-800 mb-4">⚙️ Configuração Necessária</h1>
-          <p className="text-gray-600 mb-4">Para usar o sistema, você precisa configurar suas credenciais do Supabase:</p>
-          <ol className="list-decimal list-inside space-y-2 text-gray-700 mb-6">
-            <li>Acesse seu projeto no Supabase</li>
-            <li>Vá em <strong>Project Settings → API</strong></li>
-            <li>Copie a <strong>Project URL</strong> e a <strong>anon public key</strong></li>
-            <li>Cole no código nas linhas 6 e 7</li>
-          </ol>
-          <div className="bg-gray-100 p-4 rounded font-mono text-sm">
-            <p className="text-red-600">const SUPABASE_URL = 'https://seu-projeto.supabase.co';</p>
-            <p className="text-red-600">const SUPABASE_KEY = 'sua-chave-aqui';</p>
-          </div>
-        </div>
-      </div>
-    );
-  }
+  // --- RENDERIZAÇÃO (JSX) ---
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -423,7 +355,6 @@ const handleEnviarEmail = async () => {
                         hover:bg-indigo-700 transition-all duration-200 
                         hover:scale-105 active:scale-95"
             >
-
               <Plus size={20} />
               Novo Serviço
             </button>
@@ -449,10 +380,7 @@ const handleEnviarEmail = async () => {
         </div>
       </div>
 
-      <div
-      key={activeTab}
-      className="max-w-7xl mx-auto px-4 py-6 animate-fade-in-up"
-      >
+      <div key={activeTab} className="max-w-7xl mx-auto px-4 py-6 animate-fade-in-up">
         {loading ? (
           <div className="text-center py-12">
             <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600 mx-auto"></div>
@@ -460,7 +388,7 @@ const handleEnviarEmail = async () => {
           </div>
         ) : activeTab === 'dashboard' ? (
           <div className="space-y-6">
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4 animate-fade-in-up">
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4 animate-fade-in-up">
               <div className="bg-white p-6 rounded-lg shadow animate-slide-up delay-100">
                 <div className="flex items-center justify-between">
                   <div>
@@ -480,6 +408,7 @@ const handleEnviarEmail = async () => {
                   <DollarSign className="text-green-600" size={32} />
                 </div>
               </div>
+              
               <div className="bg-white p-6 rounded-lg shadow animate-slide-up delay-300">
                 <div className="flex items-center justify-between">
                   <div>
@@ -501,39 +430,34 @@ const handleEnviarEmail = async () => {
               </div>
             </div>
 
-            {/* <<<<< AQUI: BLOCO "Serviços por Status" SUBSTITUÍDO (corrigido) >>>>> */}
+            {/* Dashboard Colorido e Responsivo */}
             <div className="bg-white p-6 rounded-lg shadow">
               <h3 className="text-lg font-semibold mb-4">Serviços por Status</h3>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-6">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4">
                 {Object.entries(stats.porStatus || {}).map(([status, dados]) => {
                   const config = statusConfig[status] || statusConfig['Pendente'];
-                  
                   return (
                     <div 
                       key={status} 
-                      className={`flex flex-col items-center justify-center p-6 rounded-xl border shadow-sm transition-all duration-300 hover:scale-105 hover:-translate-y-1 hover:shadow-lg ${config.color}`}
+                      className={`flex flex-col justify-between p-4 rounded-lg border shadow-sm transition-transform hover:scale-105 ${config.color}`}
                     >
-                      <div className="text-3xl mb-2">{config.icon}</div>
-
-                      <p className="text-3xl font-bold font-mono">
-                        {dados.count}
-                      </p>
-
-                      <p className="text-sm font-bold uppercase tracking-wide mt-1 opacity-90 text-center">
-                        {status}
-                      </p>
-
-                      <p className="text-sm mt-3 font-medium opacity-75 border-t border-black/10 pt-2 w-full text-center">
-                        R$ {dados.valor.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                      </p>
+                      <div className="flex justify-between items-start">
+                        <div className="text-3xl">{config.icon}</div>
+                        <p className="text-2xl font-bold font-mono">{dados.count}</p>
+                      </div>
+                      <div className="mt-4">
+                        <p className="text-xs font-bold uppercase tracking-wide opacity-90">
+                          {status}
+                        </p>
+                        <p className="text-sm font-medium opacity-80 mt-1 border-t border-black/10 pt-2">
+                          R$ {dados.valor.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                        </p>
+                      </div>
                     </div>
                   );
                 })}
               </div>
             </div>
-            {/* >>>>> FIM DO BLOCO SUBSTITUÍDO >>>>> */}
-
           </div>
         ) : activeTab === 'servicos' ? (
           <div className="space-y-4">
@@ -585,44 +509,32 @@ const handleEnviarEmail = async () => {
               </div>
             </div>
             <div className="flex justify-end gap-4">
-            <button
-              onClick={handleGerarPDF}
-              className="flex items-center gap-2 bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg shadow transition-all hover:scale-105 active:scale-95"
-            >
-              📄 Gerar Relatório PDF
-            </button>
+              <button
+                onClick={handleGerarPDF}
+                className="flex items-center gap-2 bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg shadow transition-all hover:scale-105 active:scale-95"
+              >
+                📄 Gerar Relatório PDF
+              </button>
 
-            <button
-              onClick={async () => {
-                setEmailEnviando(true);
-                try {
-                  await handleEnviarEmail();
-                  setToast({ mensagem: "Email enviado com sucesso! ✅", tipo: "sucesso", visivel: true });
-                } catch {
-                  setToast({ mensagem: "Erro ao enviar email! 😢", tipo: "erro", visivel: true });
-                }
-                setEmailEnviando(false);
-
-                // Sumir depois de 3s
-                setTimeout(() => setToast(prev => ({ ...prev, visivel: false })), 3000);
-              }}
-              disabled={emailEnviando}
-              className={`flex items-center gap-2 px-4 py-2 rounded-lg shadow transition-all hover:scale-105 active:scale-95 
-                ${emailEnviando ? "bg-green-400 cursor-not-allowed" : "bg-green-600 hover:bg-green-700 text-white"}`}
-            >
-              {emailEnviando ? "Enviando Email ⏳" : "✉️ Enviar por Email"}
-            </button>
-          </div>
-
-          {/* Aviso bonito */}
-          {aviso.mensagem && (
-            <div className={`fixed top-4 right-4 px-4 py-2 rounded shadow-lg text-white transition-all
-              ${aviso.tipo === "sucesso" ? "bg-green-600" : "bg-red-600"}`}
-              onAnimationEnd={() => setAviso({ mensagem: "", tipo: "" })}
-            >
-              {aviso.mensagem}
+              <button
+                onClick={async () => {
+                  setEmailEnviando(true);
+                  try {
+                    await handleEnviarEmail();
+                  } catch {
+                    setToast({ mensagem: "Erro inesperado!", tipo: "erro", visivel: true });
+                  }
+                  setEmailEnviando(false);
+                  setTimeout(() => setToast(prev => ({ ...prev, visivel: false })), 3000);
+                }}
+                disabled={emailEnviando}
+                className={`flex items-center gap-2 px-4 py-2 rounded-lg shadow transition-all hover:scale-105 active:scale-95 
+                  ${emailEnviando ? "bg-green-400 cursor-not-allowed" : "bg-green-600 hover:bg-green-700 text-white"}`}
+              >
+                {emailEnviando ? "Enviando Email ⏳" : "✉️ Enviar por Email"}
+              </button>
             </div>
-          )}
+
             <div className="bg-white rounded-lg shadow overflow-hidden">
               <div className="overflow-x-auto">
                 <table className="w-full">
@@ -638,12 +550,8 @@ const handleEnviarEmail = async () => {
                     </tr>
                   </thead>
                   <tbody className="divide-y">
-                    {servicosFiltrados.map(servico => (
-                      <tr 
-                        key={servico.id} 
-                        className="hover:bg-blue-50 transition-all duration-200 
-                                  hover:shadow-sm"
-                      >
+                    {servicosFiltradosData.map(servico => (
+                      <tr key={servico.id} className="hover:bg-blue-50 transition-all duration-200 hover:shadow-sm">
                         <td className="px-4 py-3 text-sm">
                           {new Date(servico.data + 'T00:00:00').toLocaleDateString('pt-BR')}
                         </td>
@@ -723,11 +631,7 @@ const handleEnviarEmail = async () => {
                 </thead>
                 <tbody className="divide-y">
                   {clientes.map(cliente => (
-                    <tr 
-                      key={cliente.id} 
-                      className="hover:bg-blue-50 transition-all duration-200 
-                                hover:shadow-sm "
-                    >
+                    <tr key={cliente.id} className="hover:bg-blue-50 transition-all duration-200 hover:shadow-sm">
                       <td className="px-6 py-4">
                         <p className="font-medium text-gray-900">{cliente.nome}</p>
                       </td>
@@ -983,7 +887,6 @@ const handleEnviarEmail = async () => {
                   >
                     Cancelar
                   </button>
-
                 </div>
               </div>
             </div>
@@ -991,20 +894,25 @@ const handleEnviarEmail = async () => {
         </div>
       )}
 
- 
-      {/* Toast moderno: slide + fade */}
+      {/* Toast */}
       <div 
-        className={`fixed top-6 right-6 w-96 max-w-xs px-6 py-3 rounded-xl shadow-lg text-white bg-green-600 bg-opacity-90 transform transition-all duration-500
+        className={`fixed top-6 right-6 w-96 max-w-xs px-6 py-3 rounded-xl shadow-lg text-white transform transition-all duration-500
           ${toast.visivel ? "translate-x-0 opacity-100" : "translate-x-24 opacity-0"}
+          ${toast.tipo === 'sucesso' ? 'bg-green-600' : 'bg-red-600'}
         `}
       >
         {toast.mensagem}
       </div>
 
-
-
-
-
+      {/* Aviso */}
+      {aviso.mensagem && (
+        <div className={`fixed top-4 right-4 px-4 py-2 rounded shadow-lg text-white transition-all
+          ${aviso.tipo === "sucesso" ? "bg-green-600" : "bg-red-600"}`}
+          onAnimationEnd={() => setAviso({ mensagem: "", tipo: "" })}
+        >
+          {aviso.mensagem}
+        </div>
+      )}
     </div>
   );
 };
