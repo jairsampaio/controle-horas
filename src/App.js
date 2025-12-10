@@ -1,7 +1,7 @@
 /* eslint-disable no-restricted-globals */
 import gerarRelatorioPDF from "./utils/gerarRelatorioPDF";
 import React, { useState, useEffect } from 'react';
-import { Calendar, Clock, DollarSign, User, FileText, Plus, Edit2, Trash2, Filter } from 'lucide-react';
+import { Clock, DollarSign, User, FileText, Plus, Edit2, Trash2, Filter } from 'lucide-react';
 import supabase from './services/supabase'; // 
 import StatusCard from './components/StatusCard';
 
