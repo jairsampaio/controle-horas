@@ -36,7 +36,7 @@ const App = () => {
     data: new Date().toISOString().split('T')[0],
     hora_inicial: '09:00',
     hora_final: '18:00',
-    valor_hora: '150.00',
+    valor_hora: '120.00',
     atividade: '',
     solicitante: '',
     cliente: '',
