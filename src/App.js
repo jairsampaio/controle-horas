@@ -133,29 +133,33 @@ const App = () => {
   }, [session]); // Roda quando a sessão muda (login/logout)
 
   
-    // src/App.js (Na seção de useEffects)
+    // src/App.js (Substitua todo o bloco 'Força o Logout ao fechar a aba...')
 
     // --- NOVO: Força o Logout ao fechar a aba do navegador ---
     useEffect(() => {
         // Só ativa o monitoramento se houver uma sessão ativa
         if (session) {
-            const handleBeforeUnload = async (e) => {
-                // Tenta fazer o logout silenciosamente antes de fechar
-                await supabase.auth.signOut();
-                // Alguns navegadores exigem que se defina um valor de retorno
-                e.returnValue = 'Você está prestes a fazer logout. Tem certeza?'; 
+            const handleBeforeUnload = (e) => { // NÃO PRECISA SER ASYNC
+                // 1. Tenta o logout (se a rede permitir a requisição rápida)
+                supabase.auth.signOut(); 
+                
+                // 2. GARANTIA: Limpa todo o Local Storage.
+                // Isso força o app a não encontrar o token de sessão na próxima carga.
+                localStorage.clear(); 
+                
+                // Remove o aviso de confirmação do navegador, pois já temos o confirm() feio
+                delete e.returnValue; 
             };
 
             // Adiciona o listener ao objeto Window
             window.addEventListener('beforeunload', handleBeforeUnload);
 
-            // Remove o listener quando o componente for desmontado (ou a sessão acabar)
+            // Remove o listener quando o componente for desmontado
             return () => {
                 window.removeEventListener('beforeunload', handleBeforeUnload);
             };
         }
     }, [session]); // Roda sempre que a sessão mudar
-
 
   const salvarServico = async () => {
     try {
