@@ -148,7 +148,7 @@ const App = () => {
         // CRIAR NOVO (INSERT)
         const { error: insertError } = await supabase
           .from('servicos_prestados')
-          .insert([formData]);
+          .insert([{...formData, user_id: session.user.id }]);
         error = insertError;
       }
 
@@ -220,7 +220,7 @@ const App = () => {
         // CRIAR CLIENTE
         const { error: insertError } = await supabase
           .from('clientes')
-          .insert([clienteFormData]);
+          .insert([{...clienteFormData, user_id: session.user.id }]);
         error = insertError;
       }
 
