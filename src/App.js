@@ -1,10 +1,12 @@
 /* eslint-disable no-restricted-globals */
 import gerarRelatorioPDF from "./utils/gerarRelatorioPDF";
 import React, { useState, useEffect } from 'react';
-import { Clock, DollarSign, User, FileText, Plus, Edit2, Trash2, Filter } from 'lucide-react';
+import { Clock, DollarSign, User, FileText, Plus, Filter } from 'lucide-react';
 import supabase from './services/supabase'; // 
 import StatusCard from './components/StatusCard';
 import ClientModal from './components/ClientModal';
+import ServicesTable from './components/ServicesTable';
+import ClientsTable from './components/ClientsTable';
 
 const App = () => {
   // --- ESTADOS ---
@@ -553,74 +555,13 @@ const App = () => {
                 {emailEnviando ? "Enviando Email ⏳" : "✉️ Enviar por Email"}
               </button>
             </div>
-
-            <div className="bg-white rounded-lg shadow overflow-hidden">
-              <div className="overflow-x-auto">
-                <table className="w-full">
-                  <thead className="bg-gray-50 border-b">
-                    <tr>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Data</th>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Cliente</th>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Atividade</th>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Horas</th>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Valor</th>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Ações</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y">
-                    {servicosFiltradosData.map(servico => (
-                      <tr key={servico.id} className="hover:bg-blue-50 transition-all duration-200 hover:shadow-sm">
-                        <td className="px-4 py-3 text-sm">
-                          {new Date(servico.data + 'T00:00:00').toLocaleDateString('pt-BR')}
-                        </td>
-                        <td className="px-4 py-3 text-sm font-medium">{servico.cliente}</td>
-                        <td className="px-4 py-3 text-sm">{servico.atividade}</td>
-                        <td className="px-4 py-3 text-sm">{parseFloat(servico.qtd_horas).toFixed(2)}h</td>
-                        <td className="px-4 py-3 text-sm">R$ {parseFloat(servico.valor_total).toFixed(2)}</td>
-                        <td className="px-4 py-3">
-                          <select
-                            value={servico.status}
-                            onChange={(e) => alterarStatusRapido(servico.id, e.target.value)}
-                            className={`px-2 py-1 text-xs rounded-full border-0 cursor-pointer ${
-                              servico.status === 'Pago' ? 'bg-green-100 text-green-800' :
-                              servico.status === 'NF Emitida' ? 'bg-blue-100 text-blue-800' :
-                              servico.status === 'Aprovado' ? 'bg-yellow-100 text-yellow-800' :
-                              servico.status === 'Em aprovação' ? 'bg-orange-100 text-orange-800' :
-                              'bg-gray-100 text-gray-800'
-                            }`}
-                          >
-                            <option value="Pendente">Pendente</option>
-                            <option value="Em aprovação">Em aprovação</option>
-                            <option value="Aprovado">Aprovado</option>
-                            <option value="NF Emitida">NF Emitida</option>
-                            <option value="Pago">Pago</option>
-                          </select>
-                        </td>
-                        <td className="px-4 py-3">
-                          <div className="flex gap-2">
-                            <button
-                              onClick={() => editarServico(servico)}
-                              className="text-blue-600 hover:text-blue-800 transition-transform hover:scale-125"
-                              title="Editar serviço"
-                            >
-                              <Edit2 size={16} />
-                            </button>
-                            <button
-                              onClick={() => deletarServico(servico.id)}
-                              className="text-red-600 hover:text-red-800 transition-transform hover:scale-125"
-                              title="Excluir serviço"
-                            >
-                              <Trash2 size={16} />
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
+            <ServicesTable 
+            servicos={servicosFiltradosData}
+            onStatusChange={alterarStatusRapido}
+            onEdit={editarServico}
+            onDelete={deletarServico}
+            />      
+            
           </div>
         ) : (
           <div className="space-y-4">
@@ -636,56 +577,11 @@ const App = () => {
                 Novo Cliente
               </button>
             </div>
-
-            <div className="bg-white rounded-lg shadow overflow-hidden">
-              <table className="w-full">
-                <thead className="bg-gray-50 border-b">
-                  <tr>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Nome</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Email</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Telefone</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Ações</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y">
-                  {clientes.map(cliente => (
-                    <tr key={cliente.id} className="hover:bg-blue-50 transition-all duration-200 hover:shadow-sm">
-                      <td className="px-6 py-4">
-                        <p className="font-medium text-gray-900">{cliente.nome}</p>
-                      </td>
-                      <td className="px-6 py-4 text-sm text-gray-600">{cliente.email || '-'}</td>
-                      <td className="px-6 py-4 text-sm text-gray-600">{cliente.telefone || '-'}</td>
-                      <td className="px-6 py-4">
-                        <span className={`px-2 py-1 text-xs rounded-full ${
-                          cliente.ativo ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'
-                        }`}>
-                          {cliente.ativo ? 'Ativo' : 'Inativo'}
-                        </span>
-                      </td>
-                      <td className="px-6 py-4">
-                        <div className="flex gap-2">
-                          <button
-                            onClick={() => editarCliente(cliente)}
-                            className="text-blue-600 hover:text-blue-800"
-                            title="Editar cliente"
-                          >
-                            <Edit2 size={16} />
-                          </button>
-                          <button
-                            onClick={() => deletarCliente(cliente.id)}
-                            className="text-red-600 hover:text-red-800"
-                            title="Excluir cliente"
-                          >
-                            <Trash2 size={16} />
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+            <ClientsTable 
+              clientes={clientes}
+              onEdit={editarCliente}
+              onDelete={deletarCliente}
+            />
           </div>
         )}
       </div>
