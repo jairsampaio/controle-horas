@@ -154,7 +154,8 @@ const App = () => {
 
       if (error) throw error;
 
-      alert(editingService ? 'Serviço atualizado!' : 'Serviço cadastrado!');
+      //alert(editingService ? 'Serviço atualizado!' : 'Serviço cadastrado!');
+      showToast(editingService ? 'Serviço atualizado!' : 'Serviço cadastrado!', 'sucesso');
       setShowModal(false);
       setEditingService(null);
       resetForm();
@@ -162,7 +163,8 @@ const App = () => {
 
     } catch (error) {
       console.error('Erro ao salvar:', error);
-      alert('Erro ao salvar serviço: ' + error.message);
+      //alert('Erro ao salvar serviço: ' + error.message);
+      showToast('Erro ao salvar serviço: ' + error.message, 'erro');
     }
   };
 
@@ -177,11 +179,13 @@ const App = () => {
 
       if (error) throw error;
       
-      alert('Serviço excluído!');
+      //alert('Serviço excluído!');
+      showToast('Serviço excluído!', 'sucesso');
       carregarDados();
     } catch (error) {
       console.error('Erro ao deletar:', error);
-      alert('Erro ao excluir serviço!');
+      //alert('Erro ao excluir serviço!');
+      showToast('Erro ao excluir serviço!', 'erro');
     }
   };
 
@@ -201,9 +205,13 @@ const App = () => {
   };
 
   const salvarCliente = async () => {
-    if (!clienteFormData.nome.trim()) {
-      alert('Nome do cliente é obrigatório!');
-      return;
+    //if (!clienteFormData.nome.trim()) {
+      //alert('Nome do cliente é obrigatório!');
+      //return;
+    //}
+    if (!clienteFormData.nome.trim()) { 
+    showToast('Nome do cliente é obrigatório!', 'erro');
+    return; 
     }
 
     try {
@@ -226,7 +234,8 @@ const App = () => {
 
       if (error) throw error;
 
-      alert(editingCliente ? 'Cliente atualizado!' : 'Cliente cadastrado!');
+      //alert(editingCliente ? 'Cliente atualizado!' : 'Cliente cadastrado!');
+      showToast(editingCliente ? 'Cliente atualizado!' : 'Cliente cadastrado!', 'sucesso');
       setShowClienteModal(false);
       setEditingCliente(null);
       resetClienteForm();
@@ -234,7 +243,8 @@ const App = () => {
 
     } catch (error) {
       console.error('Erro ao salvar cliente:', error);
-      alert('Erro ao salvar cliente!');
+      //alert('Erro ao salvar cliente!');
+      showToast('Erro ao salvar cliente!', 'erro');
     }
   };
 
@@ -249,11 +259,13 @@ const App = () => {
 
       if (error) throw error;
       
-      alert('Cliente excluído!');
+      //alert('Cliente excluído!');
+      showToast('Cliente excluído!', 'sucesso');
       carregarDados();
     } catch (error) {
       console.error('Erro ao deletar:', error);
-      alert('Erro ao excluir cliente!');
+      //alert('Erro ao excluir cliente!');
+      showToast('Erro ao excluir cliente!', 'erro');
     }
   };
 
@@ -279,6 +291,15 @@ const App = () => {
         reader.onerror = reject;
         reader.readAsDataURL(blob);
       });
+    };
+    // src/App.js (Na seção de utilitários)
+
+    // Função auxiliar para exibir o Toast e fazê-lo sumir automaticamente
+    const showToast = (mensagem, tipo = 'sucesso') => {
+      setToast({ visivel: true, mensagem: mensagem, tipo: tipo });
+      setTimeout(() => {
+        setToast(prev => ({ ...prev, visivel: false }));
+      }, 3000); // Esconde após 3 segundos
     };
 
   const handleGerarPDF = () => {
