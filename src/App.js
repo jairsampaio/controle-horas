@@ -170,6 +170,8 @@ const App = () => {
 
   const deletarServico = async (id) => {
     if (!confirm('Tem certeza que deseja excluir este serviço?')) return;
+    // Dentro de deletarServico:
+     
     
     try {
       const { error } = await supabase
@@ -250,6 +252,7 @@ const App = () => {
 
   const deletarCliente = async (id) => {
     if (!confirm('Tem certeza que deseja excluir este cliente?')) return;
+
     
     try {
       const { error } = await supabase
@@ -362,7 +365,7 @@ const App = () => {
       data: new Date().toISOString().split('T')[0],
       hora_inicial: '09:00',
       hora_final: '18:00',
-      valor_hora: '150.00',
+      valor_hora: '120.00',
       atividade: '',
       solicitante: '',
       cliente: '',
