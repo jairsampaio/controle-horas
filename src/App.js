@@ -235,31 +235,55 @@ const App = () => {
       alert("Selecione um cliente antes de enviar o e-mail!");
       return;
     }
+
     const clienteSelecionado = clientes.find(c => c.nome === filtros.cliente);
     if (!clienteSelecionado || !clienteSelecionado.email) {
       alert("O cliente selecionado não possui e-mail cadastrado!");
       return;
     }
+
+    // 1. Gera o PDF (igual você já fazia)
     const dadosParaRelatorio = servicosFiltrados();
     const pdfBlob = gerarRelatorioPDF(dadosParaRelatorio, filtros);
-    const formDataEmail = new FormData();
-    formDataEmail.append("pdf", pdfBlob, "relatorio-servicos.pdf");
-    formDataEmail.append("email", clienteSelecionado.email);
-    formDataEmail.append("nomeCliente", clienteSelecionado.nome);
 
-    const response = await fetch("http://localhost:3333/enviar-pdf", {
-      method: "POST",
-      body: formDataEmail
-    });
+    // 2. Converte Blob para Base64 (Texto)
+    const blobToBase64 = (blob) => {
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onloadend = () => resolve(reader.result);
+        reader.onerror = reject;
+        reader.readAsDataURL(blob);
+      });
+    };
 
-    if (response.ok) {
-      setToast({ visivel: true, mensagem: "Email enviado com sucesso! 📧", tipo: "sucesso" });
-    } else {
-      const errorText = await response.text();
-      setToast({ visivel: true, mensagem: "Erro ao enviar email: " + errorText, tipo: "erro" });
+    try {
+      const pdfBase64 = await blobToBase64(pdfBlob);
+
+      // 3. Envia para a API da Vercel (JSON simples)
+      const response = await fetch("/api/enviar-email", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          email: clienteSelecionado.email,
+          nomeCliente: clienteSelecionado.nome,
+          pdfBase64: pdfBase64
+        })
+      });
+
+      if (response.ok) {
+        setToast({ visivel: true, mensagem: "Email enviado com sucesso! 📧", tipo: "sucesso" });
+      } else {
+        const errorData = await response.json();
+        setToast({ visivel: true, mensagem: "Erro: " + (errorData.error || "Falha no envio"), tipo: "erro" });
+      }
+
+    } catch (error) {
+      console.error("Erro técnico:", error);
+      setToast({ visivel: true, mensagem: "Erro de conexão ao enviar email.", tipo: "erro" });
     }
   };
-
   const resetForm = () => {
     setFormData({
       data: new Date().toISOString().split('T')[0],
