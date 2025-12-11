@@ -8,6 +8,7 @@ import ClientModal from './components/ClientModal';
 import ServicesTable from './components/ServicesTable';
 import ClientsTable from './components/ClientsTable';
 import ServiceModal from './components/ServiceModal';
+import Auth from './components/Auth';
 
 const App = () => {
   // --- ESTADOS ---
@@ -22,6 +23,7 @@ const App = () => {
   const [showClienteModal, setShowClienteModal] = useState(false);
   const [editingService, setEditingService] = useState(null);
   const [editingCliente, setEditingCliente] = useState(null);
+  const [session, setSession] = useState(null);
   
   const [filtros, setFiltros] = useState({
     cliente: '',
@@ -59,12 +61,25 @@ const App = () => {
     'Pago': { color: 'bg-green-100 text-green-800 border-green-200', icon: '💰', label: 'Pago' }
   };
 
-  // --- FUNÇÕES DE BANCO DE DADOS (SUPABASE V2) ---
+// src/App.js (A partir de // --- FUNÇÕES DE BANCO DE DADOS (SUPABASE V2) ---)
+
+// --- FUNÇÕES DE BANCO DE DADOS (SUPABASE V2) ---
+
+  const getSession = async () => {
+    setLoading(true);
+    // Busca o estado de autenticação do Supabase
+    const { data: { session }, error } = await supabase.auth.getSession();
+
+    if (error) {
+      console.error('Erro ao buscar sessão:', error);
+      alert('Erro de autenticação!');
+    }
+    setSession(session);
+    setLoading(false);
+  };
 
   const carregarDados = async () => {
     try {
-      setLoading(true);
-      
       // 1. Buscar Serviços (Ordenado por data decrescente)
       const { data: dataServicos, error: errorServicos } = await supabase
         .from('servicos_prestados')
@@ -86,15 +101,37 @@ const App = () => {
     } catch (error) {
       console.error('Erro ao carregar dados:', error);
       alert('Erro ao carregar dados do sistema.');
-    } finally {
-      setLoading(false);
     }
   };
 
-  // Carrega dados ao abrir o app
+  // Carrega a sessão na montagem e monitora mudanças de estado
   useEffect(() => {
-    carregarDados();
-  }, []);
+    getSession();
+
+    const { data: authListener } = supabase.auth.onAuthStateChange(
+      (_event, session) => {
+        setSession(session);
+      }
+    );
+    
+    return () => {
+      authListener.subscription.unsubscribe();
+    };
+  }, []); // Roda apenas na montagem
+
+  // Recarrega os dados SEMPRE que a sessão for estabelecida
+  useEffect(() => {
+    if (session) {
+      setLoading(true);
+      carregarDados();
+      setLoading(false);
+    } else {
+      // Limpa os dados se fizer logout
+      setServicos([]);
+      setClientes([]);
+    }
+  }, [session]); // Roda quando a sessão muda (login/logout)
+
 
   const salvarServico = async () => {
     try {
@@ -218,6 +255,19 @@ const App = () => {
       console.error('Erro ao deletar:', error);
       alert('Erro ao excluir cliente!');
     }
+  };
+
+  // Funções utilitárias de Autenticação
+  const handleLogout = async () => {
+    setLoading(true);
+    const { error } = await supabase.auth.signOut();
+    if (error) {
+      console.error(error);
+    } else {
+      setSession(null); // Limpa a sessão localmente
+      // Os dados serão limpos no useEffect
+    }
+    setLoading(false);
   };
 
   // --- FUNÇÕES DE FORMULÁRIO E UTILITÁRIOS ---
@@ -366,8 +416,35 @@ const App = () => {
     }, {})
   };
 
-  // --- RENDERIZAÇÃO (JSX) ---
+  // src/App.js (Substituir a partir de // --- RENDERIZAÇÃO (JSX) ---)
 
+// --- RENDERIZAÇÃO (JSX) ---
+
+  // Componente interno para o botão Sair
+  const LogoutButton = () => (
+    <button
+      onClick={handleLogout}
+      className="bg-red-500 text-white px-3 py-2 text-sm rounded-lg flex items-center gap-1 hover:bg-red-600 transition hover:scale-105 active:scale-95"
+    >
+      Sair
+    </button>
+  );
+
+  // 1. Se a sessão ainda não foi verificada (loading), mostra o loader.
+  if (loading && !session) {
+    return (
+      <div className="min-h-screen bg-white flex items-center justify-center">
+        <div className="animate-spin rounded-full h-16 w-16 border-t-2 border-b-2 border-indigo-600"></div>
+      </div>
+    );
+  }
+
+  // 2. Se a sessão foi verificada e não existe, mostra a tela de login.
+  if (!session) {
+    return <Auth />;
+  }
+
+  // 3. Se a sessão existe (usuário logado), mostra o App completo.
   return (
     <div className="min-h-screen bg-gray-50">
       <header className="bg-white shadow-sm border-b">
@@ -377,15 +454,18 @@ const App = () => {
               <h1 className="text-2xl font-bold text-gray-900">Controle de Horas</h1>
               <p className="text-sm text-gray-500">Gerencie seus serviços prestados</p>
             </div>
-            <button
-              onClick={() => { resetForm(); setShowModal(true); }}
-              className="bg-indigo-600 text-white px-4 py-2 rounded-lg flex items-center gap-2 
-                        hover:bg-indigo-700 transition-all duration-200 
-                        hover:scale-105 active:scale-95"
-            >
-              <Plus size={20} />
-              Novo Serviço
-            </button>
+            <div className='flex items-center gap-3'> 
+              <button
+                onClick={() => { resetForm(); setShowModal(true); }}
+                className="bg-indigo-600 text-white px-4 py-2 rounded-lg flex items-center gap-2 
+                          hover:bg-indigo-700 transition-all duration-200 
+                          hover:scale-105 active:scale-95"
+              >
+                <Plus size={20} />
+                Novo Serviço
+              </button>
+              <LogoutButton />
+            </div>
           </div>
         </div>
       </header>
@@ -409,10 +489,10 @@ const App = () => {
       </div>
 
       <div key={activeTab} className="max-w-7xl mx-auto px-4 py-6 animate-fade-in-up">
-        {loading ? (
+        {loading ? ( // 👈 Note que este loading agora carrega APENAS os dados, não a sessão inicial
           <div className="text-center py-12">
             <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600 mx-auto"></div>
-            <p className="mt-4 text-gray-600">Carregando...</p>
+            <p className="mt-4 text-gray-600">Carregando Dados...</p>
           </div>
         ) : activeTab === 'dashboard' ? (
           <div className="space-y-6">
@@ -457,28 +537,28 @@ const App = () => {
                 </div>
               </div>
             </div>
-          {/* Dashboard Colorido e Responsivo */}
-          <div className="bg-white p-6 rounded-lg shadow">
-            <h3 className="text-lg font-semibold mb-4">Serviços por Status</h3>
-            
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4">
-              {Object.entries(stats.porStatus || {}).map(([status, dados]) => {
-                // Pega a configuração da cor
-                const config = statusConfig[status] || statusConfig['Pendente'];
-                
-                return (
-                  <StatusCard 
-                    key={status}
-                    status={status}
-                    count={dados.count}
-                    valor={dados.valor}
-                    color={config.color}
-                    icon={config.icon}
-                  />
-                );
-              })}
+            {/* Dashboard Colorido e Responsivo */}
+            <div className="bg-white p-6 rounded-lg shadow">
+              <h3 className="text-lg font-semibold mb-4">Serviços por Status</h3>
+              
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4">
+                {Object.entries(stats.porStatus || {}).map(([status, dados]) => {
+                  // Pega a configuração da cor
+                  const config = statusConfig[status] || statusConfig['Pendente'];
+                  
+                  return (
+                    <StatusCard 
+                      key={status}
+                      status={status}
+                      count={dados.count}
+                      valor={dados.valor}
+                      color={config.color}
+                      icon={config.icon}
+                    />
+                  );
+                })}
+              </div>
             </div>
-          </div>
           </div>
         ) : activeTab === 'servicos' ? (
           <div className="space-y-4">
@@ -556,11 +636,11 @@ const App = () => {
               </button>
             </div>
             <ServicesTable 
-            servicos={servicosFiltradosData}
-            onStatusChange={alterarStatusRapido}
-            onEdit={editarServico}
-            onDelete={deletarServico}
-            />      
+              servicos={servicosFiltradosData}
+              onStatusChange={alterarStatusRapido}
+              onEdit={editarServico}
+              onDelete={deletarServico}
+            /> 
             
           </div>
         ) : (
@@ -586,17 +666,18 @@ const App = () => {
         )}
       </div>
 
-      {/* NOVO ServiceModal */}
+      {/* Modais e Toasts (Fora do fluxo de login, mas dependem do estado) */}
+
       <ServiceModal 
-      isOpen={showModal}
-      onClose={() => { setShowModal(false); setEditingService(null); resetForm(); }}
-      onSave={salvarServico}
-      formData={formData}
-      setFormData={setFormData}
-      clientes={clientes}
-      isEditing={!!editingService}
-      />  
-      
+        isOpen={showModal}
+        onClose={() => { setShowModal(false); setEditingService(null); resetForm(); }}
+        onSave={salvarServico}
+        formData={formData}
+        setFormData={setFormData}
+        clientes={clientes}
+        isEditing={!!editingService}
+      />
+
       <ClientModal 
         isOpen={showClienteModal}
         onClose={() => { setShowClienteModal(false); setEditingCliente(null); resetClienteForm(); }}
@@ -630,3 +711,5 @@ const App = () => {
 };
 
 export default App;
+
+  
