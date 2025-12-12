@@ -10,6 +10,7 @@ import ClientsTable from './components/ClientsTable';
 import ServiceModal from './components/ServiceModal';
 import Auth from './components/Auth';
 import ConfigModal from './components/ConfigModal';
+import DashboardCharts from './components/DashboardCharts';
 
 const App = () => {
   // --- ESTADOS ---
@@ -685,6 +686,7 @@ const App = () => {
                 </div>
               </div>
             </div>
+            <DashboardCharts servicos={servicosFiltradosData} />
             {/* Dashboard Colorido e Responsivo */}
             <div className="bg-white p-6 rounded-lg shadow">
               <h3 className="text-lg font-semibold mb-4">Serviços por Status</h3>
