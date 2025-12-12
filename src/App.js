@@ -11,6 +11,7 @@ import ServiceModal from './components/ServiceModal';
 import Auth from './components/Auth';
 import ConfigModal from './components/ConfigModal';
 import DashboardCharts from './components/DashboardCharts';
+import * as XLSX from 'xlsx';
 
 const App = () => {
   // --- ESTADOS ---
@@ -421,6 +422,34 @@ const App = () => {
     URL.revokeObjectURL(url);
   };
 
+  // src/App.js (Na seção de Utilitários)
+
+const handleExportarExcel = () => {
+  // 1. Pega os dados filtrados (o que o usuário está vendo na tabela)
+  const dados = servicosFiltradosData.map(s => ({
+    Data: new Date(s.data + 'T00:00:00').toLocaleDateString('pt-BR'),
+    Cliente: s.cliente,
+    Atividade: s.atividade,
+    'Qtd Horas': parseFloat(s.qtd_horas).toFixed(2).replace('.', ','),
+    'Valor Total': parseFloat(s.valor_total).toFixed(2).replace('.', ','),
+    Status: s.status,
+    Solicitante: s.solicitante || '-',
+    'Nota Fiscal': s.numero_nfs || '-'
+  }));
+
+  // 2. Cria uma Planilha (Worksheet)
+  const ws = XLSX.utils.json_to_sheet(dados);
+
+  // 3. Cria um Livro (Workbook) e adiciona a planilha
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, "Serviços");
+
+  // 4. Gera o arquivo e força o download
+  XLSX.writeFile(wb, `Relatorio_Servicos_${new Date().toISOString().split('T')[0]}.xlsx`);
+
+  showToast('Planilha Excel gerada com sucesso!', 'sucesso');
+};
+
   const handleEnviarEmail = async () => {
     if (!filtros.cliente) {
       alert("Selecione um cliente antes de enviar o e-mail!");
@@ -759,7 +788,16 @@ const App = () => {
                 />
               </div>
             </div>
-            <div className="flex justify-end gap-4">
+            <div className="flex justify-end gap-4 flex-wrap">
+
+              {/* 👇 NOVO BOTÃO EXCEL 👇 */}
+              <button
+                onClick={handleExportarExcel}
+                className="flex items-center gap-2 bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg shadow transition-all hover:scale-105 active:scale-95"
+              >
+                <FileText size={20} /> {/* Pode usar o ícone FileText ou importar um Sheet se quiser */}
+                Excel
+              </button>
               <button
                 onClick={handleGerarPDF}
                 className="flex items-center gap-2 bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg shadow transition-all hover:scale-105 active:scale-95"
