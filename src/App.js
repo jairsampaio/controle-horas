@@ -523,18 +523,26 @@ const App = () => {
       </header>
 
       <div className="max-w-7xl mx-auto px-4 mt-6">
-        <div className="flex gap-2 border-b">
+        {/* Ajuste Mobile: w-full e justify-between para ocupar a tela sem estourar */}
+        <div className="flex w-full border-b">
           {['dashboard', 'servicos', 'clientes'].map(tab => (
             <button
               key={tab}
               onClick={() => setActiveTab(tab)}
-              className={`px-6 py-3 font-medium transition ${
+              /* Ajuste de Classes: 
+                 - flex-1: Divide o espaço igualmente entre os 3 botões
+                 - text-sm: Fonte menor no celular
+                 - px-1: Padding menor no celular
+                 - md:*: Mantém o visual antigo apenas no PC 
+              */
+              className={`flex-1 py-3 text-sm md:text-base md:px-6 font-medium transition text-center whitespace-nowrap ${
                 activeTab === tab
                   ? 'border-b-2 border-indigo-600 text-indigo-600'
                   : 'text-gray-500 hover:text-gray-700'
               }`}
             >
-              {tab === 'dashboard' ? '📊 Dashboard' : tab === 'servicos' ? '📋 Serviços' : '👥 Clientes'}
+              {/* No celular, podemos esconder os ícones se quiser, ou deixar assim */}
+              {tab === 'dashboard' ? '📊 Dash' : tab === 'servicos' ? '📋 Serviços' : '👥 Clientes'}
             </button>
           ))}
         </div>
