@@ -1,7 +1,7 @@
 /* eslint-disable no-restricted-globals */
 import gerarRelatorioPDF from "./utils/gerarRelatorioPDF";
 import React, { useState, useEffect } from 'react';
-import { Clock, DollarSign, User, FileText, Plus, Filter, Settings, LayoutDashboard, Briefcase, Users } from 'lucide-react';
+import { Clock, DollarSign, User, FileText, Plus, Filter, Settings, Mail, Users, LayoutDashboard, Briefcase } from 'lucide-react';
 import supabase from './services/supabase'; // 
 import StatusCard from './components/StatusCard';
 import ClientModal from './components/ClientModal';
@@ -795,41 +795,60 @@ const handleExportarExcel = () => {
                 />
               </div>
             </div>
-            <div className="flex justify-end gap-4 flex-wrap">
+            {/* BARRA DE FERRAMENTAS - SERVIÇOS */}
+            <div className="bg-white p-4 rounded-lg shadow space-y-4">
+              
+              {/* ... Filtros (Mantenha seus filtros aqui como estavam) ... */}
+              
+              {/* BOTÕES DE AÇÃO */}
+              <div className="flex justify-end gap-2 pt-2 border-t md:border-t-0 md:pt-0">
+                
+                {/* Botão Excel */}
+                <button
+                  onClick={handleExportarExcel}
+                  className="flex items-center gap-2 bg-green-600 hover:bg-green-700 text-white p-2 md:px-4 md:py-2 rounded-lg shadow transition-all active:scale-95"
+                  title="Exportar para Excel"
+                >
+                  <FileText size={20} />
+                  <span className="hidden md:inline">Excel</span>
+                </button>
 
-              {/* 👇 NOVO BOTÃO EXCEL 👇 */}
-              <button
-                onClick={handleExportarExcel}
-                className="flex items-center gap-2 bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg shadow transition-all hover:scale-105 active:scale-95"
-              >
-                <FileText size={20} /> {/* Pode usar o ícone FileText ou importar um Sheet se quiser */}
-                Excel
-              </button>
-              <button
-                onClick={handleGerarPDF}
-                className="flex items-center gap-2 bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg shadow transition-all hover:scale-105 active:scale-95"
-              >
-                📄 Gerar Relatório PDF
-              </button>
+                {/* Botão PDF */}
+                <button
+                  onClick={handleGerarPDF}
+                  className="flex items-center gap-2 bg-red-600 hover:bg-red-700 text-white p-2 md:px-4 md:py-2 rounded-lg shadow transition-all active:scale-95"
+                  title="Gerar PDF"
+                >
+                  <FileText size={20} />
+                  <span className="hidden md:inline">Relatório PDF</span>
+                </button>
 
-              <button
-                onClick={async () => {
-                  setEmailEnviando(true);
-                  try {
-                    await handleEnviarEmail();
-                  } catch {
-                    setToast({ mensagem: "Erro inesperado!", tipo: "erro", visivel: true });
-                  }
-                  setEmailEnviando(false);
-                  setTimeout(() => setToast(prev => ({ ...prev, visivel: false })), 3000);
-                }}
-                disabled={emailEnviando}
-                className={`flex items-center gap-2 px-4 py-2 rounded-lg shadow transition-all hover:scale-105 active:scale-95 
-                  ${emailEnviando ? "bg-green-400 cursor-not-allowed" : "bg-green-600 hover:bg-green-700 text-white"}`}
-              >
-                {emailEnviando ? "Enviando Email ⏳" : "✉️ Enviar por Email"}
-              </button>
+                {/* Botão Email */}
+                <button
+                  onClick={async () => {
+                    setEmailEnviando(true);
+                    try {
+                      await handleEnviarEmail();
+                    } catch {
+                      setToast({ mensagem: "Erro inesperado!", tipo: "erro", visivel: true });
+                    }
+                    setEmailEnviando(false);
+                    setTimeout(() => setToast(prev => ({ ...prev, visivel: false })), 3000);
+                  }}
+                  disabled={emailEnviando}
+                  className={`flex items-center gap-2 p-2 md:px-4 md:py-2 rounded-lg shadow transition-all active:scale-95 
+                    ${emailEnviando ? "bg-green-400 cursor-not-allowed" : "bg-blue-600 hover:bg-blue-700 text-white"}`} // Mudei email para Blue pra diferenciar do Excel
+                  title="Enviar por E-mail"
+                >
+                  {/* Ícone muda se estiver enviando */}
+                  {emailEnviando ? <Clock size={20} className="animate-spin" /> : <Mail size={20} />} 
+                  <span className="hidden md:inline">
+                    {emailEnviando ? "Enviando..." : "Enviar Email"}
+                  </span>
+                </button>
+              </div>
             </div>
+
             <ServicesTable 
               servicos={servicosFiltradosData}
               onStatusChange={alterarStatusRapido}
@@ -840,18 +859,24 @@ const handleExportarExcel = () => {
           </div>
         ) : (
           <div className="space-y-4">
-            <div className="flex justify-between items-center">
-              <h2 className="text-xl font-bold text-gray-900">Gerenciar Clientes</h2>
+            <div className="flex justify-between items-center bg-white p-4 rounded-lg shadow">
+              <h2 className="text-xl font-bold text-gray-900 flex items-center gap-2">
+                <Users size={24} className="text-indigo-600 hidden md:block" /> {/* Ícone decorativo no PC */}
+                Gerenciar Clientes
+              </h2>
+              
               <button
                 onClick={() => { resetClienteForm(); setShowClienteModal(true); }}
-                className="bg-indigo-600 text-white px-4 py-2 rounded-lg flex items-center gap-2 
+                className="bg-indigo-600 text-white p-2 md:px-4 md:py-2 rounded-lg flex items-center gap-2 
                           hover:bg-indigo-700 transition-all duration-200 
-                          hover:scale-105 active:scale-95"
+                          hover:scale-105 active:scale-95 shadow"
+                title="Cadastrar Novo Cliente"
               >
                 <Plus size={20} />
-                Novo Cliente
+                <span className="hidden md:inline">Novo Cliente</span>
               </button>
             </div>
+            
             <ClientsTable 
               clientes={clientes}
               onEdit={editarCliente}
