@@ -80,7 +80,7 @@ const ClientsTable = ({ clientes, onEdit, onDelete }) => {
           </thead>
           <tbody className="divide-y divide-gray-100">
             {clientes.map(cliente => (
-              <tr key={cliente.id} className="group hover:bg-gray-50 transition-colors duration-150">
+              <tr key={cliente.id} className="group hover:bg-indigo-50 transition-colors duration-150">
                 
                 {/* 1. Nome + Avatar + Email */}
                 <td className="px-6 py-4 whitespace-nowrap">

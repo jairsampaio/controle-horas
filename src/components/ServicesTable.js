@@ -91,7 +91,7 @@ const ServicesTable = ({ servicos, onStatusChange, onEdit, onDelete }) => {
           </thead>
           <tbody className="divide-y divide-gray-100">
             {servicos.map(servico => (
-              <tr key={servico.id} className="group hover:bg-green-100 transition-colors duration-150">
+              <tr key={servico.id} className="group hover:bg-indigo-50 transition-colors duration-150">
                 
                 {/* 1. Coluna Combinada: Avatar + Nome + Data */}
                 <td className="px-6 py-4 whitespace-nowrap">
