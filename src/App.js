@@ -475,48 +475,131 @@ const handleExportarExcel = () => {
   showToast('Planilha Excel gerada com sucesso!', 'sucesso');
 };
 
+  // --- FUNÇÃO DE ENVIO INTELIGENTE (AGRUPADA POR COORDENADOR) ---
   const handleEnviarEmail = async () => {
+    // 1. Validação Inicial
     if (!filtros.cliente) {
-      alert("Selecione um cliente antes de enviar o e-mail!");
+      showToast("Selecione um cliente no filtro para enviar e-mails.", "erro");
       return;
     }
 
     const clienteSelecionado = clientes.find(c => c.nome === filtros.cliente);
     if (!clienteSelecionado || !clienteSelecionado.email) {
-      alert("O cliente selecionado não possui e-mail cadastrado!");
+      showToast("Cliente sem e-mail principal cadastrado!", "erro");
       return;
     }
 
-    // 1. Gera o PDF (igual você já fazia)
-    const dadosParaRelatorio = servicosFiltrados();
-    const pdfBlob = gerarRelatorioPDF(dadosParaRelatorio, filtros);
+    if (servicosFiltradosData.length === 0) {
+      showToast("Não há serviços listados para enviar.", "erro");
+      return;
+    }
+
+    setEmailEnviando(true);
 
     try {
-      const pdfBase64 = await blobToBase64(pdfBlob);
-
-      // 3. Envia para a API da Vercel (JSON simples)
-      const response = await fetch("/api/enviar-email", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          email: clienteSelecionado.email,
-          nomeCliente: clienteSelecionado.nome,
-          pdfBase64: pdfBase64
-        })
-      });
-
-      if (response.ok) {
-        setToast({ visivel: true, mensagem: "Email enviado com sucesso! 📧", tipo: "sucesso" });
-      } else {
-        const errorData = await response.json();
-        setToast({ visivel: true, mensagem: "Erro: " + (errorData.error || "Falha no envio"), tipo: "erro" });
+      // 2. Buscar dados completos dos solicitantes envolvidos (para saber quem é o chefe de quem)
+      const nomesNaLista = [...new Set(servicosFiltradosData.map(s => s.solicitante).filter(n => n))];
+      
+      let mapaSolicitantes = [];
+      
+      if (nomesNaLista.length > 0) {
+        // Busca solicitante E o email do seu coordenador (join simulado)
+        const { data } = await supabase
+          .from('solicitantes')
+          .select(`
+            nome, 
+            email, 
+            coordenador_id,
+            coordenador:solicitantes!coordenador_id(email) 
+          `) // Essa sintaxe maluca busca o email do chefe na mesma tabela
+          .eq('cliente_id', clienteSelecionado.id)
+          .in('nome', nomesNaLista);
+        
+        mapaSolicitantes = data || [];
       }
 
+      // 3. AGRUPAMENTO: Criar "Pacotes de Envio"
+      // Estrutura do Pacote: { emailDestino: 'chefe@...', servicos: [], ccs: [] }
+      const pacotesDeEnvio = {};
+
+      servicosFiltradosData.forEach(servico => {
+        const nomeSol = servico.solicitante;
+        const dadosSol = mapaSolicitantes.find(s => s.nome === nomeSol);
+
+        // LÓGICA DE DECISÃO DO DESTINATÁRIO:
+        // Se tem solicitante cadastrado E ele tem chefe -> Manda pro Chefe.
+        // Se não tem chefe (ou não tá cadastrado) -> Manda pro Cliente Principal (Empresa).
+        let emailDestino = clienteSelecionado.email; // Padrão: Empresa
+        let emailCC = null;
+
+        if (dadosSol) {
+          if (dadosSol.email) emailCC = dadosSol.email; // O solicitante vai em cópia
+          
+          // Se tiver chefe com email, o destino muda para o chefe!
+          if (dadosSol.coordenador && dadosSol.coordenador.email) {
+            emailDestino = dadosSol.coordenador.email;
+          }
+        }
+
+        // Cria a chave do pacote (para agrupar serviços do mesmo destino)
+        if (!pacotesDeEnvio[emailDestino]) {
+          pacotesDeEnvio[emailDestino] = {
+            destinatario: emailDestino,
+            servicos: [],
+            ccs: new Set() // Usamos Set para não repetir emails de cópia
+          };
+        }
+
+        // Adiciona o serviço e o CC neste pacote
+        pacotesDeEnvio[emailDestino].servicos.push(servico);
+        if (emailCC) pacotesDeEnvio[emailDestino].ccs.add(emailCC);
+      });
+
+      // 4. DISPARO: Enviar um e-mail para cada pacote
+      const totalPacotes = Object.keys(pacotesDeEnvio).length;
+      let enviados = 0;
+
+      for (const [emailDestino, pacote] of Object.entries(pacotesDeEnvio)) {
+        
+        // Converte o Set de CCs para Array
+        const listaCCs = Array.from(pacote.ccs);
+
+        showToast(`Gerando PDF para ${emailDestino}... (${enviados + 1}/${totalPacotes})`, "sucesso");
+
+        // Gera PDF Personalizado (Só com os serviços desse pacote)
+        const pdfBlob = gerarRelatorioPDF(pacote.servicos, filtros);
+        if (!pdfBlob) throw new Error("Falha na geração do PDF");
+        const pdfBase64 = await blobToBase64(pdfBlob);
+
+        // Chama a API
+        const response = await fetch("/api/enviar-email", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            email: emailDestino,
+            cc: listaCCs,
+            nomeCliente: clienteSelecionado.nome,
+            pdfBase64: pdfBase64,
+            periodo: filtros.dataInicio ? `${new Date(filtros.dataInicio).toLocaleDateString()} a ${new Date(filtros.dataFim).toLocaleDateString()}` : 'Período Geral'
+          })
+        });
+
+        if (!response.ok) {
+          const err = await response.json();
+          console.error(`Falha ao enviar para ${emailDestino}`, err);
+          showToast(`Erro ao enviar para ${emailDestino}`, "erro");
+        } else {
+          enviados++;
+        }
+      }
+
+      showToast(`Processo finalizado! ${enviados} e-mail(s) enviado(s).`, "sucesso");
+
     } catch (error) {
-      console.error("Erro técnico:", error);
-      setToast({ visivel: true, mensagem: "Erro de conexão ao enviar email.", tipo: "erro" });
+      console.error("Erro Geral:", error);
+      showToast("Erro técnico no envio.", "erro");
+    } finally {
+      setEmailEnviando(false);
     }
   };
   
