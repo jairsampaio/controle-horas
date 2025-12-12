@@ -470,7 +470,7 @@ const App = () => {
       data: new Date().toISOString().split('T')[0],
       hora_inicial: '09:00',
       hora_final: '18:00',
-      valor_hora: valorHoraPadrao, // 👈 AQUI! Usa a variável do estado em vez de fixo
+      valor_hora: parseFloat(valorHoraPadrao || '0').toFixed(2), // 👈 AQUI! Usa a variável do estado em vez de fixo
       atividade: '',
       solicitante: '',
       cliente: '',
