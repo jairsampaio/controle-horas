@@ -1,7 +1,7 @@
 /* eslint-disable no-restricted-globals */
 import gerarRelatorioPDF from "./utils/gerarRelatorioPDF";
 import React, { useState, useEffect } from 'react';
-import { Clock, DollarSign, User, FileText, Plus, Filter } from 'lucide-react';
+import { Clock, DollarSign, User, FileText, Plus, Filter, Settings } from 'lucide-react';
 import supabase from './services/supabase'; // 
 import StatusCard from './components/StatusCard';
 import ClientModal from './components/ClientModal';
@@ -9,6 +9,7 @@ import ServicesTable from './components/ServicesTable';
 import ClientsTable from './components/ClientsTable';
 import ServiceModal from './components/ServiceModal';
 import Auth from './components/Auth';
+import ConfigModal from './components/ConfigModal';
 
 const App = () => {
   // --- ESTADOS ---
@@ -24,6 +25,8 @@ const App = () => {
   const [editingService, setEditingService] = useState(null);
   const [editingCliente, setEditingCliente] = useState(null);
   const [session, setSession] = useState(null);
+  const [showConfigModal, setShowConfigModal] = useState(false);
+  const [valorHoraPadrao, setValorHoraPadrao] = useState('150.00'); // Começa com 150 fixo até carregar do banco
   
   const [filtros, setFiltros] = useState({
     cliente: '',
@@ -77,6 +80,78 @@ const App = () => {
     setLoading(false);
   };
 
+  // --- FUNÇÕES DE CONFIGURAÇÃO ---
+
+  const carregarConfiguracao = async () => {
+    try {
+      // Busca a configuração onde a chave é 'valor_hora_padrao'
+      const { data, error } = await supabase
+        .from('configuracoes')
+        .select('valor')
+        .eq('chave', 'valor_hora_padrao')
+        .single();
+
+      if (error && error.code !== 'PGRST116') { // Ignora erro se não existir ainda
+        console.error('Erro ao carregar config:', error);
+      }
+
+      if (data) {
+        setValorHoraPadrao(data.valor);
+      }
+    } catch (error) {
+      console.error('Erro config:', error);
+    }
+  };
+
+  const salvarConfiguracao = async (novoValor) => {
+    try {
+      setLoading(true);
+      
+      // Verifica se já existe para decidir se faz Update ou Insert
+      // O jeito mais fácil no Supabase é deletar a antiga e criar a nova (ou usar upsert), 
+      // mas vamos usar a lógica de consulta simples para garantir.
+      
+      const { data: existente } = await supabase
+        .from('configuracoes')
+        .select('id')
+        .eq('chave', 'valor_hora_padrao')
+        .single();
+
+      let error;
+
+      if (existente) {
+        // Atualiza
+        const { error: updateError } = await supabase
+          .from('configuracoes')
+          .update({ valor: novoValor })
+          .eq('chave', 'valor_hora_padrao');
+        error = updateError;
+      } else {
+        // Cria (Insert)
+        const { error: insertError } = await supabase
+          .from('configuracoes')
+          .insert([{ 
+            chave: 'valor_hora_padrao', 
+            valor: novoValor,
+            user_id: session.user.id 
+          }]);
+        error = insertError;
+      }
+
+      if (error) throw error;
+
+      setValorHoraPadrao(novoValor);
+      setShowConfigModal(false);
+      showToast('Configuração salva!', 'sucesso');
+
+    } catch (error) {
+      console.error('Erro ao salvar config:', error);
+      showToast('Erro ao salvar configuração.', 'erro');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const carregarDados = async () => {
     try {
       // 1. Buscar Serviços (Ordenado por data decrescente)
@@ -124,6 +199,7 @@ const App = () => {
     if (session) {
       setLoading(true);
       carregarDados();
+      carregarConfiguracao();
       setLoading(false);
     } else {
       // Limpa os dados se fizer logout
@@ -388,12 +464,13 @@ const App = () => {
       setToast({ visivel: true, mensagem: "Erro de conexão ao enviar email.", tipo: "erro" });
     }
   };
+  
   const resetForm = () => {
     setFormData({
       data: new Date().toISOString().split('T')[0],
       hora_inicial: '09:00',
       hora_final: '18:00',
-      valor_hora: '120.00',
+      valor_hora: valorHoraPadrao, // 👈 AQUI! Usa a variável do estado em vez de fixo
       atividade: '',
       solicitante: '',
       cliente: '',
@@ -506,16 +583,27 @@ const App = () => {
               <h1 className="text-2xl font-bold text-gray-900">Controle de Horas</h1>
               <p className="text-sm text-gray-500">Gerencie seus serviços prestados</p>
             </div>
-            <div className='flex items-center gap-3'> 
+            <div className='flex items-center gap-2'> {/* Diminuí o gap para caber melhor no mobile */}
+              
+              {/* Botão de Configurações (Aparece só o ícone no mobile para economizar espaço) */}
+              <button
+                onClick={() => setShowConfigModal(true)}
+                className="p-2 text-gray-600 hover:text-indigo-600 hover:bg-gray-100 rounded-full transition"
+                title="Configurações"
+              >
+                <Settings size={20} />
+              </button>
+
               <button
                 onClick={() => { resetForm(); setShowModal(true); }}
-                className="bg-indigo-600 text-white px-4 py-2 rounded-lg flex items-center gap-2 
+                className="bg-indigo-600 text-white px-3 py-2 rounded-lg flex items-center gap-2 
                           hover:bg-indigo-700 transition-all duration-200 
-                          hover:scale-105 active:scale-95"
+                          hover:scale-105 active:scale-95 text-sm font-medium whitespace-nowrap"
               >
-                <Plus size={20} />
-                Novo Serviço
+                <Plus size={18} />
+                <span className="hidden sm:inline">Novo Serviço</span> {/* Esconde texto "Novo Serviço" em telas muito pequenas */}
               </button>
+              
               <LogoutButton />
             </div>
           </div>
@@ -745,6 +833,14 @@ const App = () => {
         formData={clienteFormData}
         setFormData={setClienteFormData}
         isEditing={!!editingCliente}
+      />
+
+      {/* Modal de Configuração */}
+      <ConfigModal 
+        isOpen={showConfigModal}
+        onClose={() => setShowConfigModal(false)}
+        onSave={salvarConfiguracao}
+        valorAtual={valorHoraPadrao}
       />
 
       {/* Toast */}
