@@ -561,6 +561,13 @@ const handleExportarExcel = () => {
         if (!pdfBlob) throw new Error("Falha PDF");
         const pdfBase64 = await blobToBase64(pdfBlob);
 
+        // 👇 ADICIONE ESSA LINHA PARA TESTAR:
+        console.log("📨 TENTATIVA DE ENVIO:", { 
+            Para: emailDestino, 
+            CCs: listaCCs, 
+            Servicos: pacote.servicos.length 
+        });
+        
         const response = await fetch("/api/enviar-email", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
