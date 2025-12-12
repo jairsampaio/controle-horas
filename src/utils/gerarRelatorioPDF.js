@@ -1,105 +1,75 @@
-import jsPDF from "jspdf";
-import autoTable from "jspdf-autotable";
+// src/utils/gerarRelatorioPDF.js
+import jsPDF from 'jspdf';
+import 'jspdf-autotable';
 
-export default function gerarRelatorioPDF(servicos = [], filtros = {}) {
+const gerarRelatorioPDF = (servicos, filtros) => {
   const doc = new jsPDF();
 
-  // =========================
-  // ✅ TOPO DO RELATÓRIO
-  // =========================
-  doc.setFontSize(16);
-  doc.text("Relatório de Serviços", 14, 20);
-
-  let yTopo = 26;
-
-  if (filtros?.cliente) {
-    doc.setFontSize(12);
-    doc.text(`Cliente: ${filtros.cliente}`, 14, yTopo);
-    yTopo += 6;
-  }
+  // 1. Título e Cabeçalho do Relatório
+  doc.setFontSize(18);
+  doc.text('Relatório de Serviços Prestados', 14, 20);
 
   doc.setFontSize(10);
-  doc.text(
-    `Gerado em: ${new Date().toLocaleDateString("pt-BR")}`,
-    14,
-    yTopo
-  );
+  doc.text(`Gerado em: ${new Date().toLocaleDateString('pt-BR')}`, 14, 28);
 
-  // =========================
-  // ✅ FILTROS APLICADOS
-  // =========================
-  let yFiltro = yTopo + 10;
-
-  if (filtros?.status) {
-    doc.text(`Status: ${filtros.status}`, 14, yFiltro);
-    yFiltro += 6;
+  if (filtros.cliente) {
+    doc.text(`Cliente: ${filtros.cliente}`, 14, 34);
   }
 
-  if (filtros?.dataInicio && filtros?.dataFim) {
-    doc.text(
-      `Período: ${new Date(filtros.dataInicio).toLocaleDateString("pt-BR")} até ${new Date(filtros.dataFim).toLocaleDateString("pt-BR")}`,
-      14,
-      yFiltro
-    );
-    yFiltro += 6;
-  }
+  // 2. Definição das Colunas e Dados
+  const tableColumn = ["Data", "Cliente", "Solicitante", "Atividade", "Horas", "Valor", "Status"];
+  
+  const tableRows = [];
 
-  // =========================
-  // ✅ DADOS DA TABELA
-  // =========================
-  const dados = servicos.map((s) => {
-    const horas = Number(s.qtd_horas || 0);
-    const valor = Number(s.valor_total || 0);
-
-    return [
-      new Date(s.data + "T00:00:00").toLocaleDateString("pt-BR"),
-      s.cliente || "-",
-      s.atividade || "-",
-      horas.toFixed(2),
-      valor.toLocaleString("pt-BR", {
-        style: "currency",
-        currency: "BRL",
-      }),
-      s.status || "-",
+  servicos.forEach(servico => {
+    const servicoData = [
+      new Date(servico.data + 'T00:00:00').toLocaleDateString('pt-BR'),
+      servico.cliente,
+      servico.solicitante || '-', // 👈 AQUI: Adicionamos o Solicitante na linha (se vazio, põe traço)
+      servico.atividade,
+      parseFloat(servico.qtd_horas).toFixed(2),
+      `R$ ${parseFloat(servico.valor_total).toFixed(2)}`,
+      servico.status
     ];
+    tableRows.push(servicoData);
   });
 
-  autoTable(doc, {
-    startY: yFiltro + 6,
-    head: [["Data", "Cliente", "Atividade", "Horas", "Valor", "Status"]],
-    body: dados.length ? dados : [["-", "-", "-", "0.00", "R$ 0,00", "-"]],
+  // 3. Totais
+  const totalHoras = servicos.reduce((sum, s) => sum + parseFloat(s.qtd_horas), 0);
+  const totalValor = servicos.reduce((sum, s) => sum + parseFloat(s.valor_total), 0);
+
+  // 4. Geração da Tabela com Estilização
+  doc.autoTable({
+    startY: 40,
+    head: [tableColumn],
+    body: tableRows,
+    theme: 'striped',
+    headStyles: { fillColor: [79, 70, 229] }, // Cor Indigo (combinando com o app)
+    styles: { fontSize: 8, cellPadding: 2 },
+    
+    // 👇 AQUI: Ajuste das larguras para caber o Solicitante
+    columnStyles: {
+      0: { cellWidth: 20 }, // Data
+      1: { cellWidth: 25 }, // Cliente
+      2: { cellWidth: 25 }, // Solicitante (NOVO)
+      3: { cellWidth: 'auto' }, // Atividade (ocupa o resto)
+      4: { cellWidth: 15, halign: 'right' }, // Horas
+      5: { cellWidth: 25, halign: 'right' }, // Valor
+      6: { cellWidth: 25 }  // Status
+    },
+    
+    // Adiciona a linha de totais no final
+    foot: [[
+      "", "", "TOTAIS:", // Pula 2 colunas, escreve "TOTAIS" na coluna Solicitante
+      `${servicos.length} serviços`, 
+      totalHoras.toFixed(2), 
+      `R$ ${totalValor.toFixed(2)}`, 
+      ""
+    ]],
+    footStyles: { fillColor: [243, 244, 246], textColor: [0, 0, 0], fontStyle: 'bold' }
   });
 
-  // =========================
-  // ✅ TOTAIS
-  // =========================
-  const totalHoras = servicos.reduce(
-    (acc, s) => acc + Number(s.qtd_horas || 0),
-    0
-  );
+  return doc.output('blob');
+};
 
-  const totalValor = servicos.reduce(
-    (acc, s) => acc + Number(s.valor_total || 0),
-    0
-  );
-
-  const finalY = doc.lastAutoTable?.finalY || yFiltro + 20;
-
-  doc.setFontSize(11);
-  doc.text(`Total de Horas: ${totalHoras.toFixed(2)}`, 14, finalY + 10);
-
-  doc.text(
-    `Valor Total: ${totalValor.toLocaleString("pt-BR", {
-      style: "currency",
-      currency: "BRL",
-    })}`,
-    14,
-    finalY + 18
-  );
-
-  // =========================
-  // ✅ GERA O PDF E RETORNA
-  // =========================
-  const pdfBlob = doc.output("blob");
-  return pdfBlob;
-}
+export default gerarRelatorioPDF;
