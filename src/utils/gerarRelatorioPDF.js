@@ -1,10 +1,9 @@
 // src/utils/gerarRelatorioPDF.js
 import jsPDF from 'jspdf';
-import 'jspdf-autotable';
+import autoTable from 'jspdf-autotable'; // 👈 MUDANÇA 1: Importação nomeada
 
 const gerarRelatorioPDF = (servicos, filtros) => {
   try {
-    console.log("Iniciando geração de PDF...");
     const doc = new jsPDF();
 
     // 1. Título e Cabeçalho
@@ -19,29 +18,20 @@ const gerarRelatorioPDF = (servicos, filtros) => {
     }
 
     // 2. Definição das Colunas
-    // Nota: O autotable espera um Array de Arrays para o cabeçalho
     const tableColumn = ["Data", "Cliente", "Solicitante", "Atividade", "Horas", "Valor", "Status"];
     
-    // 3. Preparação dos Dados (Com proteção contra nulos)
+    // 3. Preparação dos Dados
     const tableRows = servicos.map(servico => {
-      // Garante que os valores numéricos sejam tratados com segurança
       const horas = parseFloat(servico.qtd_horas || 0);
       const valor = parseFloat(servico.valor_total || 0);
       
       return [
-        // Data: tenta formatar, se falhar usa a string original
         safeDate(servico.data),
-        // Cliente
         String(servico.cliente || '-'),
-        // Solicitante (Aqui estava o possível erro se fosse undefined)
         String(servico.solicitante || '-'),
-        // Atividade
         String(servico.atividade || ''),
-        // Horas
         horas.toFixed(2),
-        // Valor
         `R$ ${valor.toFixed(2)}`,
-        // Status
         String(servico.status || 'Pendente')
       ];
     });
@@ -50,29 +40,23 @@ const gerarRelatorioPDF = (servicos, filtros) => {
     const totalHoras = servicos.reduce((sum, s) => sum + parseFloat(s.qtd_horas || 0), 0);
     const totalValor = servicos.reduce((sum, s) => sum + parseFloat(s.valor_total || 0), 0);
 
-    console.log("Dados processados. Gerando tabela...");
-
-    // 5. Geração da Tabela
-    doc.autoTable({
+    // 5. Geração da Tabela (MUDANÇA 2: Usando a função importada diretamente)
+    autoTable(doc, {
       startY: 40,
-      head: [tableColumn], // Array de Arrays
+      head: [tableColumn],
       body: tableRows,
       theme: 'striped',
       headStyles: { fillColor: [79, 70, 229] },
       styles: { fontSize: 8, cellPadding: 2 },
-      
-      // Definição das larguras
       columnStyles: {
-        0: { cellWidth: 20 }, // Data
-        1: { cellWidth: 25 }, // Cliente
-        2: { cellWidth: 25 }, // Solicitante
-        3: { cellWidth: 'auto' }, // Atividade
-        4: { cellWidth: 15, halign: 'right' }, // Horas
-        5: { cellWidth: 25, halign: 'right' }, // Valor
-        6: { cellWidth: 25 }  // Status
+        0: { cellWidth: 20 },
+        1: { cellWidth: 25 },
+        2: { cellWidth: 25 },
+        3: { cellWidth: 'auto' },
+        4: { cellWidth: 15, halign: 'right' },
+        5: { cellWidth: 25, halign: 'right' },
+        6: { cellWidth: 25 }
       },
-      
-      // Rodapé com totais
       foot: [[
         "", "", "TOTAIS:", 
         `${servicos.length} serviços`, 
@@ -88,12 +72,10 @@ const gerarRelatorioPDF = (servicos, filtros) => {
 
   } catch (error) {
     console.error("ERRO AO GERAR PDF:", error);
-    alert("Erro ao gerar o PDF. Verifique o console (F12) para detalhes.");
     return null;
   }
 };
 
-// Função auxiliar para data segura
 const safeDate = (dataStr) => {
   try {
     if (!dataStr) return '-';
