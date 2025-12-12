@@ -475,7 +475,7 @@ const handleExportarExcel = () => {
   showToast('Planilha Excel gerada com sucesso!', 'sucesso');
 };
 
-  // --- FUNÇÃO DE ENVIO INTELIGENTE (AGRUPADA POR COORDENADOR) ---
+// --- FUNÇÃO DE ENVIO CORRIGIDA (LÓGICA SIMPLIFICADA) ---
   const handleEnviarEmail = async () => {
     // 1. Validação Inicial
     if (!filtros.cliente) {
@@ -497,81 +497,70 @@ const handleExportarExcel = () => {
     setEmailEnviando(true);
 
     try {
-      // 2. Buscar dados completos dos solicitantes envolvidos (para saber quem é o chefe de quem)
-      const nomesNaLista = [...new Set(servicosFiltradosData.map(s => s.solicitante).filter(n => n))];
-      
-      let mapaSolicitantes = [];
-      
-      if (nomesNaLista.length > 0) {
-        // Busca solicitante E o email do seu coordenador (join simulado)
-        const { data } = await supabase
-          .from('solicitantes')
-          .select(`
-            nome, 
-            email, 
-            coordenador_id,
-            coordenador:solicitantes!coordenador_id(email) 
-          `) // Essa sintaxe maluca busca o email do chefe na mesma tabela
-          .eq('cliente_id', clienteSelecionado.id)
-          .in('nome', nomesNaLista);
-        
-        mapaSolicitantes = data || [];
-      }
+      // 2. BUSCA SIMPLIFICADA: Baixa TODOS os solicitantes desse cliente
+      // (Em vez de tentar fazer join complexo, baixamos a lista e cruzamos no código)
+      const { data: todosSolicitantes, error } = await supabase
+        .from('solicitantes')
+        .select('*')
+        .eq('cliente_id', clienteSelecionado.id);
 
-      // 3. AGRUPAMENTO: Criar "Pacotes de Envio"
-      // Estrutura do Pacote: { emailDestino: 'chefe@...', servicos: [], ccs: [] }
+      if (error) throw error;
+
+      // 3. AGRUPAMENTO
       const pacotesDeEnvio = {};
 
       servicosFiltradosData.forEach(servico => {
-        const nomeSol = servico.solicitante;
-        const dadosSol = mapaSolicitantes.find(s => s.nome === nomeSol);
-
-        // LÓGICA DE DECISÃO DO DESTINATÁRIO:
-        // Se tem solicitante cadastrado E ele tem chefe -> Manda pro Chefe.
-        // Se não tem chefe (ou não tá cadastrado) -> Manda pro Cliente Principal (Empresa).
-        let emailDestino = clienteSelecionado.email; // Padrão: Empresa
+        // Padrão: Manda pra Empresa
+        let emailDestino = clienteSelecionado.email;
         let emailCC = null;
 
-        if (dadosSol) {
-          if (dadosSol.email) emailCC = dadosSol.email; // O solicitante vai em cópia
-          
-          // Se tiver chefe com email, o destino muda para o chefe!
-          if (dadosSol.coordenador && dadosSol.coordenador.email) {
-            emailDestino = dadosSol.coordenador.email;
+        // Tenta achar quem pediu esse serviço na lista que baixamos
+        const solicitanteEncontrado = todosSolicitantes.find(
+          s => s.nome.trim().toLowerCase() === (servico.solicitante || '').trim().toLowerCase()
+        );
+
+        if (solicitanteEncontrado) {
+          // Se achou, pega o email dele pra cópia
+          if (solicitanteEncontrado.email) emailCC = solicitanteEncontrado.email;
+
+          // AGORA A MÁGICA: Verifica se ele tem um chefe vinculado
+          if (solicitanteEncontrado.coordenador_id) {
+            // Busca quem é esse chefe na mesma lista (pelo ID)
+            const chefe = todosSolicitantes.find(s => s.id === solicitanteEncontrado.coordenador_id);
+            
+            // Se achou o chefe e ele tem email, muda o destino!
+            if (chefe && chefe.email) {
+              emailDestino = chefe.email;
+            }
           }
         }
 
-        // Cria a chave do pacote (para agrupar serviços do mesmo destino)
+        // Cria/Atualiza o pacote de envio
         if (!pacotesDeEnvio[emailDestino]) {
           pacotesDeEnvio[emailDestino] = {
             destinatario: emailDestino,
             servicos: [],
-            ccs: new Set() // Usamos Set para não repetir emails de cópia
+            ccs: new Set()
           };
         }
 
-        // Adiciona o serviço e o CC neste pacote
         pacotesDeEnvio[emailDestino].servicos.push(servico);
         if (emailCC) pacotesDeEnvio[emailDestino].ccs.add(emailCC);
       });
 
-      // 4. DISPARO: Enviar um e-mail para cada pacote
+      // 4. DISPARO
       const totalPacotes = Object.keys(pacotesDeEnvio).length;
       let enviados = 0;
 
       for (const [emailDestino, pacote] of Object.entries(pacotesDeEnvio)) {
-        
-        // Converte o Set de CCs para Array
         const listaCCs = Array.from(pacote.ccs);
 
-        showToast(`Gerando PDF para ${emailDestino}... (${enviados + 1}/${totalPacotes})`, "sucesso");
+        showToast(`Enviando para ${emailDestino}...`, "sucesso");
 
-        // Gera PDF Personalizado (Só com os serviços desse pacote)
         const pdfBlob = gerarRelatorioPDF(pacote.servicos, filtros);
-        if (!pdfBlob) throw new Error("Falha na geração do PDF");
+        if (!pdfBlob) throw new Error("Falha PDF");
         const pdfBase64 = await blobToBase64(pdfBlob);
 
-        // Chama a API
         const response = await fetch("/api/enviar-email", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -580,24 +569,18 @@ const handleExportarExcel = () => {
             cc: listaCCs,
             nomeCliente: clienteSelecionado.nome,
             pdfBase64: pdfBase64,
-            periodo: filtros.dataInicio ? `${new Date(filtros.dataInicio).toLocaleDateString()} a ${new Date(filtros.dataFim).toLocaleDateString()}` : 'Período Geral'
+            periodo: filtros.dataInicio ? `${new Date(filtros.dataInicio).toLocaleDateString()} a ...` : 'Período Geral'
           })
         });
 
-        if (!response.ok) {
-          const err = await response.json();
-          console.error(`Falha ao enviar para ${emailDestino}`, err);
-          showToast(`Erro ao enviar para ${emailDestino}`, "erro");
-        } else {
-          enviados++;
-        }
+        if (response.ok) enviados++;
       }
 
-      showToast(`Processo finalizado! ${enviados} e-mail(s) enviado(s).`, "sucesso");
+      showToast(`Sucesso! ${enviados} e-mail(s) enviado(s).`, "sucesso");
 
     } catch (error) {
-      console.error("Erro Geral:", error);
-      showToast("Erro técnico no envio.", "erro");
+      console.error("Erro:", error);
+      showToast("Erro no envio.", "erro");
     } finally {
       setEmailEnviando(false);
     }
