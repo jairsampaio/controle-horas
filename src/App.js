@@ -34,7 +34,8 @@ const App = () => {
     cliente: '',
     status: '',
     dataInicio: '',
-    dataFim: ''
+    dataFim: '',
+    solicitante: '' 
   });
 
   const [formData, setFormData] = useState({
@@ -571,10 +572,24 @@ const handleExportarExcel = () => {
   // Função auxiliar para filtrar (usada no render e no PDF)
   const servicosFiltrados = () => {
     return servicos.filter(s => {
+      // Filtros existentes
       if (filtros.cliente && s.cliente !== filtros.cliente) return false;
       if (filtros.status && s.status !== filtros.status) return false;
       if (filtros.dataInicio && s.data < filtros.dataInicio) return false;
       if (filtros.dataFim && s.data > filtros.dataFim) return false;
+      
+      // 👇 NOVO FILTRO DE SOLICITANTE
+      // Se tiver algo digitado no filtro...
+      if (filtros.solicitante) {
+        // Pega o solicitante do serviço (ou vazio se for nulo)
+        const solicitanteServico = (s.solicitante || '').toLowerCase();
+        // O que o usuário digitou
+        const filtroDigitado = filtros.solicitante.toLowerCase();
+        
+        // Se o nome não contiver o que foi digitado, esconde (return false)
+        if (!solicitanteServico.includes(filtroDigitado)) return false;
+      }
+
       return true;
     });
   };
@@ -702,47 +717,58 @@ const handleExportarExcel = () => {
           </div>
         ) : activeTab === 'dashboard' ? (
           <div className="space-y-6">
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4 animate-fade-in-up">
-              <div className="bg-white p-6 rounded-lg shadow animate-slide-up delay-100">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm text-gray-600">Total de Horas</p>
-                    <p className="text-2xl font-bold text-gray-900">{stats.totalHoras.toFixed(2)}h</p>
-                  </div>
-                  <Clock className="text-indigo-600" size={32} />
-                </div>
-              </div>
-              
-              <div className="bg-white p-6 rounded-lg shadow animate-slide-up delay-200">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm text-gray-600">Valor Total</p>
-                    <p className="text-2xl font-bold text-gray-900">R$ {stats.totalValor.toFixed(2)}</p>
-                  </div>
-                  <DollarSign className="text-green-600" size={32} />
-                </div>
-              </div>
-              
-              <div className="bg-white p-6 rounded-lg shadow animate-slide-up delay-300">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm text-gray-600">Serviços</p>
-                    <p className="text-2xl font-bold text-gray-900">{stats.totalServicos}</p>
-                  </div>
-                  <FileText className="text-blue-600" size={32} />
-                </div>
-              </div>
-              
-              <div className="bg-white p-6 rounded-lg shadow animate-slide-up delay-500">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm text-gray-600">Clientes</p>
-                    <p className="text-2xl font-bold text-gray-900">{clientes.length}</p>
-                  </div>
-                  <User className="text-purple-600" size={32} />
-                </div>
-              </div>
-            </div>
+          {/* Note que mudei md:grid-cols-4 para md:grid-cols-5 para caber tudo na mesma linha */}
+              <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+                
+                {/* Filtro Solicitante (NOVO) - Coloquei primeiro ou onde preferir */}
+                <input
+                  type="text"
+                  placeholder="Filtrar Solicitante..."
+                  value={filtros.solicitante}
+                  onChange={(e) => setFiltros({...filtros, solicitante: e.target.value})}
+                  className="border rounded px-3 py-2 outline-none focus:ring-2 focus:ring-indigo-500"
+                />
+
+                <select
+                  value={filtros.cliente}
+                  onChange={(e) => setFiltros({...filtros, cliente: e.target.value})}
+                  className="border rounded px-3 py-2"
+                >
+                  <option value="">Todos os clientes</option>
+                  {clientes.map(c => (
+                    <option key={c.id} value={c.nome}>{c.nome}</option>
+                  ))}
+                </select>
+                
+                <select
+                  value={filtros.status}
+                  onChange={(e) => setFiltros({...filtros, status: e.target.value})}
+                  className="border rounded px-3 py-2"
+                >
+                  <option value="">Todos os status</option>
+                  <option value="Pendente">Pendente</option>
+                  <option value="Em aprovação">Em aprovação</option>
+                  <option value="Aprovado">Aprovado</option>
+                  <option value="NF Emitida">NF Emitida</option>
+                  <option value="Pago">Pago</option>
+                </select>
+                
+                <input
+                  type="date"
+                  value={filtros.dataInicio}
+                  onChange={(e) => setFiltros({...filtros, dataInicio: e.target.value})}
+                  className="border rounded px-3 py-2"
+                  placeholder="Data início"
+                />
+                
+                <input
+                  type="date"
+                  value={filtros.dataFim}
+                  onChange={(e) => setFiltros({...filtros, dataFim: e.target.value})}
+                  className="border rounded px-3 py-2"
+                  placeholder="Data fim"
+                />
+              </div>    
             <DashboardCharts servicos={servicosFiltradosData} />
             {/* Dashboard Colorido e Responsivo */}
             <div className="bg-white p-6 rounded-lg shadow">
