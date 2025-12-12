@@ -611,8 +611,6 @@ const handleExportarExcel = () => {
     }, {})
   };
 
-  // src/App.js (Substituir a partir de // --- RENDERIZAÇÃO (JSX) ---)
-
 // --- RENDERIZAÇÃO (JSX) ---
 
   // Componente interno para o botão Sair
@@ -625,7 +623,7 @@ const handleExportarExcel = () => {
     </button>
   );
 
-  // 1. Se a sessão ainda não foi verificada (loading), mostra o loader.
+  // 1. Loading inicial
   if (loading && !session) {
     return (
       <div className="min-h-screen bg-white flex items-center justify-center">
@@ -634,12 +632,12 @@ const handleExportarExcel = () => {
     );
   }
 
-  // 2. Se a sessão foi verificada e não existe, mostra a tela de login.
+  // 2. Tela de Login
   if (!session) {
     return <Auth />;
   }
 
-  // 3. Se a sessão existe (usuário logado), mostra o App completo.
+  // 3. App Principal
   return (
     <div className="min-h-screen bg-gray-50">
       <header className="bg-white shadow-sm border-b">
@@ -649,9 +647,8 @@ const handleExportarExcel = () => {
               <h1 className="text-2xl font-bold text-gray-900">Controle de Horas</h1>
               <p className="text-sm text-gray-500">Gerencie seus serviços prestados</p>
             </div>
-            <div className='flex items-center gap-2'> {/* Diminuí o gap para caber melhor no mobile */}
+            <div className='flex items-center gap-2'>
               
-              {/* Botão de Configurações (Aparece só o ícone no mobile para economizar espaço) */}
               <button
                 onClick={() => setShowConfigModal(true)}
                 className="p-2 text-gray-600 hover:text-indigo-600 hover:bg-gray-100 rounded-full transition"
@@ -667,7 +664,7 @@ const handleExportarExcel = () => {
                           hover:scale-105 active:scale-95 text-sm font-medium whitespace-nowrap"
               >
                 <Plus size={18} />
-                <span className="hidden sm:inline">Novo Serviço</span> {/* Esconde texto "Novo Serviço" em telas muito pequenas */}
+                <span className="hidden sm:inline">Novo Serviço</span>
               </button>
               
               <LogoutButton />
@@ -676,6 +673,7 @@ const handleExportarExcel = () => {
         </div>
       </header>
 
+      {/* Navegação por Abas */}
       <div className="max-w-7xl mx-auto px-4 mt-6">
         <div className="flex w-full border-b bg-white rounded-t-lg shadow-sm">
           {[
@@ -692,15 +690,10 @@ const handleExportarExcel = () => {
                   : 'text-gray-400 hover:text-gray-600 hover:bg-gray-50'
               }`}
             >
-              {/* Ícone sempre visível */}
               <tab.icon size={24} strokeWidth={activeTab === tab.id ? 2.5 : 2} />
-              
-              {/* Texto: Escondido no celular (hidden), Visível no PC (md:block) */}
               <span className="hidden md:block font-medium">
                 {tab.label}
               </span>
-
-              {/* A barrinha azul embaixo da aba ativa */}
               {activeTab === tab.id && (
                 <span className="absolute bottom-0 left-0 w-full h-1 bg-indigo-600 rounded-t-full" />
               )}
@@ -709,76 +702,65 @@ const handleExportarExcel = () => {
         </div>
       </div>
 
+      {/* Conteúdo das Abas */}
       <div key={activeTab} className="max-w-7xl mx-auto px-4 py-6 animate-fade-in-up">
-        {loading ? ( // 👈 Note que este loading agora carrega APENAS os dados, não a sessão inicial
+        {loading ? (
           <div className="text-center py-12">
             <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600 mx-auto"></div>
             <p className="mt-4 text-gray-600">Carregando Dados...</p>
           </div>
         ) : activeTab === 'dashboard' ? (
+          // --- ABA DASHBOARD ---
           <div className="space-y-6">
-          {/* Note que mudei md:grid-cols-4 para md:grid-cols-5 para caber tudo na mesma linha */}
-              <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
-                
-                {/* Filtro Solicitante (NOVO) - Coloquei primeiro ou onde preferir */}
-                <input
-                  type="text"
-                  placeholder="Filtrar Solicitante..."
-                  value={filtros.solicitante}
-                  onChange={(e) => setFiltros({...filtros, solicitante: e.target.value})}
-                  className="border rounded px-3 py-2 outline-none focus:ring-2 focus:ring-indigo-500"
-                />
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4 animate-fade-in-up">
+              <div className="bg-white p-6 rounded-lg shadow animate-slide-up delay-100">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm text-gray-600">Total de Horas</p>
+                    <p className="text-2xl font-bold text-gray-900">{stats.totalHoras.toFixed(2)}h</p>
+                  </div>
+                  <Clock className="text-indigo-600" size={32} />
+                </div>
+              </div>
+              
+              <div className="bg-white p-6 rounded-lg shadow animate-slide-up delay-200">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm text-gray-600">Valor Total</p>
+                    <p className="text-2xl font-bold text-gray-900">R$ {stats.totalValor.toFixed(2)}</p>
+                  </div>
+                  <DollarSign className="text-green-600" size={32} />
+                </div>
+              </div>
+              
+              <div className="bg-white p-6 rounded-lg shadow animate-slide-up delay-300">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm text-gray-600">Serviços</p>
+                    <p className="text-2xl font-bold text-gray-900">{stats.totalServicos}</p>
+                  </div>
+                  <FileText className="text-blue-600" size={32} />
+                </div>
+              </div>
+              
+              <div className="bg-white p-6 rounded-lg shadow animate-slide-up delay-500">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm text-gray-600">Clientes</p>
+                    <p className="text-2xl font-bold text-gray-900">{clientes.length}</p>
+                  </div>
+                  <User className="text-purple-600" size={32} />
+                </div>
+              </div>
+            </div>
 
-                <select
-                  value={filtros.cliente}
-                  onChange={(e) => setFiltros({...filtros, cliente: e.target.value})}
-                  className="border rounded px-3 py-2"
-                >
-                  <option value="">Todos os clientes</option>
-                  {clientes.map(c => (
-                    <option key={c.id} value={c.nome}>{c.nome}</option>
-                  ))}
-                </select>
-                
-                <select
-                  value={filtros.status}
-                  onChange={(e) => setFiltros({...filtros, status: e.target.value})}
-                  className="border rounded px-3 py-2"
-                >
-                  <option value="">Todos os status</option>
-                  <option value="Pendente">Pendente</option>
-                  <option value="Em aprovação">Em aprovação</option>
-                  <option value="Aprovado">Aprovado</option>
-                  <option value="NF Emitida">NF Emitida</option>
-                  <option value="Pago">Pago</option>
-                </select>
-                
-                <input
-                  type="date"
-                  value={filtros.dataInicio}
-                  onChange={(e) => setFiltros({...filtros, dataInicio: e.target.value})}
-                  className="border rounded px-3 py-2"
-                  placeholder="Data início"
-                />
-                
-                <input
-                  type="date"
-                  value={filtros.dataFim}
-                  onChange={(e) => setFiltros({...filtros, dataFim: e.target.value})}
-                  className="border rounded px-3 py-2"
-                  placeholder="Data fim"
-                />
-              </div>    
             <DashboardCharts servicos={servicosFiltradosData} />
-            {/* Dashboard Colorido e Responsivo */}
+
             <div className="bg-white p-6 rounded-lg shadow">
               <h3 className="text-lg font-semibold mb-4">Serviços por Status</h3>
-              
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4">
                 {Object.entries(stats.porStatus || {}).map(([status, dados]) => {
-                  // Pega a configuração da cor
                   const config = statusConfig[status] || statusConfig['Pendente'];
-                  
                   return (
                     <StatusCard 
                       key={status}
@@ -794,13 +776,28 @@ const handleExportarExcel = () => {
             </div>
           </div>
         ) : activeTab === 'servicos' ? (
+          // --- ABA SERVIÇOS ---
           <div className="space-y-4">
+            
+            {/* Bloco de Filtros - AGORA NO LUGAR CERTO */}
             <div className="bg-white p-4 rounded-lg shadow space-y-4">
               <div className="flex items-center gap-2 text-gray-700 font-medium">
                 <Filter size={20} />
                 Filtros
               </div>
-              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+              
+              {/* Grid de 5 colunas para caber o novo filtro */}
+              <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+                {/* 1. Filtro Solicitante (NOVO) */}
+                <input
+                  type="text"
+                  placeholder="Filtrar por Solicitante..."
+                  value={filtros.solicitante || ''}
+                  onChange={(e) => setFiltros({...filtros, solicitante: e.target.value})}
+                  className="border rounded px-3 py-2 outline-none focus:ring-2 focus:ring-indigo-500"
+                />
+
+                {/* 2. Filtro Cliente */}
                 <select
                   value={filtros.cliente}
                   onChange={(e) => setFiltros({...filtros, cliente: e.target.value})}
@@ -812,6 +809,7 @@ const handleExportarExcel = () => {
                   ))}
                 </select>
                 
+                {/* 3. Filtro Status */}
                 <select
                   value={filtros.status}
                   onChange={(e) => setFiltros({...filtros, status: e.target.value})}
@@ -825,6 +823,7 @@ const handleExportarExcel = () => {
                   <option value="Pago">Pago</option>
                 </select>
                 
+                {/* 4. Data Início */}
                 <input
                   type="date"
                   value={filtros.dataInicio}
@@ -833,6 +832,7 @@ const handleExportarExcel = () => {
                   placeholder="Data início"
                 />
                 
+                {/* 5. Data Fim */}
                 <input
                   type="date"
                   value={filtros.dataFim}
@@ -842,15 +842,10 @@ const handleExportarExcel = () => {
                 />
               </div>
             </div>
-            {/* BARRA DE FERRAMENTAS - SERVIÇOS */}
+
+            {/* Barra de Ações (Excel/PDF/Email) */}
             <div className="bg-white p-4 rounded-lg shadow space-y-4">
-              
-              {/* ... Filtros (Mantenha seus filtros aqui como estavam) ... */}
-              
-              {/* BOTÕES DE AÇÃO */}
               <div className="flex justify-end gap-2 pt-2 border-t md:border-t-0 md:pt-0">
-                
-                {/* Botão Excel */}
                 <button
                   onClick={handleExportarExcel}
                   className="flex items-center gap-2 bg-green-600 hover:bg-green-700 text-white p-2 md:px-4 md:py-2 rounded-lg shadow transition-all active:scale-95"
@@ -860,7 +855,6 @@ const handleExportarExcel = () => {
                   <span className="hidden md:inline">Excel</span>
                 </button>
 
-                {/* Botão PDF */}
                 <button
                   onClick={handleGerarPDF}
                   className="flex items-center gap-2 bg-red-600 hover:bg-red-700 text-white p-2 md:px-4 md:py-2 rounded-lg shadow transition-all active:scale-95"
@@ -870,7 +864,6 @@ const handleExportarExcel = () => {
                   <span className="hidden md:inline">Relatório PDF</span>
                 </button>
 
-                {/* Botão Email */}
                 <button
                   onClick={async () => {
                     setEmailEnviando(true);
@@ -884,10 +877,9 @@ const handleExportarExcel = () => {
                   }}
                   disabled={emailEnviando}
                   className={`flex items-center gap-2 p-2 md:px-4 md:py-2 rounded-lg shadow transition-all active:scale-95 
-                    ${emailEnviando ? "bg-green-400 cursor-not-allowed" : "bg-blue-600 hover:bg-blue-700 text-white"}`} // Mudei email para Blue pra diferenciar do Excel
+                    ${emailEnviando ? "bg-green-400 cursor-not-allowed" : "bg-blue-600 hover:bg-blue-700 text-white"}`}
                   title="Enviar por E-mail"
                 >
-                  {/* Ícone muda se estiver enviando */}
                   {emailEnviando ? <Clock size={20} className="animate-spin" /> : <Mail size={20} />} 
                   <span className="hidden md:inline">
                     {emailEnviando ? "Enviando..." : "Enviar Email"}
@@ -902,13 +894,13 @@ const handleExportarExcel = () => {
               onEdit={editarServico}
               onDelete={deletarServico}
             /> 
-            
           </div>
         ) : (
+          // --- ABA CLIENTES ---
           <div className="space-y-4">
             <div className="flex justify-between items-center bg-white p-4 rounded-lg shadow">
               <h2 className="text-xl font-bold text-gray-900 flex items-center gap-2">
-                <Users size={24} className="text-indigo-600 hidden md:block" /> {/* Ícone decorativo no PC */}
+                <Users size={24} className="text-indigo-600 hidden md:block" />
                 Gerenciar Clientes
               </h2>
               
@@ -933,7 +925,7 @@ const handleExportarExcel = () => {
         )}
       </div>
 
-      {/* Modais e Toasts (Fora do fluxo de login, mas dependem do estado) */}
+      {/* --- MODAIS E TOASTS --- */}
 
       <ServiceModal 
         isOpen={showModal}
@@ -954,7 +946,6 @@ const handleExportarExcel = () => {
         isEditing={!!editingCliente}
       />
 
-      {/* Modal de Configuração */}
       <ConfigModal 
         isOpen={showConfigModal}
         onClose={() => setShowConfigModal(false)}
@@ -983,7 +974,7 @@ const handleExportarExcel = () => {
       )}
     </div>
   );
-};
+}; // Fechamento do App
 
 export default App;
 
