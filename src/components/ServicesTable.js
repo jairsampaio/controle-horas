@@ -9,14 +9,26 @@ const ServicesTable = ({ servicos, onStatusChange, onEdit, onDelete }) => {
     return new Date(dataStr + 'T00:00:00').toLocaleDateString('pt-BR');
   };
 
+  // --- 1. EMPTY STATE (Visual quando não há dados) ---
+  // Se a lista estiver vazia, retorna este visual amigável para Mobile e Desktop
+  if (servicos.length === 0) {
+    return (
+      <div className="flex flex-col items-center justify-center py-12 text-center bg-white rounded-lg border-2 border-dashed border-gray-200">
+        <div className="bg-gray-50 p-4 rounded-full mb-3">
+          <Calendar size={32} className="text-gray-400" />
+        </div>
+        <h3 className="text-lg font-medium text-gray-900">Nenhum serviço encontrado</h3>
+        <p className="text-gray-500 max-w-sm mt-1">
+          Tente ajustar os filtros ou cadastre um novo serviço para começar.
+        </p>
+      </div>
+    );
+  }
+
   return (
     <>
       {/* --- VERSÃO MOBILE (CARDS) --- */}
       <div className="md:hidden space-y-4">
-        {servicos.length === 0 && (
-          <p className="text-center text-gray-500 py-4">Nenhum serviço encontrado.</p>
-        )}
-        
         {servicos.map(servico => (
           <div key={servico.id} className="bg-white p-4 rounded-lg shadow border border-gray-100 space-y-3">
             {/* Cabeçalho do Card: Data e Status */}

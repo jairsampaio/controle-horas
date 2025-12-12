@@ -3,14 +3,27 @@ import React from 'react';
 import { Edit2, Trash2, Mail, Phone, User } from 'lucide-react';
 
 const ClientsTable = ({ clientes, onEdit, onDelete }) => {
+  
+  // --- 1. EMPTY STATE (Visual quando não há dados) ---
+  // Se a lista estiver vazia, retorna este visual amigável para Mobile e Desktop
+  if (clientes.length === 0) {
+    return (
+      <div className="flex flex-col items-center justify-center py-12 text-center bg-white rounded-lg border-2 border-dashed border-gray-200">
+        <div className="bg-gray-50 p-4 rounded-full mb-3">
+          <User size={32} className="text-gray-400" />
+        </div>
+        <h3 className="text-lg font-medium text-gray-900">Sua lista de clientes está vazia</h3>
+        <p className="text-gray-500 max-w-sm mt-1">
+          Cadastre seus clientes para gerenciar os serviços prestados a eles.
+        </p>
+      </div>
+    );
+  }
+
   return (
     <>
       {/* --- VERSÃO MOBILE (CARDS) --- */}
       <div className="md:hidden space-y-4">
-        {clientes.length === 0 && (
-          <p className="text-center text-gray-500 py-4">Nenhum cliente cadastrado.</p>
-        )}
-        
         {clientes.map(cliente => (
           <div key={cliente.id} className="bg-white p-4 rounded-lg shadow border border-gray-100 flex flex-col gap-3">
             
