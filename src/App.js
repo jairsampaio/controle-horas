@@ -1,7 +1,7 @@
 /* eslint-disable no-restricted-globals */
 import gerarRelatorioPDF from "./utils/gerarRelatorioPDF";
 import React, { useState, useEffect } from 'react';
-import { Clock, DollarSign, User, FileText, Plus, Filter, Settings } from 'lucide-react';
+import { Clock, DollarSign, User, FileText, Plus, Filter, Settings, LayoutDashboard, Briefcase, Users } from 'lucide-react';
 import supabase from './services/supabase'; // 
 import StatusCard from './components/StatusCard';
 import ClientModal from './components/ClientModal';
@@ -641,26 +641,33 @@ const handleExportarExcel = () => {
       </header>
 
       <div className="max-w-7xl mx-auto px-4 mt-6">
-        {/* Ajuste Mobile: w-full e justify-between para ocupar a tela sem estourar */}
-        <div className="flex w-full border-b">
-          {['dashboard', 'servicos', 'clientes'].map(tab => (
+        <div className="flex w-full border-b bg-white rounded-t-lg shadow-sm">
+          {[
+            { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
+            { id: 'servicos', label: 'Serviços', icon: Briefcase },
+            { id: 'clientes', label: 'Clientes', icon: Users },
+          ].map(tab => (
             <button
-              key={tab}
-              onClick={() => setActiveTab(tab)}
-              /* Ajuste de Classes: 
-                 - flex-1: Divide o espaço igualmente entre os 3 botões
-                 - text-sm: Fonte menor no celular
-                 - px-1: Padding menor no celular
-                 - md:*: Mantém o visual antigo apenas no PC 
-              */
-              className={`flex-1 py-3 text-sm md:text-base md:px-6 font-medium transition text-center whitespace-nowrap ${
-                activeTab === tab
-                  ? 'border-b-2 border-indigo-600 text-indigo-600'
-                  : 'text-gray-500 hover:text-gray-700'
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id)}
+              className={`flex-1 py-4 flex items-center justify-center gap-2 transition-all duration-200 relative ${
+                activeTab === tab.id
+                  ? 'text-indigo-600'
+                  : 'text-gray-400 hover:text-gray-600 hover:bg-gray-50'
               }`}
             >
-              {/* No celular, podemos esconder os ícones se quiser, ou deixar assim */}
-              {tab === 'dashboard' ? '📊 Dash' : tab === 'servicos' ? '📋 Serviços' : '👥 Clientes'}
+              {/* Ícone sempre visível */}
+              <tab.icon size={24} strokeWidth={activeTab === tab.id ? 2.5 : 2} />
+              
+              {/* Texto: Escondido no celular (hidden), Visível no PC (md:block) */}
+              <span className="hidden md:block font-medium">
+                {tab.label}
+              </span>
+
+              {/* A barrinha azul embaixo da aba ativa */}
+              {activeTab === tab.id && (
+                <span className="absolute bottom-0 left-0 w-full h-1 bg-indigo-600 rounded-t-full" />
+              )}
             </button>
           ))}
         </div>
