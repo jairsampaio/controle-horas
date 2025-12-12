@@ -1,6 +1,6 @@
 // src/components/ServicesTable.js
 import React from 'react';
-import { Edit2, Trash2, Calendar, User, Clock, DollarSign, Activity } from 'lucide-react';
+import { Edit2, Trash2, Calendar, Activity } from 'lucide-react';
 
 const ServicesTable = ({ servicos, onStatusChange, onEdit, onDelete }) => {
   

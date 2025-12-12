@@ -12,6 +12,7 @@ import Auth from './components/Auth';
 import ConfigModal from './components/ConfigModal';
 import DashboardCharts from './components/DashboardCharts';
 import * as XLSX from 'xlsx';
+import SolicitantesModal from './components/SolicitantesModal'; 
 
 const App = () => {
   // --- ESTADOS ---
@@ -29,6 +30,8 @@ const App = () => {
   const [session, setSession] = useState(null);
   const [showConfigModal, setShowConfigModal] = useState(false);
   const [valorHoraPadrao, setValorHoraPadrao] = useState('150.00'); // Começa com 150 fixo até carregar do banco
+  const [showSolicitantesModal, setShowSolicitantesModal] = useState(false);
+  const [clienteParaSolicitantes, setClienteParaSolicitantes] = useState(null);
   
   const [filtros, setFiltros] = useState({
     cliente: '',
@@ -569,6 +572,12 @@ const handleExportarExcel = () => {
     setShowClienteModal(true);
   };
 
+  // Função para abrir o modal de gestão de solicitantes
+  const handleManageTeam = (cliente) => {
+    setClienteParaSolicitantes(cliente);
+    setShowSolicitantesModal(true);
+  };
+
   // Função auxiliar para filtrar (usada no render e no PDF)
   const servicosFiltrados = () => {
     return servicos.filter(s => {
@@ -920,6 +929,7 @@ const handleExportarExcel = () => {
               clientes={clientes}
               onEdit={editarCliente}
               onDelete={deletarCliente}
+              onManageTeam={handleManageTeam}
             />
           </div>
         )}
@@ -944,6 +954,13 @@ const handleExportarExcel = () => {
         formData={clienteFormData}
         setFormData={setClienteFormData}
         isEditing={!!editingCliente}
+      />
+
+      <SolicitantesModal 
+        isOpen={showSolicitantesModal}
+        onClose={() => { setShowSolicitantesModal(false); setClienteParaSolicitantes(null); }}
+        cliente={clienteParaSolicitantes}
+        userId={session?.user?.id}
       />
 
       <ConfigModal 
