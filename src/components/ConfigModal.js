@@ -4,10 +4,10 @@ import React, { useState, useEffect } from 'react';
 const ConfigModal = ({ isOpen, onClose, onSave, valorAtual }) => {
   const [valor, setValor] = useState('');
 
-  // Sempre que o modal abre ou o valor atual muda, atualiza o input local
+  // Sempre que o modal abre, carrega o valor já formatado com 2 casas
   useEffect(() => {
     if (isOpen) {
-      setValor(valorAtual);
+      setValor(parseFloat(valorAtual || '0').toFixed(2));
     }
   }, [isOpen, valorAtual]);
 
@@ -28,6 +28,8 @@ const ConfigModal = ({ isOpen, onClose, onSave, valorAtual }) => {
               step="0.01"
               value={valor}
               onChange={(e) => setValor(e.target.value)}
+              // O Pulo do Gato 🐱: Formata assim que você termina de digitar (clica fora)
+              onBlur={() => setValor(parseFloat(valor || '0').toFixed(2))}
               className="w-full border rounded-lg px-3 py-2 focus:ring-2 focus:ring-indigo-500 outline-none transition"
               placeholder="Ex: 150.00"
             />
