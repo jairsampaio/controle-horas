@@ -1,7 +1,7 @@
 /* eslint-disable no-restricted-globals */
 import gerarRelatorioPDF from "./utils/gerarRelatorioPDF";
 import React, { useState, useEffect } from 'react';
-import { Clock, DollarSign, User, FileText, Plus, Filter, Settings, Mail, Users, LayoutDashboard, Briefcase } from 'lucide-react';
+import { Clock, DollarSign, User, FileText, Plus, Filter, Settings, Mail, Users, LayoutDashboard, Briefcase, Hourglass, Timer, CheckCircle, FileCheck } from 'lucide-react';
 import supabase from './services/supabase'; // 
 import StatusCard from './components/StatusCard';
 import ClientModal from './components/ClientModal';
@@ -58,12 +58,33 @@ const App = () => {
   });
 
   // --- CONFIGURAÇÃO DE CORES DOS STATUS ---
+  // --- CONFIGURAÇÃO DE CORES E ÍCONES ---
   const statusConfig = {
-    'Pendente': { color: 'bg-gray-100 text-gray-800 border-gray-200', icon: '⏳', label: 'Pendente' },
-    'Em aprovação': { color: 'bg-orange-100 text-orange-800 border-orange-200', icon: '⏱️', label: 'Em Aprovação' },
-    'Aprovado': { color: 'bg-yellow-100 text-yellow-800 border-yellow-200', icon: '✅', label: 'Aprovado' },
-    'NF Emitida': { color: 'bg-blue-100 text-blue-800 border-blue-200', icon: '📄', label: 'NF Emitida' },
-    'Pago': { color: 'bg-green-100 text-green-800 border-green-200', icon: '💰', label: 'Pago' }
+    'Pendente': { 
+      color: 'bg-gray-100 text-gray-700 border-gray-200', 
+      icon: Hourglass, // 👈 Sem aspas! É o componente.
+      label: 'Pendente' 
+    },
+    'Em aprovação': { 
+      color: 'bg-orange-100 text-orange-800 border-orange-200', 
+      icon: Timer, 
+      label: 'Em Aprovação' 
+    },
+    'Aprovado': { 
+      color: 'bg-yellow-100 text-yellow-800 border-yellow-200', 
+      icon: CheckCircle, 
+      label: 'Aprovado' 
+    },
+    'NF Emitida': { 
+      color: 'bg-blue-100 text-blue-800 border-blue-200', 
+      icon: FileCheck, 
+      label: 'NF Emitida' 
+    },
+    'Pago': { 
+      color: 'bg-green-100 text-green-800 border-green-200', 
+      icon: DollarSign, 
+      label: 'Pago' 
+    }
   };
 
 
