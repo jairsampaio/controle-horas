@@ -28,8 +28,13 @@ export default async function handler(req, res) {
 
   // ⚠️ SEGURANÇA: Notei que sua senha estava exposta. 
   // O ideal é usar process.env.EMAIL_PASS, mas mantive a lógica para funcionar agora.
-  const user = process.env.EMAIL_USER || "contatosampaiojair@gmail.com";
-  const pass = process.env.EMAIL_PASS || "ekvd flqt aczg wled"; 
+  const user = process.env.EMAIL_USER;
+  const pass = process.env.EMAIL_PASS;
+
+  // Se por algum motivo o Vercel não carregar (embora deva), a função vai parar.
+  if (!user || !pass) {
+    return res.status(500).json({ error: "Variáveis de ambiente (EMAIL_USER/PASS) ausentes." });
+  }
 
   const transporter = nodemailer.createTransport({
     service: "gmail",
