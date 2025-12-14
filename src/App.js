@@ -294,22 +294,45 @@ const App = () => {
         }
     }, [session]); // Roda sempre que a sessão mudar
 
-    // --- CONTROLE DO BOTÃO VOLTAR (MOBILE) ---
+ // --- CONTROLE TOTAL DO BOTÃO VOLTAR (MODAIS + ABAS) ---
   useEffect(() => {
-    // Quando mudar de aba, se NÃO for dashboard, adiciona histórico
-    if (activeTab !== 'dashboard') {
-      window.history.pushState({ tab: activeTab }, '', `#${activeTab}`);
+    // Verifica se algum modal está aberto
+    const algumModalAberto = showModal || showClienteModal || showSolicitantesModal || showConfigModal;
+
+    // LÓGICA DE EMPURRAR HISTÓRICO (CRIAR CAMADAS)
+    // Se abriu um modal, cria um ponto no histórico '#modal'
+    if (algumModalAberto) {
+        if (window.location.hash !== '#modal') {
+            window.history.pushState({ type: 'modal' }, '', '#modal');
+        }
+    } 
+    // Se não tem modal, mas mudou de aba, cria ponto no histórico '#aba'
+    else if (activeTab !== 'dashboard') {
+        if (window.location.hash !== `#${activeTab}`) {
+            window.history.pushState({ type: 'tab' }, '', `#${activeTab}`);
+        }
     }
 
+    // LÓGICA DE VOLTAR (DESCASCAR CAMADAS)
     const handlePopState = () => {
-      // Se o usuário apertar voltar, forçamos a volta para o Dashboard
-      // Se já estiver no Dashboard, o navegador segue o fluxo normal (sair)
-      setActiveTab('dashboard');
+      // Nível 1: Se tem modal aberto, fecha ele e fica na tela atual
+      if (showModal || showClienteModal || showSolicitantesModal || showConfigModal) {
+        setShowModal(false);
+        setShowClienteModal(false);
+        setShowSolicitantesModal(false);
+        setShowConfigModal(false);
+        return; // Para aqui, não mexe na aba ainda
+      }
+
+      // Nível 2: Se não tem modal, mas está em Serviços/Clientes, volta pro Dashboard
+      if (activeTab !== 'dashboard') {
+        setActiveTab('dashboard');
+      }
     };
 
     window.addEventListener('popstate', handlePopState);
     return () => window.removeEventListener('popstate', handlePopState);
-  }, [activeTab]);
+  }, [activeTab, showModal, showClienteModal, showSolicitantesModal, showConfigModal]);
 
   const salvarServico = async () => {
     try {
