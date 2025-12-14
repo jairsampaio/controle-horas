@@ -114,7 +114,7 @@ const ServiceModal = ({ isOpen, onClose, onSave, formData, setFormData, clientes
 
             <div className="pt-4 border-t flex justify-end gap-2">
               <button type="button" onClick={onClose} className="px-4 py-2 text-sm text-gray-700 bg-gray-100 rounded hover:bg-gray-200 transition-colors font-medium flex items-center gap-2"><RotateCcw size={16}/> Cancelar</button>
-              <button type="submit" disabled={loading} className={`px-4 py-2 text-sm text-white rounded shadow-sm transition-all transform active:scale-95 flex items-center gap-2 font-medium ${buttonColor}`}>{loading ? 'Salvando...' : <><Save size={16} /> {isEditing ? 'Salvar Alterações' : 'Salvar Serviço'}</>}</button>
+              <button type="submit" disabled={loading} className={`px-4 py-2 text-sm text-white rounded shadow-sm transition-all transform active:scale-95 flex items-center gap-2 font-medium ${buttonColor}`}>{loading ? 'Salvando...' : <><Save size={16} /> <span className="font-bold">Salvar</span></>}</button>
             </div>
           </form>
         </div>

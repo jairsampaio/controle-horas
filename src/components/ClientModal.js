@@ -99,7 +99,7 @@ const ClientModal = ({ isOpen, onClose, onSave, formData, setFormData, isEditing
               type="submit"
               className={`flex-1 text-white py-2 rounded text-sm font-medium transition-colors flex justify-center items-center gap-2 ${buttonColor}`}
             >
-              <Save size={16} /> {isEditing ? 'Salvar Alterações' : 'Cadastrar'}
+              <Save size={16} /> <span className="font-bold">Salvar</span>
             </button>
           </div>
         </form>

@@ -14,7 +14,7 @@ import DashboardCharts from './components/DashboardCharts';
 import * as XLSX from 'xlsx';
 import SolicitantesModal from './components/SolicitantesModal'; 
 import MultiSelect from './components/MultiSelect'; // 👈 NOVO
-import { formatCurrency, formatHours } from './utils/formatters'; // 👈 NOVO
+import { formatCurrency, formatHours, formatHoursInt } from './utils/formatters'; // Adicione formatHoursInt
 
 const App = () => {
   // --- ESTADOS ---
@@ -293,6 +293,23 @@ const App = () => {
             };
         }
     }, [session]); // Roda sempre que a sessão mudar
+
+    // --- CONTROLE DO BOTÃO VOLTAR (MOBILE) ---
+  useEffect(() => {
+    // Quando mudar de aba, se NÃO for dashboard, adiciona histórico
+    if (activeTab !== 'dashboard') {
+      window.history.pushState({ tab: activeTab }, '', `#${activeTab}`);
+    }
+
+    const handlePopState = () => {
+      // Se o usuário apertar voltar, forçamos a volta para o Dashboard
+      // Se já estiver no Dashboard, o navegador segue o fluxo normal (sair)
+      setActiveTab('dashboard');
+    };
+
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, [activeTab]);
 
   const salvarServico = async () => {
     try {
@@ -850,7 +867,7 @@ const handleExportarExcel = () => {
                 <div className="flex items-center justify-between">
                   <div>
                     <p className="text-sm text-gray-600">Total de Horas</p>
-                    <p className="text-2xl font-bold text-gray-900">{formatHours(stats.totalHoras)}</p>
+                    <p className="text-2xl font-bold text-gray-900">{formatHoursInt(stats.totalHoras)}</p>
                   </div>
                   <Clock className="text-indigo-600" size={32} />
                 </div>

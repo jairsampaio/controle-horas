@@ -1,4 +1,3 @@
-// src/utils/formatters.js
 export const formatCurrency = (value) => {
   if (value === undefined || value === null || isNaN(parseFloat(value))) return 'R$ 0,00';
   return parseFloat(value).toLocaleString('pt-BR', {
@@ -23,4 +22,10 @@ export const formatHours = (value) => {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   }) + 'h';
+};
+
+// 👇 NOVA FUNÇÃO PARA O DASHBOARD (Inteiro)
+export const formatHoursInt = (value) => {
+  if (value === undefined || value === null || isNaN(parseFloat(value))) return '0h';
+  return Math.round(parseFloat(value)) + 'h';
 };
