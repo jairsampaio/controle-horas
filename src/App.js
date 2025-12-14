@@ -13,6 +13,8 @@ import ConfigModal from './components/ConfigModal';
 import DashboardCharts from './components/DashboardCharts';
 import * as XLSX from 'xlsx';
 import SolicitantesModal from './components/SolicitantesModal'; 
+import MultiSelect from './components/MultiSelect'; // 👈 NOVO
+import { formatCurrency, formatHours } from './utils/formatters'; // 👈 NOVO
 
 const App = () => {
   // --- ESTADOS ---
@@ -32,13 +34,17 @@ const App = () => {
   const [valorHoraPadrao, setValorHoraPadrao] = useState('150.00'); // Começa com 150 fixo até carregar do banco
   const [showSolicitantesModal, setShowSolicitantesModal] = useState(false);
   const [clienteParaSolicitantes, setClienteParaSolicitantes] = useState(null);
+  // 🆕 Estado para as opções do MultiSelect
+  const [todosSolicitantesDoCliente, setTodosSolicitantesDoCliente] = useState([]); 
+  // 🆕 Estado para Ordenação da Tabela
+  const [sortConfig, setSortConfig] = useState({ key: 'data', direction: 'desc' });
   
   const [filtros, setFiltros] = useState({
     cliente: '',
     status: '',
     dataInicio: '',
     dataFim: '',
-    solicitante: '' 
+    solicitantes: []
   });
 
   const [formData, setFormData] = useState({
@@ -90,7 +96,31 @@ const App = () => {
       label: 'Pago' 
     }
   };
-
+  // EFEITO: Carrega lista de solicitantes para o filtro quando seleciona um cliente
+  useEffect(() => {
+    const carregarSolicitantesFiltro = async () => {
+      // Se não tem cliente selecionado, limpa as opções e o filtro
+      if (!filtros.cliente) {
+        setTodosSolicitantesDoCliente([]);
+        setFiltros(prev => ({ ...prev, solicitantes: [] })); 
+        return;
+      }
+      
+      const clienteObj = clientes.find(c => c.nome === filtros.cliente);
+      if (clienteObj) {
+        const { data } = await supabase
+          .from('solicitantes')
+          .select('nome')
+          .eq('cliente_id', clienteObj.id)
+          .order('nome', { ascending: true });
+          
+        if (data) {
+            setTodosSolicitantesDoCliente(data.map(s => s.nome));
+        }
+      }
+    };
+    carregarSolicitantesFiltro();
+  }, [filtros.cliente, clientes]);
 
 // --- FUNÇÕES DE BANCO DE DADOS (SUPABASE V2) ---
 
@@ -651,29 +681,50 @@ const handleExportarExcel = () => {
     setShowSolicitantesModal(true);
   };
 
-  // Função auxiliar para filtrar (usada no render e no PDF)
+  // --- FUNÇÕES DE ORDENAÇÃO E FILTRO ---
+  
+  const handleSort = (key) => {
+    let direction = 'asc';
+    if (sortConfig.key === key && sortConfig.direction === 'asc') direction = 'desc';
+    setSortConfig({ key, direction });
+  };
+
   const servicosFiltrados = () => {
-    return servicos.filter(s => {
-      // Filtros existentes
+    // 1. Filtra
+    let result = servicos.filter(s => {
       if (filtros.cliente && s.cliente !== filtros.cliente) return false;
       if (filtros.status && s.status !== filtros.status) return false;
       if (filtros.dataInicio && s.data < filtros.dataInicio) return false;
       if (filtros.dataFim && s.data > filtros.dataFim) return false;
       
-      // 👇 NOVO FILTRO DE SOLICITANTE
-      // Se tiver algo digitado no filtro...
-      if (filtros.solicitante) {
-        // Pega o solicitante do serviço (ou vazio se for nulo)
-        const solicitanteServico = (s.solicitante || '').toLowerCase();
-        // O que o usuário digitou
-        const filtroDigitado = filtros.solicitante.toLowerCase();
-        
-        // Se o nome não contiver o que foi digitado, esconde (return false)
-        if (!solicitanteServico.includes(filtroDigitado)) return false;
+      // Lógica Multi-Select: Verifica se o serviço está na lista de selecionados
+      if (filtros.solicitantes && filtros.solicitantes.length > 0) {
+        const solNome = (s.solicitante || '').trim();
+        // Se o nome no serviço NÃO estiver na lista do filtro, esconde
+        if (!filtros.solicitantes.includes(solNome)) return false;
       }
-
       return true;
     });
+
+    // 2. Ordena
+    if (sortConfig.key) {
+      result.sort((a, b) => {
+        let valA = a[sortConfig.key];
+        let valB = b[sortConfig.key];
+        
+        // Tratamento para números (para ordenar valor corretamente)
+        if (sortConfig.key === 'valor_total' || sortConfig.key === 'qtd_horas') {
+            valA = parseFloat(valA || 0);
+            valB = parseFloat(valB || 0);
+        }
+
+        if (valA < valB) return sortConfig.direction === 'asc' ? -1 : 1;
+        if (valA > valB) return sortConfig.direction === 'asc' ? 1 : -1;
+        return 0;
+      });
+    }
+
+    return result;
   };
 
   const servicosFiltradosData = servicosFiltrados(); // Executa o filtro para usar na tela
@@ -799,7 +850,7 @@ const handleExportarExcel = () => {
                 <div className="flex items-center justify-between">
                   <div>
                     <p className="text-sm text-gray-600">Total de Horas</p>
-                    <p className="text-2xl font-bold text-gray-900">{stats.totalHoras.toFixed(2)}h</p>
+                    <p className="text-2xl font-bold text-gray-900">{formatHours(stats.totalHoras)}</p>
                   </div>
                   <Clock className="text-indigo-600" size={32} />
                 </div>
@@ -809,7 +860,7 @@ const handleExportarExcel = () => {
                 <div className="flex items-center justify-between">
                   <div>
                     <p className="text-sm text-gray-600">Valor Total</p>
-                    <p className="text-2xl font-bold text-gray-900">R$ {stats.totalValor.toFixed(2)}</p>
+                    <p className="text-2xl font-bold text-gray-900">{formatCurrency(stats.totalValor)}</p>
                   </div>
                   <DollarSign className="text-green-600" size={32} />
                 </div>
@@ -871,12 +922,12 @@ const handleExportarExcel = () => {
               {/* Grid de 5 colunas para caber o novo filtro */}
               <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
                 {/* 1. Filtro Solicitante (NOVO) */}
-                <input
-                  type="text"
-                  placeholder="Filtrar por Solicitante..."
-                  value={filtros.solicitante || ''}
-                  onChange={(e) => setFiltros({...filtros, solicitante: e.target.value})}
-                  className="border rounded px-3 py-2 outline-none focus:ring-2 focus:ring-indigo-500"
+                {/* Substitua pelo MultiSelect */}
+                <MultiSelect 
+                  options={todosSolicitantesDoCliente} 
+                  selected={filtros.solicitantes} 
+                  onChange={(novos) => setFiltros({...filtros, solicitantes: novos})}
+                  placeholder={filtros.cliente ? "Filtrar Solicitantes..." : "Selecione Cliente"}
                 />
 
                 {/* 2. Filtro Cliente */}
@@ -975,6 +1026,9 @@ const handleExportarExcel = () => {
               onStatusChange={alterarStatusRapido}
               onEdit={editarServico}
               onDelete={deletarServico}
+              // 👇 ADICIONE ESSAS DUAS LINHAS:
+              onSort={handleSort} 
+              sortConfig={sortConfig}
             /> 
           </div>
         ) : (

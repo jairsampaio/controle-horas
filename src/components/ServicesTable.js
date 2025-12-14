@@ -1,18 +1,23 @@
-// src/components/ServicesTable.js
 import React from 'react';
-import { Edit2, Trash2, Calendar, Activity } from 'lucide-react';
+import { Edit2, Trash2, Calendar, ArrowUp, ArrowDown } from 'lucide-react';
+import { formatCurrency, formatHours } from '../utils/formatters';
 
-const ServicesTable = ({ servicos, onStatusChange, onEdit, onDelete }) => {
+const ServicesTable = ({ servicos, onStatusChange, onEdit, onDelete, onSort, sortConfig }) => {
   
   const formatData = (dataStr) => {
     return new Date(dataStr + 'T00:00:00').toLocaleDateString('pt-BR');
   };
 
-  // Função para gerar cor de avatar baseada na letra (Frufru visual legal)
   const getAvatarColor = (name) => {
     const colors = ['bg-red-100 text-red-700', 'bg-blue-100 text-blue-700', 'bg-green-100 text-green-700', 'bg-purple-100 text-purple-700', 'bg-yellow-100 text-yellow-700', 'bg-indigo-100 text-indigo-700'];
     const index = name.charCodeAt(0) % colors.length;
     return colors[index];
+  };
+
+  // Ícone de ordenação dinâmica
+  const SortIcon = ({ column }) => {
+    if (sortConfig.key !== column) return <div className="w-4" />; // Espaço vazio para alinhar
+    return sortConfig.direction === 'asc' ? <ArrowUp size={14} /> : <ArrowDown size={14} />;
   };
 
   // --- EMPTY STATE ---
@@ -24,7 +29,7 @@ const ServicesTable = ({ servicos, onStatusChange, onEdit, onDelete }) => {
         </div>
         <h3 className="text-xl font-semibold text-gray-800">Nenhum serviço encontrado</h3>
         <p className="text-gray-500 max-w-sm mt-2">
-          Sua lista está limpa. Que tal cadastrar o primeiro serviço do dia?
+          Sua lista está limpa ou os filtros não retornaram resultados.
         </p>
       </div>
     );
@@ -32,12 +37,10 @@ const ServicesTable = ({ servicos, onStatusChange, onEdit, onDelete }) => {
 
   return (
     <>
-      {/* --- VERSÃO MOBILE (CARDS) - Mantive igual pois já estava ótimo --- */}
+      {/* --- VERSÃO MOBILE (CARDS) --- */}
       <div className="md:hidden space-y-4">
         {servicos.map(servico => (
           <div key={servico.id} className="bg-white p-4 rounded-xl shadow-sm border border-gray-100 space-y-3">
-             {/* ... (Seu código mobile atual continua aqui) ... */}
-             {/* Vou repetir o bloco mobile resumido para garantir que funcione se copiar tudo */}
             <div className="flex justify-between items-start">
               <div className="flex items-center gap-2 text-gray-600 font-medium text-sm">
                 <Calendar size={16} />
@@ -59,14 +62,13 @@ const ServicesTable = ({ servicos, onStatusChange, onEdit, onDelete }) => {
                 </div>
                 {servico.cliente}
               </div>
-              <div className="flex items-center gap-2 text-gray-500 text-sm pl-10">
-                <Activity size={14} />
+              <div className="text-sm text-gray-500 pl-10">
                 {servico.atividade}
               </div>
             </div>
             <div className="pt-3 border-t border-gray-50 flex justify-between items-center">
-               <div className="font-bold text-gray-900">
-                  R$ {parseFloat(servico.valor_total).toFixed(2)}
+               <div className="font-bold text-gray-900 text-lg">
+                  {formatCurrency(servico.valor_total)} {/* 👈 AQUI: Ponto virou vírgula */}
                </div>
                <div className="flex gap-2">
                  <button onClick={() => onEdit(servico)} className="p-2 text-blue-600 bg-blue-50 rounded-lg"><Edit2 size={16}/></button>
@@ -77,12 +79,22 @@ const ServicesTable = ({ servicos, onStatusChange, onEdit, onDelete }) => {
         ))}
       </div>
 
-      {/* --- VERSÃO DESKTOP MODERNIZADA --- */}
+      {/* --- VERSÃO DESKTOP --- */}
       <div className="hidden md:block overflow-hidden rounded-xl border border-gray-200 shadow-sm bg-white">
         <table className="w-full">
           <thead className="bg-gray-50">
             <tr>
-              <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Cliente / Data</th>
+              {/* 1. Cabeçalho Ordenável */}
+              <th 
+                className="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 hover:text-indigo-600 transition-colors group select-none"
+                onClick={() => onSort('data')}
+              >
+                <div className="flex items-center gap-1">
+                  Data <SortIcon column="data" />
+                </div>
+              </th>
+              
+              <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Cliente / Solicitante</th>
               <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Atividade</th>
               <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Valor / Horas</th>
               <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Status</th>
@@ -91,37 +103,39 @@ const ServicesTable = ({ servicos, onStatusChange, onEdit, onDelete }) => {
           </thead>
           <tbody className="divide-y divide-gray-100">
             {servicos.map(servico => (
-              <tr key={servico.id} className="group hover:bg-indigo-50 transition-colors duration-150">
+              <tr key={servico.id} className="group hover:bg-gray-50 transition-colors duration-150">
                 
-                {/* 1. Coluna Combinada: Avatar + Nome + Data */}
+                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
+                   <div className="flex items-center gap-2">
+                      <Calendar size={14} className="text-gray-400"/>
+                      {formatData(servico.data)}
+                   </div>
+                </td>
+
                 <td className="px-6 py-4 whitespace-nowrap">
                   <div className="flex items-center">
-                    <div className={`flex-shrink-0 h-10 w-10 rounded-full flex items-center justify-center font-bold ${getAvatarColor(servico.cliente)}`}>
+                    <div className={`flex-shrink-0 h-8 w-8 rounded-full flex items-center justify-center font-bold text-xs ${getAvatarColor(servico.cliente)}`}>
                       {servico.cliente.charAt(0)}
                     </div>
-                    <div className="ml-4">
+                    <div className="ml-3">
                       <div className="text-sm font-bold text-gray-900">{servico.cliente}</div>
-                      <div className="text-xs text-gray-500 flex items-center gap-1 mt-0.5">
-                        <Calendar size={12} /> {formatData(servico.data)}
-                      </div>
+                      <div className="text-xs text-gray-500">{servico.solicitante || '-'}</div>
                     </div>
                   </div>
                 </td>
 
-                {/* 2. Coluna Atividade (Texto cinza mais suave) */}
                 <td className="px-6 py-4">
                   <div className="text-sm text-gray-600 max-w-xs truncate" title={servico.atividade}>
                     {servico.atividade}
                   </div>
                 </td>
 
-                {/* 3. Coluna Financeira (Valor em destaque, horas discreto) */}
+                {/* 3. Coluna Financeira Formatada */}
                 <td className="px-6 py-4 whitespace-nowrap">
-                  <div className="text-sm font-bold text-gray-900">R$ {parseFloat(servico.valor_total).toFixed(2)}</div>
-                  <div className="text-xs text-gray-500 mt-0.5">{parseFloat(servico.qtd_horas).toFixed(2)} horas</div>
+                  <div className="text-sm font-bold text-gray-900">{formatCurrency(servico.valor_total)}</div>
+                  <div className="text-xs text-gray-500 mt-0.5">{formatHours(servico.qtd_horas)}</div>
                 </td>
 
-                {/* 4. Coluna Status (Badge Moderno) */}
                 <td className="px-6 py-4 whitespace-nowrap">
                    <select
                       value={servico.status}
@@ -142,7 +156,6 @@ const ServicesTable = ({ servicos, onStatusChange, onEdit, onDelete }) => {
                     </select>
                 </td>
 
-                {/* 5. Coluna Ações (Só aparecem com cor no hover da linha) */}
                 <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                   <div className="flex justify-end gap-3 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
                     <button
