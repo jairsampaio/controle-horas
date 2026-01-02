@@ -487,6 +487,13 @@ const salvarConfiguracao = async (novoValor, novoNome) => {
 
   const handleGerarPDF = () => {
     const dadosParaRelatorio = servicosFiltrados(); 
+
+    console.log("DEBUG NOME:", {
+        estadoReact: nomeConsultor,
+        sessaoEmail: session?.user?.email,
+        vaiImprimir: nomeConsultor || session?.user?.email
+    });
+
     // Usa o nome das configurações OU do Auth OU um fallback
     const nomeParaRelatorio = nomeConsultor || session?.user?.email || 'Consultor';
 
