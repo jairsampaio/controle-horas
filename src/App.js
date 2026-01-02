@@ -1,7 +1,8 @@
 /* eslint-disable no-restricted-globals */
 import gerarRelatorioPDF from "./utils/gerarRelatorioPDF";
 import React, { useState, useEffect } from 'react';
-import { Clock, DollarSign, User, FileText, Plus, Filter, Settings, Mail, Users, LayoutDashboard, Briefcase, Hourglass, Timer, CheckCircle, FileCheck, Building2 } from 'lucide-react';
+// 👇 CORREÇÃO AQUI: Adicionados LayoutDashboard e Briefcase nos imports
+import { Clock, DollarSign, User, FileText, Plus, Filter, Settings, Mail, Users, LayoutDashboard, Briefcase, Hourglass, Timer, CheckCircle, FileCheck, Building2, Menu } from 'lucide-react';
 import supabase from './services/supabase'; 
 import StatusCard from './components/StatusCard';
 import ClientModal from './components/ClientModal';
@@ -14,7 +15,8 @@ import DashboardCharts from './components/DashboardCharts';
 import * as XLSX from 'xlsx';
 import SolicitantesModal from './components/SolicitantesModal'; 
 import MultiSelect from './components/MultiSelect'; 
-import ChannelsModal from './components/ChannelsModal';
+import ChannelsModal from './components/ChannelsModal'; 
+import Sidebar from './components/Sidebar'; 
 import { formatCurrency, formatHours, formatHoursInt } from './utils/formatters'; 
 
 const App = () => {
@@ -32,18 +34,19 @@ const App = () => {
   const [editingCliente, setEditingCliente] = useState(null);
   const [session, setSession] = useState(null);
   const [showConfigModal, setShowConfigModal] = useState(false);
-  const [valorHoraPadrao, setValorHoraPadrao] = useState('120.00'); // Começa com 150 fixo até carregar do banco
-  const [nomeConsultor, setNomeConsultor] = useState('');
+  
+  // CONFIGURAÇÕES GERAIS
+  const [valorHoraPadrao, setValorHoraPadrao] = useState('150.00'); 
+  const [nomeConsultor, setNomeConsultor] = useState(''); 
+
   const [showSolicitantesModal, setShowSolicitantesModal] = useState(false);
   const [clienteParaSolicitantes, setClienteParaSolicitantes] = useState(null);
-  
-  // 🆕 Estado para Modal de Canais
   const [showChannelsModal, setShowChannelsModal] = useState(false);
-
-  // 🆕 Estado para as opções do MultiSelect
   const [todosSolicitantesDoCliente, setTodosSolicitantesDoCliente] = useState([]); 
-  // 🆕 Estado para Ordenação da Tabela
   const [sortConfig, setSortConfig] = useState({ key: 'data', direction: 'desc' });
+  
+  // Estado para controlar o Menu Mobile
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   
   const [filtros, setFiltros] = useState({
     cliente: '',
@@ -61,7 +64,7 @@ const App = () => {
     atividade: '',
     solicitante: '',
     cliente: '',
-    canal_id: '', // 👈 NOVO CAMPO
+    canal_id: '',
     status: 'Pendente',
     numero_nfs: '',
     observacoes: ''
@@ -74,77 +77,37 @@ const App = () => {
     ativo: true
   });
 
-  // --- CONFIGURAÇÃO DE CORES DOS STATUS ---
-  // --- CONFIGURAÇÃO DE CORES E ÍCONES ---
   const statusConfig = {
-    'Pendente': { 
-      color: 'bg-gray-100 text-gray-700 border-gray-200', 
-      icon: Hourglass, // 👈 Sem aspas! É o componente.
-      label: 'Pendente' 
-    },
-    'Em aprovação': { 
-      color: 'bg-orange-100 text-orange-800 border-orange-200', 
-      icon: Timer, 
-      label: 'Em Aprovação' 
-    },
-    'Aprovado': { 
-      color: 'bg-yellow-100 text-yellow-800 border-yellow-200', 
-      icon: CheckCircle, 
-      label: 'Aprovado' 
-    },
-    'NF Emitida': { 
-      color: 'bg-blue-100 text-blue-800 border-blue-200', 
-      icon: FileCheck, 
-      label: 'NF Emitida' 
-    },
-    'Pago': { 
-      color: 'bg-green-100 text-green-800 border-green-200', 
-      icon: DollarSign, 
-      label: 'Pago' 
-    }
+    'Pendente': { color: 'bg-gray-100 text-gray-700 border-gray-200', icon: Hourglass, label: 'Pendente' },
+    'Em aprovação': { color: 'bg-orange-100 text-orange-800 border-orange-200', icon: Timer, label: 'Em Aprovação' },
+    'Aprovado': { color: 'bg-yellow-100 text-yellow-800 border-yellow-200', icon: CheckCircle, label: 'Aprovado' },
+    'NF Emitida': { color: 'bg-blue-100 text-blue-800 border-blue-200', icon: FileCheck, label: 'NF Emitida' },
+    'Pago': { color: 'bg-green-100 text-green-800 border-green-200', icon: DollarSign, label: 'Pago' }
   };
-  // EFEITO: Carrega lista de solicitantes para o filtro quando seleciona um cliente
+
   useEffect(() => {
     const carregarSolicitantesFiltro = async () => {
-      // Se não tem cliente selecionado, limpa as opções e o filtro
       if (!filtros.cliente) {
         setTodosSolicitantesDoCliente([]);
         setFiltros(prev => ({ ...prev, solicitantes: [] })); 
         return;
       }
-      
       const clienteObj = clientes.find(c => c.nome === filtros.cliente);
       if (clienteObj) {
-        const { data } = await supabase
-          .from('solicitantes')
-          .select('nome')
-          .eq('cliente_id', clienteObj.id)
-          .order('nome', { ascending: true });
-          
-        if (data) {
-            setTodosSolicitantesDoCliente(data.map(s => s.nome));
-        }
+        const { data } = await supabase.from('solicitantes').select('nome').eq('cliente_id', clienteObj.id).order('nome', { ascending: true });
+        if (data) setTodosSolicitantesDoCliente(data.map(s => s.nome));
       }
     };
     carregarSolicitantesFiltro();
   }, [filtros.cliente, clientes]);
 
-// --- FUNÇÕES DE BANCO DE DADOS (SUPABASE V2) ---
-
   const getSession = async () => {
     setLoading(true);
-    // Busca o estado de autenticação do Supabase
     const { data: { session }, error } = await supabase.auth.getSession();
-
-    if (error) {
-      console.error('Erro ao buscar sessão:', error);
-      alert('Erro de autenticação!');
-    }
+    if (error) { console.error('Erro sessão:', error); alert('Erro de autenticação!'); }
     setSession(session);
     setLoading(false);
   };
-
-  // --- FUNÇÕES DE CONFIGURAÇÃO ---
 
   const carregarConfiguracao = async () => {
     try {
@@ -167,17 +130,15 @@ const App = () => {
     }
   };
 
-const salvarConfiguracao = async (novoValor, novoNome) => {
+  const salvarConfiguracao = async (novoValor, novoNome) => {
     try {
       setLoading(true);
       
-      // Salva Valor Hora
       await supabase.from('configuracoes').upsert(
         { chave: 'valor_hora_padrao', valor: novoValor, user_id: session.user.id }, 
         { onConflict: 'chave, user_id' }
       );
 
-      // Salva Nome Consultor
       await supabase.from('configuracoes').upsert(
         { chave: 'nome_consultor', valor: novoNome, user_id: session.user.id },
         { onConflict: 'chave, user_id' }
@@ -198,10 +159,9 @@ const salvarConfiguracao = async (novoValor, novoNome) => {
 
   const carregarDados = async () => {
     try {
-      // Busca Serviços com JOIN em Canais
       const { data: dataServicos, error: errorServicos } = await supabase
         .from('servicos_prestados')
-        .select('*, canais(nome)') // 👈 Traz o nome do canal
+        .select('*, canais(nome)')
         .order('data', { ascending: false });
 
       if (errorServicos) throw errorServicos;
@@ -213,102 +173,39 @@ const salvarConfiguracao = async (novoValor, novoNome) => {
     } catch (error) { console.error('Erro dados:', error); alert('Erro ao carregar dados.'); }
   };
 
-  // Carrega a sessão na montagem e monitora mudanças de estado
   useEffect(() => {
     getSession();
+    const { data: authListener } = supabase.auth.onAuthStateChange((_event, session) => { setSession(session); });
+    return () => { authListener.subscription.unsubscribe(); };
+  }, []);
 
-    const { data: authListener } = supabase.auth.onAuthStateChange(
-      (_event, session) => {
-        setSession(session);
-      }
-    );
-    
-    return () => {
-      authListener.subscription.unsubscribe();
-    };
+  useEffect(() => {
+    if (session) { setLoading(true); carregarDados(); carregarConfiguracao(); setLoading(false); } 
+    else { setServicos([]); setClientes([]); }
+  }, [session]);
 
-  }, []); // Roda apenas na montagem
-
-  // Recarrega os dados SEMPRE que a sessão for estabelecida
   useEffect(() => {
     if (session) {
-      setLoading(true);
-      carregarDados();
-      carregarConfiguracao();
-      setLoading(false);
-    } else {
-      // Limpa os dados se fizer logout
-      setServicos([]);
-      setClientes([]);
+      const handleBeforeUnload = (e) => { supabase.auth.signOut(); localStorage.clear(); delete e.returnValue; };
+      window.addEventListener('beforeunload', handleBeforeUnload);
+      return () => { window.removeEventListener('beforeunload', handleBeforeUnload); };
     }
-  }, [session]); // Roda quando a sessão muda (login/logout)
+  }, [session]);
 
-  
-    // src/App.js (Substitua todo o bloco 'Força o Logout ao fechar a aba...')
-
-    // --- NOVO: Força o Logout ao fechar a aba do navegador ---
-    useEffect(() => {
-        // Só ativa o monitoramento se houver uma sessão ativa
-        if (session) {
-            const handleBeforeUnload = (e) => { // NÃO PRECISA SER ASYNC
-                // 1. Tenta o logout (se a rede permitir a requisição rápida)
-                supabase.auth.signOut(); 
-                
-                // 2. GARANTIA: Limpa todo o Local Storage.
-                // Isso força o app a não encontrar o token de sessão na próxima carga.
-                localStorage.clear(); 
-                
-                // Remove o aviso de confirmação do navegador, pois já temos o confirm() feio
-                delete e.returnValue; 
-            };
-
-            // Adiciona o listener ao objeto Window
-            window.addEventListener('beforeunload', handleBeforeUnload);
-
-            // Remove o listener quando o componente for desmontado
-            return () => {
-                window.removeEventListener('beforeunload', handleBeforeUnload);
-            };
-        }
-    }, [session]); // Roda sempre que a sessão mudar
-
- // --- CONTROLE TOTAL DO BOTÃO VOLTAR (MODAIS + ABAS) ---
   useEffect(() => {
-    // Verifica se algum modal está aberto
     const algumModalAberto = showModal || showClienteModal || showSolicitantesModal || showConfigModal || showChannelsModal;
-
-    // LÓGICA DE EMPURRAR HISTÓRICO (CRIAR CAMADAS)
-    // Se abriu um modal, cria um ponto no histórico '#modal'
     if (algumModalAberto) {
-        if (window.location.hash !== '#modal') {
-            window.history.pushState({ type: 'modal' }, '', '#modal');
-        }
-    } 
-    // Se não tem modal, mas mudou de aba, cria ponto no histórico '#aba'
-    else if (activeTab !== 'dashboard') {
-        if (window.location.hash !== `#${activeTab}`) {
-            window.history.pushState({ type: 'tab' }, '', `#${activeTab}`);
-        }
+        if (window.location.hash !== '#modal') window.history.pushState({ type: 'modal' }, '', '#modal');
+    } else if (activeTab !== 'dashboard') {
+        if (window.location.hash !== `#${activeTab}`) window.history.pushState({ type: 'tab' }, '', `#${activeTab}`);
     }
-
-    // LÓGICA DE VOLTAR (DESCASCAR CAMADAS)
     const handlePopState = () => {
-      // Nível 1: Se tem modal aberto, fecha ele e fica na tela atual
       if (showModal || showClienteModal || showSolicitantesModal || showConfigModal || showChannelsModal) {
-        setShowModal(false);
-        setShowClienteModal(false);
-        setShowSolicitantesModal(false);
-        setShowConfigModal(false);
-        setShowChannelsModal(false); // 👈 Fecha o modal de canais
-        return; // Para aqui, não mexe na aba ainda
+        setShowModal(false); setShowClienteModal(false); setShowSolicitantesModal(false); setShowConfigModal(false); setShowChannelsModal(false);
+        return;
       }
-
-      // Nível 2: Se não tem modal, mas está em Serviços/Clientes, volta pro Dashboard
-      if (activeTab !== 'dashboard') {
-        setActiveTab('dashboard');
-      }
+      if (activeTab !== 'dashboard') setActiveTab('dashboard');
     };
-
     window.addEventListener('popstate', handlePopState);
     return () => window.removeEventListener('popstate', handlePopState);
   }, [activeTab, showModal, showClienteModal, showSolicitantesModal, showConfigModal, showChannelsModal]);
@@ -316,187 +213,68 @@ const salvarConfiguracao = async (novoValor, novoNome) => {
   const salvarServico = async () => {
     try {
       let error;
-      
       if (editingService) {
-        // ATUALIZAR (UPDATE)
-        const { error: updateError } = await supabase
-          .from('servicos_prestados')
-          .update(formData)
-          .eq('id', editingService.id);
+        const { error: updateError } = await supabase.from('servicos_prestados').update(formData).eq('id', editingService.id);
         error = updateError;
       } else {
-        // CRIAR NOVO (INSERT)
-        const { error: insertError } = await supabase
-          .from('servicos_prestados')
-          .insert([{...formData, user_id: session.user.id }]);
+        const { error: insertError } = await supabase.from('servicos_prestados').insert([{...formData, user_id: session.user.id }]);
         error = insertError;
       }
-
       if (error) throw error;
-
-      //alert(editingService ? 'Serviço atualizado!' : 'Serviço cadastrado!');
       showToast(editingService ? 'Serviço atualizado!' : 'Serviço cadastrado!', 'sucesso');
-      setShowModal(false);
-      setEditingService(null);
-      resetForm();
-      carregarDados();
-
-    } catch (error) {
-      console.error('Erro ao salvar:', error);
-      //alert('Erro ao salvar serviço: ' + error.message);
-      showToast('Erro ao salvar serviço: ' + error.message, 'erro');
-    }
+      setShowModal(false); setEditingService(null); resetForm(); carregarDados();
+    } catch (error) { console.error('Erro ao salvar:', error); showToast('Erro ao salvar serviço: ' + error.message, 'erro'); }
   };
 
   const deletarServico = async (id) => {
     if (!confirm('Tem certeza que deseja excluir este serviço?')) return;
-    // Dentro de deletarServico:
-      
-    
     try {
-      const { error } = await supabase
-        .from('servicos_prestados')
-        .delete()
-        .eq('id', id);
-
+      const { error } = await supabase.from('servicos_prestados').delete().eq('id', id);
       if (error) throw error;
-      
-      //alert('Serviço excluído!');
-      showToast('Serviço excluído!', 'sucesso');
-      carregarDados();
-    } catch (error) {
-      console.error('Erro ao deletar:', error);
-      //alert('Erro ao excluir serviço!');
-      showToast('Erro ao excluir serviço!', 'erro');
-    }
+      showToast('Serviço excluído!', 'sucesso'); carregarDados();
+    } catch (error) { console.error('Erro deletar:', error); showToast('Erro ao excluir serviço!', 'erro'); }
   };
 
   const alterarStatusRapido = async (id, novoStatus) => {
     try {
-      const { error } = await supabase
-        .from('servicos_prestados')
-        .update({ status: novoStatus })
-        .eq('id', id);
-
-      if (error) throw error;
-      carregarDados();
-    } catch (error) {
-      console.error('Erro ao alterar status:', error);
-      alert('Erro ao alterar status!');
-    }
+      const { error } = await supabase.from('servicos_prestados').update({ status: novoStatus }).eq('id', id);
+      if (error) throw error; carregarDados();
+    } catch (error) { console.error('Erro status:', error); alert('Erro ao alterar status!'); }
   };
 
   const salvarCliente = async () => {
-    //if (!clienteFormData.nome.trim()) {
-      //alert('Nome do cliente é obrigatório!');
-      //return;
-    //}
-    if (!clienteFormData.nome.trim()) { 
-    showToast('Nome do cliente é obrigatório!', 'erro');
-    return; 
-    }
-
+    if (!clienteFormData.nome.trim()) { showToast('Nome do cliente é obrigatório!', 'erro'); return; }
     try {
       let error;
-
       if (editingCliente) {
-        // ATUALIZAR CLIENTE
-        const { error: updateError } = await supabase
-          .from('clientes')
-          .update(clienteFormData)
-          .eq('id', editingCliente.id);
+        const { error: updateError } = await supabase.from('clientes').update(clienteFormData).eq('id', editingCliente.id);
         error = updateError;
       } else {
-        // CRIAR CLIENTE
-        const { error: insertError } = await supabase
-          .from('clientes')
-          .insert([{...clienteFormData, user_id: session.user.id }]);
+        const { error: insertError } = await supabase.from('clientes').insert([{...clienteFormData, user_id: session.user.id }]);
         error = insertError;
       }
-
       if (error) throw error;
-
-      //alert(editingCliente ? 'Cliente atualizado!' : 'Cliente cadastrado!');
       showToast(editingCliente ? 'Cliente atualizado!' : 'Cliente cadastrado!', 'sucesso');
-      setShowClienteModal(false);
-      setEditingCliente(null);
-      resetClienteForm();
-      carregarDados();
-
-    } catch (error) {
-      console.error('Erro ao salvar cliente:', error);
-      //alert('Erro ao salvar cliente!');
-      showToast('Erro ao salvar cliente!', 'erro');
-    }
+      setShowClienteModal(false); setEditingCliente(null); resetClienteForm(); carregarDados();
+    } catch (error) { console.error('Erro cliente:', error); showToast('Erro ao salvar cliente!', 'erro'); }
   };
 
   const deletarCliente = async (id) => {
     if (!confirm('Tem certeza que deseja excluir este cliente?')) return;
-
-    
     try {
-      const { error } = await supabase
-        .from('clientes')
-        .delete()
-        .eq('id', id);
-
+      const { error } = await supabase.from('clientes').delete().eq('id', id);
       if (error) throw error;
-      
-      //alert('Cliente excluído!');
-      showToast('Cliente excluído!', 'sucesso');
-      carregarDados();
-    } catch (error) {
-      console.error('Erro ao deletar:', error);
-      //alert('Erro ao excluir cliente!');
-      showToast('Erro ao excluir cliente!', 'erro');
-    }
+      showToast('Cliente excluído!', 'sucesso'); carregarDados();
+    } catch (error) { console.error('Erro deletar:', error); showToast('Erro ao excluir cliente!', 'erro'); }
   };
 
-  // Funções utilitárias de Autenticação
-  const handleLogout = async () => {
-    setLoading(true);
-    const { error } = await supabase.auth.signOut();
-    if (error) {
-      console.error(error);
-    } else {
-      setSession(null); // Limpa a sessão localmente
-      // Os dados serão limpos no useEffect
-    }
-    setLoading(false);
-  };
-
-  // --- FUNÇÕES DE FORMULÁRIO E UTILITÁRIOS ---
-      // 2. Converte Blob para Base64 (Texto)
-    const blobToBase64 = (blob) => {
-      return new Promise((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onloadend = () => resolve(reader.result);
-        reader.onerror = reject;
-        reader.readAsDataURL(blob);
-      });
-    };
-    // src/App.js (Na seção de utilitários)
-
-    // Função auxiliar para exibir o Toast e fazê-lo sumir automaticamente
-    const showToast = (mensagem, tipo = 'sucesso') => {
-      setToast({ visivel: true, mensagem: mensagem, tipo: tipo });
-      setTimeout(() => {
-        setToast(prev => ({ ...prev, visivel: false }));
-      }, 3000); // Esconde após 3 segundos
-    };
+  const handleLogout = async () => { setLoading(true); const { error } = await supabase.auth.signOut(); if (error) console.error(error); else setSession(null); setLoading(false); };
+  const blobToBase64 = (blob) => { return new Promise((resolve, reject) => { const reader = new FileReader(); reader.onloadend = () => resolve(reader.result); reader.onerror = reject; reader.readAsDataURL(blob); }); };
+  const showToast = (mensagem, tipo = 'sucesso') => { setToast({ visivel: true, mensagem: mensagem, tipo: tipo }); setTimeout(() => { setToast(prev => ({ ...prev, visivel: false })); }, 3000); };
 
   const handleGerarPDF = () => {
     const dadosParaRelatorio = servicosFiltrados(); 
-
-    console.log("DEBUG NOME:", {
-        estadoReact: nomeConsultor,
-        sessaoEmail: session?.user?.email,
-        vaiImprimir: nomeConsultor || session?.user?.email
-    });
-
-    // Usa o nome das configurações OU do Auth OU um fallback
     const nomeParaRelatorio = nomeConsultor || session?.user?.email || 'Consultor';
-
     const pdfBlob = gerarRelatorioPDF(dadosParaRelatorio, filtros, nomeParaRelatorio);
     const url = URL.createObjectURL(pdfBlob);
     const a = document.createElement("a");
@@ -506,179 +284,80 @@ const salvarConfiguracao = async (novoValor, novoNome) => {
     URL.revokeObjectURL(url);
   };
 
-  // src/App.js (Na seção de Utilitários)
+  const handleExportarExcel = () => {
+    const dados = servicosFiltradosData.map(s => ({ Data: new Date(s.data + 'T00:00:00').toLocaleDateString('pt-BR'), Canal: s.canais?.nome || 'Direto', Cliente: s.cliente, Atividade: s.atividade, 'Qtd Horas': parseFloat(s.qtd_horas).toFixed(2).replace('.', ','), 'Valor Total': parseFloat(s.valor_total).toFixed(2).replace('.', ','), Status: s.status, Solicitante: s.solicitante || '-', 'Nota Fiscal': s.numero_nfs || '-' }));
+    const ws = XLSX.utils.json_to_sheet(dados); const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, "Serviços"); XLSX.writeFile(wb, `Relatorio_Servicos_${new Date().toISOString().split('T')[0]}.xlsx`); showToast('Planilha Excel gerada com sucesso!', 'sucesso');
+  };
 
-const handleExportarExcel = () => {
-  // 1. Pega os dados filtrados (o que o usuário está vendo na tabela)
-  const dados = servicosFiltradosData.map(s => ({
-    Data: new Date(s.data + 'T00:00:00').toLocaleDateString('pt-BR'),
-    Cliente: s.cliente,
-    Atividade: s.atividade,
-    'Qtd Horas': parseFloat(s.qtd_horas).toFixed(2).replace('.', ','),
-    'Valor Total': parseFloat(s.valor_total).toFixed(2).replace('.', ','),
-    Status: s.status,
-    Solicitante: s.solicitante || '-',
-    'Nota Fiscal': s.numero_nfs || '-'
-  }));
-
-  // 2. Cria uma Planilha (Worksheet)
-  const ws = XLSX.utils.json_to_sheet(dados);
-
-  // 3. Cria um Livro (Workbook) e adiciona a planilha
-  const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, ws, "Serviços");
-
-  // 4. Gera o arquivo e força o download
-  XLSX.writeFile(wb, `Relatorio_Servicos_${new Date().toISOString().split('T')[0]}.xlsx`);
-
-  showToast('Planilha Excel gerada com sucesso!', 'sucesso');
-};
-
-// --- FUNÇÃO DE ENVIO CORRIGIDA (LÓGICA SIMPLIFICADA) ---
   const handleEnviarEmail = async () => {
-    // 1. Validação Inicial
-    if (!filtros.cliente) {
-      showToast("Selecione um cliente no filtro para enviar e-mails.", "erro");
-      return;
-    }
-
+    if (!filtros.cliente) { showToast("Selecione um cliente no filtro para enviar e-mails.", "erro"); return; }
     const clienteSelecionado = clientes.find(c => c.nome === filtros.cliente);
-    if (!clienteSelecionado || !clienteSelecionado.email) {
-      showToast("Cliente sem e-mail principal cadastrado!", "erro");
-      return;
-    }
-
-    if (servicosFiltradosData.length === 0) {
-      showToast("Não há serviços listados para enviar.", "erro");
-      return;
-    }
+    if (!clienteSelecionado || !clienteSelecionado.email) { showToast("Cliente sem e-mail principal cadastrado!", "erro"); return; }
+    if (servicosFiltradosData.length === 0) { showToast("Não há serviços listados para enviar.", "erro"); return; }
 
     setEmailEnviando(true);
-
     try {
-      // 2. BUSCA SIMPLIFICADA: Baixa TODOS os solicitantes desse cliente
-      // (Em vez de tentar fazer join complexo, baixamos a lista e cruzamos no código)
-      const { data: todosSolicitantes, error } = await supabase
-        .from('solicitantes')
-        .select('*')
-        .eq('cliente_id', clienteSelecionado.id);
-
+      const { data: todosSolicitantes, error } = await supabase.from('solicitantes').select('*').eq('cliente_id', clienteSelecionado.id);
       if (error) throw error;
-
-      // 3. AGRUPAMENTO
+      
       const pacotesDeEnvio = {};
-
       servicosFiltradosData.forEach(servico => {
-        // Padrão: Manda pra Empresa
         let emailDestino = clienteSelecionado.email;
         let emailCC = null;
-
-        // Tenta achar quem pediu esse serviço na lista que baixamos
-        const solicitanteEncontrado = todosSolicitantes.find(
-          s => s.nome.trim().toLowerCase() === (servico.solicitante || '').trim().toLowerCase()
-        );
-
+        const solicitanteEncontrado = todosSolicitantes.find(s => s.nome.trim().toLowerCase() === (servico.solicitante || '').trim().toLowerCase());
         if (solicitanteEncontrado) {
-          // Se achou, pega o email dele pra cópia
           if (solicitanteEncontrado.email) emailCC = solicitanteEncontrado.email;
-
-          // AGORA A MÁGICA: Verifica se ele tem um chefe vinculado
           if (solicitanteEncontrado.coordenador_id) {
-            // Busca quem é esse chefe na mesma lista (pelo ID)
             const chefe = todosSolicitantes.find(s => s.id === solicitanteEncontrado.coordenador_id);
-            
-            // Se achou o chefe e ele tem email, muda o destino!
-            if (chefe && chefe.email) {
-              emailDestino = chefe.email;
-            }
+            if (chefe && chefe.email) emailDestino = chefe.email;
           }
         }
-
-        // Cria/Atualiza o pacote de envio
-        if (!pacotesDeEnvio[emailDestino]) {
-          pacotesDeEnvio[emailDestino] = {
-            destinatario: emailDestino,
-            servicos: [],
-            ccs: new Set()
-          };
-        }
-
+        if (!pacotesDeEnvio[emailDestino]) { pacotesDeEnvio[emailDestino] = { destinatario: emailDestino, servicos: [], ccs: new Set() }; }
         pacotesDeEnvio[emailDestino].servicos.push(servico);
         if (emailCC) pacotesDeEnvio[emailDestino].ccs.add(emailCC);
       });
 
-      // 4. DISPARO
-      const totalPacotes = Object.keys(pacotesDeEnvio).length;
       let enviados = 0;
-
       for (const [emailDestino, pacote] of Object.entries(pacotesDeEnvio)) {
         const listaCCs = Array.from(pacote.ccs);
-
         showToast(`Enviando para ${emailDestino}...`, "sucesso");
-
-        const pdfBlob = gerarRelatorioPDF(pacote.servicos, filtros);
+        
+        const nomeParaRelatorio = nomeConsultor || session?.user?.email || 'Consultor';
+        const pdfBlob = gerarRelatorioPDF(pacote.servicos, filtros, nomeParaRelatorio);
+        
         if (!pdfBlob) throw new Error("Falha PDF");
         const pdfBase64 = await blobToBase64(pdfBlob);
-
-        // 👇 ADICIONE ESSA LINHA PARA TESTAR:
-        console.log("📨 TENTATIVA DE ENVIO:", { 
-            Para: emailDestino, 
-            CCs: listaCCs, 
-            Servicos: pacote.servicos.length 
-        });
+        
+        console.log("📨 ENVIO:", { Para: emailDestino, Servicos: pacote.servicos.length });
         
         const response = await fetch("/api/enviar-email", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            email: emailDestino,
-            cc: listaCCs,
-            nomeCliente: clienteSelecionado.nome,
-            pdfBase64: pdfBase64,
-            periodo: filtros.dataInicio ? `${new Date(filtros.dataInicio).toLocaleDateString()} a ...` : 'Período Geral'
-          })
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ email: emailDestino, cc: listaCCs, nomeCliente: clienteSelecionado.nome, pdfBase64: pdfBase64, periodo: filtros.dataInicio ? `${new Date(filtros.dataInicio).toLocaleDateString()} a ...` : 'Período Geral' })
         });
-
         if (response.ok) enviados++;
       }
-
       showToast(`Sucesso! ${enviados} e-mail(s) enviado(s).`, "sucesso");
-
-    } catch (error) {
-      console.error("Erro:", error);
-      showToast("Erro no envio.", "erro");
-    } finally {
-      setEmailEnviando(false);
-    }
+    } catch (error) { console.error("Erro:", error); showToast("Erro no envio.", "erro"); } finally { setEmailEnviando(false); }
   };
   
-  const resetForm = () => {
-    setFormData({
-      data: new Date().toISOString().split('T')[0],
-      hora_inicial: '09:00',
-      hora_final: '18:00',
-      valor_hora: parseFloat(valorHoraPadrao || '0').toFixed(2), // 👈 AQUI! Usa a variável do estado em vez de fixo
-      atividade: '',
-      solicitante: '',
-      cliente: '',
-      canal_id: '', // 👈 LIMPA O CANAL AO RESETAR
-      status: 'Pendente',
-      numero_nfs: '',
-      observacoes: ''
-    });
+  const resetForm = () => { 
+    setFormData({ 
+      data: new Date().toISOString().split('T')[0], 
+      hora_inicial: '09:00', 
+      hora_final: '18:00', 
+      valor_hora: parseFloat(valorHoraPadrao || '0').toFixed(2), 
+      atividade: '', 
+      solicitante: '', 
+      cliente: '', 
+      canal_id: '', 
+      status: 'Pendente', 
+      numero_nfs: '', 
+      observacoes: '' 
+    }); 
   };
-
-  const resetClienteForm = () => {
-    setClienteFormData({
-      nome: '',
-      email: '',
-      telefone: '',
-      ativo: true
-    });
-  };
-
-  const editarServico = (servico) => {
-    setEditingService(servico);
+  const resetClienteForm = () => { setClienteFormData({ nome: '', email: '', telefone: '', ativo: true }); };
+  const editarServico = (servico) => { 
+    setEditingService(servico); 
     setFormData({
       data: servico.data,
       hora_inicial: servico.hora_inicial,
@@ -687,485 +366,212 @@ const handleExportarExcel = () => {
       atividade: servico.atividade,
       solicitante: servico.solicitante || '',
       cliente: servico.cliente,
-      canal_id: servico.canal_id || '', // 👈 CARREGA O CANAL NA EDIÇÃO
+      canal_id: servico.canal_id || '', 
       status: servico.status,
       numero_nfs: servico.numero_nfs || '',
       observacoes: servico.observacoes || ''
     });
-    setShowModal(true);
+    setShowModal(true); 
   };
-
-  const editarCliente = (cliente) => {
-    setEditingCliente(cliente);
-    setClienteFormData({
-      nome: cliente.nome,
-      email: cliente.email || '',
-      telefone: cliente.telefone || '',
-      ativo: cliente.ativo
-    });
-    setShowClienteModal(true);
-  };
-
-  // Função para abrir o modal de gestão de solicitantes
-  const handleManageTeam = (cliente) => {
-    setClienteParaSolicitantes(cliente);
-    setShowSolicitantesModal(true);
-  };
-
-  // --- FUNÇÕES DE ORDENAÇÃO E FILTRO ---
-  
-  const handleSort = (key) => {
-    let direction = 'asc';
-    if (sortConfig.key === key && sortConfig.direction === 'asc') direction = 'desc';
-    setSortConfig({ key, direction });
-  };
+  const editarCliente = (cliente) => { setEditingCliente(cliente); setClienteFormData(cliente); setShowClienteModal(true); };
+  const handleManageTeam = (cliente) => { setClienteParaSolicitantes(cliente); setShowSolicitantesModal(true); };
+  const handleSort = (key) => { let direction = 'asc'; if (sortConfig.key === key && sortConfig.direction === 'asc') direction = 'desc'; setSortConfig({ key, direction }); };
 
   const servicosFiltrados = () => {
-    // 1. Filtra
     let result = servicos.filter(s => {
       if (filtros.cliente && s.cliente !== filtros.cliente) return false;
       if (filtros.status && s.status !== filtros.status) return false;
       if (filtros.dataInicio && s.data < filtros.dataInicio) return false;
       if (filtros.dataFim && s.data > filtros.dataFim) return false;
-      
-      // Lógica Multi-Select: Verifica se o serviço está na lista de selecionados
       if (filtros.solicitantes && filtros.solicitantes.length > 0) {
         const solNome = (s.solicitante || '').trim();
-        // Se o nome no serviço NÃO estiver na lista do filtro, esconde
         if (!filtros.solicitantes.includes(solNome)) return false;
       }
       return true;
     });
-
-    // 2. Ordena
     if (sortConfig.key) {
       result.sort((a, b) => {
         let valA = a[sortConfig.key];
         let valB = b[sortConfig.key];
-        
-        // Tratamento para números (para ordenar valor corretamente)
-        if (sortConfig.key === 'valor_total' || sortConfig.key === 'qtd_horas') {
-            valA = parseFloat(valA || 0);
-            valB = parseFloat(valB || 0);
-        }
-
+        if (sortConfig.key === 'valor_total' || sortConfig.key === 'qtd_horas') { valA = parseFloat(valA || 0); valB = parseFloat(valB || 0); }
         if (valA < valB) return sortConfig.direction === 'asc' ? -1 : 1;
         if (valA > valB) return sortConfig.direction === 'asc' ? 1 : -1;
         return 0;
       });
     }
-
     return result;
   };
 
-  const servicosFiltradosData = servicosFiltrados(); // Executa o filtro para usar na tela
-
-  // Cálculos do Dashboard
+  const servicosFiltradosData = servicosFiltrados(); 
   const stats = {
     totalHoras: servicosFiltradosData.reduce((sum, s) => sum + parseFloat(s.qtd_horas || 0), 0),
     totalValor: servicosFiltradosData.reduce((sum, s) => sum + parseFloat(s.valor_total || 0), 0),
     totalServicos: servicosFiltradosData.length,
-    porStatus: servicosFiltradosData.reduce((acc, s) => {
-      if (!acc[s.status]) {
-        acc[s.status] = { count: 0, valor: 0 };
-      }
-      acc[s.status].count += 1;
-      acc[s.status].valor += parseFloat(s.valor_total || 0);
-      return acc;
-    }, {})
+    porStatus: servicosFiltradosData.reduce((acc, s) => { if (!acc[s.status]) { acc[s.status] = { count: 0, valor: 0 }; } acc[s.status].count += 1; acc[s.status].valor += parseFloat(s.valor_total || 0); return acc; }, {})
   };
 
-// --- RENDERIZAÇÃO (JSX) ---
+  if (loading && !session) return <div className="min-h-screen bg-white flex items-center justify-center"><div className="animate-spin rounded-full h-16 w-16 border-t-2 border-b-2 border-indigo-600"></div></div>;
+  if (!session) return <Auth />;
 
-  // Componente interno para o botão Sair
-  const LogoutButton = () => (
-    <button
-      onClick={handleLogout}
-      className="bg-red-500 text-white px-3 py-2 text-sm rounded-lg flex items-center gap-1 hover:bg-red-600 transition hover:scale-105 active:scale-95"
-    >
-      Sair
-    </button>
-  );
-
-  // 1. Loading inicial
-  if (loading && !session) {
-    return (
-      <div className="min-h-screen bg-white flex items-center justify-center">
-        <div className="animate-spin rounded-full h-16 w-16 border-t-2 border-b-2 border-indigo-600"></div>
-      </div>
-    );
-  }
-
-  // 2. Tela de Login
-  if (!session) {
-    return <Auth />;
-  }
-
-  // 3. App Principal
   return (
-    <div className="min-h-screen bg-gray-50">
-      <header className="bg-white shadow-sm border-b">
-        <div className="max-w-7xl mx-auto px-4 py-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <h1 className="text-2xl font-bold text-gray-900">Controle de Horas</h1>
-              <p className="text-sm text-gray-500">Gerencie seus serviços prestados</p>
-            </div>
-            <div className='flex items-center gap-2'>
-              
-              {/* 🆕 BOTÃO DE CANAIS */}
-              <button 
-                onClick={() => setShowChannelsModal(true)} 
-                className="p-2 text-gray-600 hover:text-indigo-600 hover:bg-gray-100 rounded-full transition" 
-                title="Gerenciar Canais / Parceiros"
-              >
-                <Building2 size={20} />
-              </button>
+    // 🆕 LAYOUT MODERNO (SHELL)
+    <div className="flex h-screen bg-gray-50 overflow-hidden">
+      
+      {/* 1. SIDEBAR (Lateral) */}
+      <Sidebar 
+        activeTab={activeTab} 
+        setActiveTab={setActiveTab} 
+        isOpen={isMobileMenuOpen}
+        onClose={() => setIsMobileMenuOpen(false)}
+        onLogout={handleLogout}
+        onOpenConfig={() => setShowConfigModal(true)}
+        onOpenChannels={() => setShowChannelsModal(true)}
+      />
 
-              <button
-                onClick={() => setShowConfigModal(true)}
-                className="p-2 text-gray-600 hover:text-indigo-600 hover:bg-gray-100 rounded-full transition"
-                title="Configurações"
-              >
-                <Settings size={20} />
-              </button>
-
-              <button
-                onClick={() => { resetForm(); setShowModal(true); }}
-                className="bg-indigo-600 text-white px-3 py-2 rounded-lg flex items-center gap-2 
-                          hover:bg-indigo-700 transition-all duration-200 
-                          hover:scale-105 active:scale-95 text-sm font-medium whitespace-nowrap"
-              >
-                <Plus size={18} />
-                <span className="hidden sm:inline">Novo Serviço</span>
-              </button>
-              
-              <LogoutButton />
-            </div>
-          </div>
-        </div>
-      </header>
-
-      {/* Navegação por Abas */}
-      <div className="max-w-7xl mx-auto px-4 mt-6">
-        <div className="flex w-full border-b bg-white rounded-t-lg shadow-sm">
-          {[
-            { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
-            { id: 'servicos', label: 'Serviços', icon: Briefcase },
-            { id: 'clientes', label: 'Clientes', icon: Users },
-          ].map(tab => (
-            <button
-              key={tab.id}
-              onClick={() => setActiveTab(tab.id)}
-              className={`flex-1 py-4 flex items-center justify-center gap-2 transition-all duration-200 relative ${
-                activeTab === tab.id
-                  ? 'text-indigo-600'
-                  : 'text-gray-400 hover:text-gray-600 hover:bg-gray-50'
-              }`}
+      {/* 2. CONTEÚDO PRINCIPAL (Direita) */}
+      <div className="flex-1 flex flex-col min-w-0 overflow-hidden relative">
+        
+        {/* Top Bar (Cabeçalho do Conteúdo) */}
+        <header className="bg-white border-b border-gray-200 h-16 flex items-center justify-between px-6 shadow-sm z-10">
+          <div className="flex items-center gap-4">
+            {/* Botão Menu Hamburguer (Só Mobile) */}
+            <button 
+              onClick={() => setIsMobileMenuOpen(true)}
+              className="md:hidden p-2 -ml-2 text-gray-500 hover:text-gray-700 rounded-lg hover:bg-gray-100"
             >
-              <tab.icon size={24} strokeWidth={activeTab === tab.id ? 2.5 : 2} />
-              <span className="hidden md:block font-medium">
-                {tab.label}
-              </span>
-              {activeTab === tab.id && (
-                <span className="absolute bottom-0 left-0 w-full h-1 bg-indigo-600 rounded-t-full" />
-              )}
+              <Menu size={24} />
             </button>
-          ))}
-        </div>
-      </div>
-
-      {/* Conteúdo das Abas */}
-      <div key={activeTab} className="max-w-7xl mx-auto px-4 py-6 animate-fade-in-up">
-        {loading ? (
-          <div className="text-center py-12">
-            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600 mx-auto"></div>
-            <p className="mt-4 text-gray-600">Carregando Dados...</p>
-          </div>
-        ) : activeTab === 'dashboard' ? (
-          // --- ABA DASHBOARD ---
-          <div className="space-y-6">
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4 animate-fade-in-up">
-              <div className="bg-white p-6 rounded-lg shadow animate-slide-up delay-100">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm text-gray-600">Total de Horas</p>
-                    <p className="text-2xl font-bold text-gray-900">{formatHoursInt(stats.totalHoras)}</p>
-                  </div>
-                  <Clock className="text-indigo-600" size={32} />
-                </div>
-              </div>
-              
-              <div className="bg-white p-6 rounded-lg shadow animate-slide-up delay-200">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm text-gray-600">Valor Total</p>
-                    <p className="text-2xl font-bold text-gray-900">{formatCurrency(stats.totalValor)}</p>
-                  </div>
-                  <DollarSign className="text-green-600" size={32} />
-                </div>
-              </div>
-              
-              <div className="bg-white p-6 rounded-lg shadow animate-slide-up delay-300">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm text-gray-600">Serviços</p>
-                    <p className="text-2xl font-bold text-gray-900">{stats.totalServicos}</p>
-                  </div>
-                  <FileText className="text-blue-600" size={32} />
-                </div>
-              </div>
-              
-              <div className="bg-white p-6 rounded-lg shadow animate-slide-up delay-500">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm text-gray-600">Clientes</p>
-                    <p className="text-2xl font-bold text-gray-900">{clientes.length}</p>
-                  </div>
-                  <User className="text-purple-600" size={32} />
-                </div>
-              </div>
-            </div>
-
-            <DashboardCharts servicos={servicosFiltradosData} />
-
-            <div className="bg-white p-6 rounded-lg shadow">
-              <h3 className="text-lg font-semibold mb-4">Serviços por Status</h3>
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4">
-                {Object.entries(stats.porStatus || {}).map(([status, dados]) => {
-                  const config = statusConfig[status] || statusConfig['Pendente'];
-                  return (
-                    <StatusCard 
-                      key={status}
-                      status={status}
-                      count={dados.count}
-                      valor={dados.valor}
-                      color={config.color}
-                      icon={config.icon}
-                    />
-                  );
-                })}
-              </div>
-            </div>
-          </div>
-        ) : activeTab === 'servicos' ? (
-          // --- ABA SERVIÇOS ---
-          <div className="space-y-4">
             
-            {/* Bloco de Filtros - AGORA NO LUGAR CERTO */}
-            <div className="bg-white p-4 rounded-lg shadow space-y-4">
-              <div className="flex items-center gap-2 text-gray-700 font-medium">
-                <Filter size={20} />
-                Filtros
-              </div>
-              
-              {/* Grid de 5 colunas para caber o novo filtro */}
-              <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
-                {/* 1. Filtro Solicitante (NOVO) */}
-                {/* Substitua pelo MultiSelect */}
-                <MultiSelect 
-                  options={todosSolicitantesDoCliente} 
-                  selected={filtros.solicitantes} 
-                  onChange={(novos) => setFiltros({...filtros, solicitantes: novos})}
-                  placeholder={filtros.cliente ? "Filtrar Solicitantes..." : "Selecione Cliente"}
-                />
-
-                {/* 2. Filtro Cliente */}
-                <select
-                  value={filtros.cliente}
-                  onChange={(e) => setFiltros({...filtros, cliente: e.target.value})}
-                  className="border rounded px-3 py-2"
-                >
-                  <option value="">Todos os clientes</option>
-                  {clientes.map(c => (
-                    <option key={c.id} value={c.nome}>{c.nome}</option>
-                  ))}
-                </select>
-                
-                {/* 3. Filtro Status */}
-                <select
-                  value={filtros.status}
-                  onChange={(e) => setFiltros({...filtros, status: e.target.value})}
-                  className="border rounded px-3 py-2"
-                >
-                  <option value="">Todos os status</option>
-                  <option value="Pendente">Pendente</option>
-                  <option value="Em aprovação">Em aprovação</option>
-                  <option value="Aprovado">Aprovado</option>
-                  <option value="NF Emitida">NF Emitida</option>
-                  <option value="Pago">Pago</option>
-                </select>
-                
-                {/* 4. Data Início */}
-                <input
-                  type="date"
-                  value={filtros.dataInicio}
-                  onChange={(e) => setFiltros({...filtros, dataInicio: e.target.value})}
-                  className="border rounded px-3 py-2"
-                  placeholder="Data início"
-                />
-                
-                {/* 5. Data Fim */}
-                <input
-                  type="date"
-                  value={filtros.dataFim}
-                  onChange={(e) => setFiltros({...filtros, dataFim: e.target.value})}
-                  className="border rounded px-3 py-2"
-                  placeholder="Data fim"
-                />
-              </div>
-            </div>
-
-            {/* Barra de Ações (Excel/PDF/Email) */}
-            <div className="bg-white p-4 rounded-lg shadow space-y-4">
-              <div className="flex justify-end gap-2 pt-2 border-t md:border-t-0 md:pt-0">
-                <button
-                  onClick={handleExportarExcel}
-                  className="flex items-center gap-2 bg-green-600 hover:bg-green-700 text-white p-2 md:px-4 md:py-2 rounded-lg shadow transition-all active:scale-95"
-                  title="Exportar para Excel"
-                >
-                  <FileText size={20} />
-                  <span className="hidden md:inline">Excel</span>
-                </button>
-
-                <button
-                  onClick={handleGerarPDF}
-                  className="flex items-center gap-2 bg-red-600 hover:bg-red-700 text-white p-2 md:px-4 md:py-2 rounded-lg shadow transition-all active:scale-95"
-                  title="Gerar PDF"
-                >
-                  <FileText size={20} />
-                  <span className="hidden md:inline">Relatório PDF</span>
-                </button>
-
-                <button
-                  onClick={async () => {
-                    setEmailEnviando(true);
-                    try {
-                      await handleEnviarEmail();
-                    } catch {
-                      setToast({ mensagem: "Erro inesperado!", tipo: "erro", visivel: true });
-                    }
-                    setEmailEnviando(false);
-                    setTimeout(() => setToast(prev => ({ ...prev, visivel: false })), 3000);
-                  }}
-                  disabled={emailEnviando}
-                  className={`flex items-center gap-2 p-2 md:px-4 md:py-2 rounded-lg shadow transition-all active:scale-95 
-                    ${emailEnviando ? "bg-green-400 cursor-not-allowed" : "bg-blue-600 hover:bg-blue-700 text-white"}`}
-                  title="Enviar por E-mail"
-                >
-                  {emailEnviando ? <Clock size={20} className="animate-spin" /> : <Mail size={20} />} 
-                  <span className="hidden md:inline">
-                    {emailEnviando ? "Enviando..." : "Enviar Email"}
-                  </span>
-                </button>
-              </div>
-            </div>
-
-            <ServicesTable 
-              servicos={servicosFiltradosData}
-              onStatusChange={alterarStatusRapido}
-              onEdit={editarServico}
-              onDelete={deletarServico}
-              // 👇 ADICIONE ESSAS DUAS LINHAS:
-              onSort={handleSort} 
-              sortConfig={sortConfig}
-            /> 
+            <h1 className="text-xl font-bold text-gray-800 flex items-center gap-2">
+              {activeTab === 'dashboard' && <><LayoutDashboard className="text-indigo-600" /> Dashboard</>}
+              {activeTab === 'servicos' && <><Briefcase className="text-indigo-600" /> Meus Serviços</>}
+              {activeTab === 'clientes' && <><Users className="text-indigo-600" /> Clientes</>}
+            </h1>
           </div>
-        ) : (
-          // --- ABA CLIENTES ---
-          <div className="space-y-4">
-            <div className="flex justify-between items-center bg-white p-4 rounded-lg shadow">
-              <h2 className="text-xl font-bold text-gray-900 flex items-center gap-2">
-                <Users size={24} className="text-indigo-600 hidden md:block" />
-                Gerenciar Clientes
-              </h2>
-              
-              <button
-                onClick={() => { resetClienteForm(); setShowClienteModal(true); }}
-                className="bg-indigo-600 text-white p-2 md:px-4 md:py-2 rounded-lg flex items-center gap-2 
-                          hover:bg-indigo-700 transition-all duration-200 
-                          hover:scale-105 active:scale-95 shadow"
-                title="Cadastrar Novo Cliente"
-              >
-                <Plus size={20} />
-                <span className="hidden md:inline">Novo Cliente</span>
-              </button>
-            </div>
-            
-            <ClientsTable 
-              clientes={clientes}
-              onEdit={editarCliente}
-              onDelete={deletarCliente}
-              onManageTeam={handleManageTeam}
-            />
+
+          {/* Botão de Ação Principal (Novo Serviço) - Sempre visível */}
+          <button
+            onClick={() => { resetForm(); setShowModal(true); }}
+            className="bg-indigo-600 text-white px-4 py-2 rounded-xl flex items-center gap-2 
+                      hover:bg-indigo-700 transition-all duration-200 
+                      hover:scale-105 active:scale-95 text-sm font-bold shadow-md shadow-indigo-200"
+          >
+            <Plus size={18} />
+            <span className="hidden sm:inline">Novo Serviço</span>
+          </button>
+        </header>
+
+        {/* Área de Scroll (Conteúdo das Abas) */}
+        <main className="flex-1 overflow-y-auto p-4 md:p-8 scroll-smooth">
+          
+          <div className="max-w-7xl mx-auto animate-fade-in-up pb-10">
+            {loading ? (
+              <div className="text-center py-12">
+                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600 mx-auto"></div>
+                <p className="mt-4 text-gray-600">Carregando Dados...</p>
+              </div>
+            ) : activeTab === 'dashboard' ? (
+              // --- CONTEÚDO DASHBOARD ---
+              <div className="space-y-6">
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                  <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 hover:shadow-md transition-shadow">
+                    <div className="flex items-center justify-between mb-2">
+                      <div className="p-3 bg-indigo-50 rounded-xl"><Clock className="text-indigo-600" size={24} /></div>
+                      <span className="text-xs font-bold text-gray-400 uppercase tracking-wider">Horas</span>
+                    </div>
+                    <div><p className="text-2xl font-black text-gray-900">{formatHoursInt(stats.totalHoras)}</p><p className="text-xs text-gray-500 mt-1">Total acumulado</p></div>
+                  </div>
+                  
+                  <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 hover:shadow-md transition-shadow">
+                    <div className="flex items-center justify-between mb-2">
+                      <div className="p-3 bg-green-50 rounded-xl"><DollarSign className="text-green-600" size={24} /></div>
+                      <span className="text-xs font-bold text-gray-400 uppercase tracking-wider">Faturamento</span>
+                    </div>
+                    <div><p className="text-2xl font-black text-gray-900">{formatCurrency(stats.totalValor)}</p><p className="text-xs text-gray-500 mt-1">Total acumulado</p></div>
+                  </div>
+
+                  <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 hover:shadow-md transition-shadow">
+                    <div className="flex items-center justify-between mb-2">
+                      <div className="p-3 bg-blue-50 rounded-xl"><FileText className="text-blue-600" size={24} /></div>
+                      <span className="text-xs font-bold text-gray-400 uppercase tracking-wider">Serviços</span>
+                    </div>
+                    <div><p className="text-2xl font-black text-gray-900">{stats.totalServicos}</p><p className="text-xs text-gray-500 mt-1">Lançamentos</p></div>
+                  </div>
+
+                  <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 hover:shadow-md transition-shadow">
+                    <div className="flex items-center justify-between mb-2">
+                      <div className="p-3 bg-purple-50 rounded-xl"><Users className="text-purple-600" size={24} /></div>
+                      <span className="text-xs font-bold text-gray-400 uppercase tracking-wider">Clientes</span>
+                    </div>
+                    <div><p className="text-2xl font-black text-gray-900">{clientes.length}</p><p className="text-xs text-gray-500 mt-1">Ativos</p></div>
+                  </div>
+                </div>
+
+                <DashboardCharts servicos={servicosFiltradosData} />
+
+                <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
+                  <h3 className="text-lg font-bold text-gray-800 mb-6">Status dos Serviços</h3>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4">
+                    {Object.entries(stats.porStatus || {}).map(([status, dados]) => {
+                      const config = statusConfig[status] || statusConfig['Pendente'];
+                      return <StatusCard key={status} status={status} count={dados.count} valor={dados.valor} color={config.color} icon={config.icon} />;
+                    })}
+                  </div>
+                </div>
+              </div>
+
+            ) : activeTab === 'servicos' ? (
+              // --- CONTEÚDO SERVIÇOS ---
+              <div className="space-y-6">
+                
+                {/* Filtros em Card */}
+                <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 space-y-4">
+                  <div className="flex items-center gap-2 text-gray-800 font-bold mb-2">
+                    <Filter size={20} className="text-indigo-600" /> Filtros Avançados
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+                    <MultiSelect options={todosSolicitantesDoCliente} selected={filtros.solicitantes} onChange={(novos) => setFiltros({...filtros, solicitantes: novos})} placeholder={filtros.cliente ? "Filtrar Solicitantes..." : "Selecione Cliente"} />
+                    <select value={filtros.cliente} onChange={(e) => setFiltros({...filtros, cliente: e.target.value})} className="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 outline-none"><option value="">Todos os clientes</option>{clientes.map(c => (<option key={c.id} value={c.nome}>{c.nome}</option>))}</select>
+                    <select value={filtros.status} onChange={(e) => setFiltros({...filtros, status: e.target.value})} className="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 outline-none"><option value="">Todos os status</option><option value="Pendente">Pendente</option><option value="Em aprovação">Em aprovação</option><option value="Aprovado">Aprovado</option><option value="NF Emitida">NF Emitida</option><option value="Pago">Pago</option></select>
+                    <input type="date" value={filtros.dataInicio} onChange={(e) => setFiltros({...filtros, dataInicio: e.target.value})} className="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 outline-none" />
+                    <input type="date" value={filtros.dataFim} onChange={(e) => setFiltros({...filtros, dataFim: e.target.value})} className="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 outline-none" />
+                  </div>
+                </div>
+
+                {/* Barra de Ações */}
+                <div className="flex flex-wrap justify-end gap-3">
+                  <button onClick={handleExportarExcel} className="flex items-center gap-2 bg-white border border-gray-200 text-gray-700 hover:bg-gray-50 px-4 py-2 rounded-lg text-sm font-medium transition-colors" title="Exportar Excel"><FileText size={18} className="text-green-600" /> Excel</button>
+                  <button onClick={handleGerarPDF} className="flex items-center gap-2 bg-white border border-gray-200 text-gray-700 hover:bg-gray-50 px-4 py-2 rounded-lg text-sm font-medium transition-colors" title="Gerar PDF"><FileText size={18} className="text-red-600" /> PDF</button>
+                  <button onClick={async () => { setEmailEnviando(true); try { await handleEnviarEmail(); } catch { setToast({ mensagem: "Erro inesperado!", tipo: "erro", visivel: true }); } setEmailEnviando(false); setTimeout(() => setToast(prev => ({ ...prev, visivel: false })), 3000); }} disabled={emailEnviando} className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors text-white ${emailEnviando ? "bg-indigo-400 cursor-not-allowed" : "bg-indigo-600 hover:bg-indigo-700"}`}>{emailEnviando ? <Clock size={18} className="animate-spin" /> : <Mail size={18} />} {emailEnviando ? "Enviando..." : "Enviar p/ Cliente"}</button>
+                </div>
+
+                <ServicesTable servicos={servicosFiltradosData} onStatusChange={alterarStatusRapido} onEdit={editarServico} onDelete={deletarServico} onSort={handleSort} sortConfig={sortConfig} /> 
+              </div>
+
+            ) : (
+              // --- CONTEÚDO CLIENTES ---
+              <div className="space-y-6">
+                <div className="flex justify-between items-center bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
+                  <h2 className="text-lg font-bold text-gray-800">Base de Clientes</h2>
+                  <button onClick={() => { resetClienteForm(); setShowClienteModal(true); }} className="bg-indigo-50 text-indigo-700 px-4 py-2 rounded-lg text-sm font-bold hover:bg-indigo-100 transition-colors flex items-center gap-2"><Plus size={18} /> Cadastrar</button>
+                </div>
+                <ClientsTable clientes={clientes} onEdit={editarCliente} onDelete={deletarCliente} onManageTeam={handleManageTeam} />
+              </div>
+            )}
           </div>
-        )}
+        </main>
       </div>
 
-      {/* --- MODAIS E TOASTS --- */}
-
-      <ServiceModal 
-        isOpen={showModal}
-        onClose={() => { setShowModal(false); setEditingService(null); resetForm(); }}
-        onSave={salvarServico}
-        formData={formData}
-        setFormData={setFormData}
-        clientes={clientes}
-        isEditing={!!editingService}
-      />
-
-      <ClientModal 
-        isOpen={showClienteModal}
-        onClose={() => { setShowClienteModal(false); setEditingCliente(null); resetClienteForm(); }}
-        onSave={salvarCliente}
-        formData={clienteFormData}
-        setFormData={setClienteFormData}
-        isEditing={!!editingCliente}
-      />
-
-      <SolicitantesModal 
-        isOpen={showSolicitantesModal}
-        onClose={() => { setShowSolicitantesModal(false); setClienteParaSolicitantes(null); }}
-        cliente={clienteParaSolicitantes}
-        userId={session?.user?.id}
-      />
-
-      <ConfigModal 
-        isOpen={showConfigModal}
-        onClose={() => setShowConfigModal(false)}
-        onSave={salvarConfiguracao}
-        valorAtual={valorHoraPadrao}
-        nomeAtual={nomeConsultor}
-      />
-
-      {/* 🆕 MODAL DE CANAIS (RENDERIZADO AQUI) */}
-      <ChannelsModal 
-        isOpen={showChannelsModal} 
-        onClose={() => setShowChannelsModal(false)} 
-        userId={session?.user?.id} 
-      />
-
-      {/* Toast */}
-      <div 
-        className={`fixed top-6 right-6 w-96 max-w-xs px-6 py-3 rounded-xl shadow-lg text-white transform transition-all duration-500
-          ${toast.visivel ? "translate-x-0 opacity-100" : "translate-x-24 opacity-0"}
-          ${toast.tipo === 'sucesso' ? 'bg-green-600' : 'bg-red-600'}
-        `}
-      >
-        {toast.mensagem}
-      </div>
-
-      {/* Aviso */}
-      {aviso.mensagem && (
-        <div className={`fixed top-4 right-4 px-4 py-2 rounded shadow-lg text-white transition-all
-          ${aviso.tipo === "sucesso" ? "bg-green-600" : "bg-red-600"}`}
-          onAnimationEnd={() => setAviso({ mensagem: "", tipo: "" })}
-        >
-          {aviso.mensagem}
-        </div>
-      )}
+      {/* --- MODAIS E UTILITÁRIOS --- */}
+      <ServiceModal isOpen={showModal} onClose={() => { setShowModal(false); setEditingService(null); resetForm(); }} onSave={salvarServico} formData={formData} setFormData={setFormData} clientes={clientes} isEditing={!!editingService} />
+      <ClientModal isOpen={showClienteModal} onClose={() => { setShowClienteModal(false); setEditingCliente(null); resetClienteForm(); }} onSave={salvarCliente} formData={clienteFormData} setFormData={setClienteFormData} isEditing={!!editingCliente} />
+      <SolicitantesModal isOpen={showSolicitantesModal} onClose={() => { setShowSolicitantesModal(false); setClienteParaSolicitantes(null); }} cliente={clienteParaSolicitantes} userId={session?.user?.id} />
+      <ConfigModal isOpen={showConfigModal} onClose={() => setShowConfigModal(false)} onSave={salvarConfiguracao} valorAtual={valorHoraPadrao} nomeAtual={nomeConsultor} />
+      <ChannelsModal isOpen={showChannelsModal} onClose={() => setShowChannelsModal(false)} userId={session?.user?.id} />
+      
+      <div className={`fixed top-6 right-6 w-96 max-w-xs px-6 py-3 rounded-xl shadow-lg text-white transform transition-all duration-500 z-[60] ${toast.visivel ? "translate-x-0 opacity-100" : "translate-x-24 opacity-0"} ${toast.tipo === 'sucesso' ? 'bg-green-600' : 'bg-red-600'}`}>{toast.mensagem}</div>
+      {aviso.mensagem && (<div className={`fixed top-4 right-4 px-4 py-2 rounded shadow-lg text-white transition-all z-[60] ${aviso.tipo === "sucesso" ? "bg-green-600" : "bg-red-600"}`} onAnimationEnd={() => setAviso({ mensagem: "", tipo: "" })}>{aviso.mensagem}</div>)}
     </div>
   );
-}; // Fechamento do App
-
+};
 export default App;
