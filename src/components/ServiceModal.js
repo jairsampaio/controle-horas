@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { X, Save, Clock, DollarSign, User, FileText, Calendar, Activity, List, RotateCcw } from 'lucide-react';
+import { X, Save, Clock, DollarSign, User, FileText, Calendar, Activity, List, RotateCcw, Building2 } from 'lucide-react'; // 👈 BUILDING2 ADICIONADO
 import supabase from '../services/supabase';
 
 const ServiceModal = ({ isOpen, onClose, onSave, formData, setFormData, clientes, isEditing }) => {
@@ -7,7 +7,10 @@ const ServiceModal = ({ isOpen, onClose, onSave, formData, setFormData, clientes
   const [listaSolicitantes, setListaSolicitantes] = useState([]);
   const [loadingSolicitantes, setLoadingSolicitantes] = useState(false);
   
-  // 🆕 Estado local para o valor visual
+  // 🆕 Estado para Canais (V2)
+  const [listaCanais, setListaCanais] = useState([]);
+
+  // Estado local para o valor visual
   const [valorVisual, setValorVisual] = useState('');
 
   // Sincroniza o valor visual APENAS quando o modal abre (para edição)
@@ -22,6 +25,25 @@ const ServiceModal = ({ isOpen, onClose, onSave, formData, setFormData, clientes
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen]); 
+
+  // 🆕 Busca a lista de Canais (V2)
+  useEffect(() => {
+    const carregarCanais = async () => {
+      const { data, error } = await supabase
+        .from('canais')
+        .select('*')
+        .eq('ativo', true) // Apenas ativos
+        .order('nome', { ascending: true });
+      
+      if (!error) {
+        setListaCanais(data || []);
+      }
+    };
+    
+    if (isOpen) {
+        carregarCanais();
+    }
+  }, [isOpen]);
 
   // Busca solicitantes
   useEffect(() => {
@@ -40,7 +62,7 @@ const ServiceModal = ({ isOpen, onClose, onSave, formData, setFormData, clientes
 
   if (!isOpen) return null;
 
-  // 👇 LÓGICA BANCÁRIA: Digitação flui da direita para a esquerda
+  // Lógica Bancária: Digitação flui da direita para a esquerda
   const handleValorChange = (e) => {
     // 1. Remove tudo que não é número
     const apenasNumeros = e.target.value.replace(/\D/g, "");
@@ -95,8 +117,30 @@ const ServiceModal = ({ isOpen, onClose, onSave, formData, setFormData, clientes
               <div className="space-y-1"><label className="text-xs font-bold text-gray-500 uppercase tracking-wider flex items-center gap-1"><Clock size={12} /> Fim</label><input type="time" value={formData.hora_final} onChange={(e) => handleChange('hora_final', e.target.value)} className="w-full border rounded px-3 py-2 outline-none focus:ring-2 focus:ring-indigo-500" required /></div>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {/* 🆕 BLOCO DO CANAL + CLIENTE + SOLICITANTE */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              
+              {/* 1. CANAL / PARCEIRO (V2) */}
+              <div className="space-y-1">
+                <label className="text-xs font-bold text-gray-500 uppercase tracking-wider flex items-center gap-1">
+                    <Building2 size={12} /> Canal / Parceiro
+                </label>
+                <select 
+                    value={formData.canal_id || ''} 
+                    onChange={(e) => handleChange('canal_id', e.target.value)} 
+                    className="w-full border rounded px-3 py-2 outline-none focus:ring-2 focus:ring-indigo-500 bg-white"
+                >
+                    <option value="">-- Direto (Sem Canal) --</option>
+                    {listaCanais.map(canal => (
+                        <option key={canal.id} value={canal.id}>{canal.nome}</option>
+                    ))}
+                </select>
+              </div>
+
+              {/* 2. CLIENTE */}
               <div className="space-y-1"><label className="text-xs font-bold text-gray-500 uppercase tracking-wider flex items-center gap-1"><User size={12} /> Cliente</label><select value={formData.cliente} onChange={(e) => setFormData(prev => ({ ...prev, cliente: e.target.value, solicitante: '' }))} className="w-full border rounded px-3 py-2 outline-none focus:ring-2 focus:ring-indigo-500 bg-white" required><option value="">Selecione...</option>{clientes.map(c => <option key={c.id} value={c.nome}>{c.nome}</option>)}</select></div>
+              
+              {/* 3. SOLICITANTE */}
               <div className="space-y-1"><label className="text-xs font-bold text-gray-500 uppercase tracking-wider flex items-center gap-1"><User size={12} /> Solicitante</label>{loadingSolicitantes ? (<div className="text-xs text-gray-500 p-2 border rounded">Buscando...</div>) : listaSolicitantes.length > 0 ? (<select value={formData.solicitante} onChange={(e) => handleChange('solicitante', e.target.value)} className="w-full border rounded px-3 py-2 outline-none focus:ring-2 focus:ring-indigo-500 bg-white" required><option value="">Quem pediu?</option>{listaSolicitantes.map((sol, i) => <option key={i} value={sol.nome}>{sol.nome}</option>)}</select>) : (<input type="text" placeholder="Nome" value={formData.solicitante} onChange={(e) => handleChange('solicitante', e.target.value)} className="w-full border rounded px-3 py-2 outline-none focus:ring-2 focus:ring-indigo-500 disabled:bg-gray-100" disabled={!formData.cliente} required />)}</div>
             </div>
 
@@ -107,10 +151,10 @@ const ServiceModal = ({ isOpen, onClose, onSave, formData, setFormData, clientes
                 <label className="text-xs font-bold text-gray-500 uppercase tracking-wider flex items-center gap-1">
                   <DollarSign size={12} /> Valor Hora (R$)
                 </label>
-                {/* 👈 INPUT BANCÁRIO (Type Text + Lógica HandleChange) */}
+                {/* INPUT BANCÁRIO */}
                 <input 
                   type="text"
-                  inputMode="numeric" /* Melhora o teclado no mobile */
+                  inputMode="numeric" 
                   value={valorVisual} 
                   onChange={handleValorChange} 
                   placeholder="0,00"

@@ -1,7 +1,7 @@
 /* eslint-disable no-restricted-globals */
 import gerarRelatorioPDF from "./utils/gerarRelatorioPDF";
 import React, { useState, useEffect } from 'react';
-import { Clock, DollarSign, User, FileText, Plus, Filter, Settings, Mail, Users, LayoutDashboard, Briefcase, Hourglass, Timer, CheckCircle, FileCheck, Building2 } from 'lucide-react'; // 👈 IMPORT Building2 ADICIONADO
+import { Clock, DollarSign, User, FileText, Plus, Filter, Settings, Mail, Users, LayoutDashboard, Briefcase, Hourglass, Timer, CheckCircle, FileCheck, Building2 } from 'lucide-react';
 import supabase from './services/supabase'; 
 import StatusCard from './components/StatusCard';
 import ClientModal from './components/ClientModal';
@@ -14,7 +14,7 @@ import DashboardCharts from './components/DashboardCharts';
 import * as XLSX from 'xlsx';
 import SolicitantesModal from './components/SolicitantesModal'; 
 import MultiSelect from './components/MultiSelect'; 
-import ChannelsModal from './components/ChannelsModal'; // 👈 IMPORT ChannelsModal ADICIONADO
+import ChannelsModal from './components/ChannelsModal';
 import { formatCurrency, formatHours, formatHoursInt } from './utils/formatters'; 
 
 const App = () => {
@@ -60,6 +60,7 @@ const App = () => {
     atividade: '',
     solicitante: '',
     cliente: '',
+    canal_id: '', // 👈 NOVO CAMPO
     status: 'Pendente',
     numero_nfs: '',
     observacoes: ''
@@ -302,7 +303,6 @@ const App = () => {
  // --- CONTROLE TOTAL DO BOTÃO VOLTAR (MODAIS + ABAS) ---
   useEffect(() => {
     // Verifica se algum modal está aberto
-    // 🆕 ADICIONADO showChannelsModal
     const algumModalAberto = showModal || showClienteModal || showSolicitantesModal || showConfigModal || showChannelsModal;
 
     // LÓGICA DE EMPURRAR HISTÓRICO (CRIAR CAMADAS)
@@ -322,13 +322,12 @@ const App = () => {
     // LÓGICA DE VOLTAR (DESCASCAR CAMADAS)
     const handlePopState = () => {
       // Nível 1: Se tem modal aberto, fecha ele e fica na tela atual
-      // 🆕 ADICIONADO showChannelsModal
       if (showModal || showClienteModal || showSolicitantesModal || showConfigModal || showChannelsModal) {
         setShowModal(false);
         setShowClienteModal(false);
         setShowSolicitantesModal(false);
         setShowConfigModal(false);
-        setShowChannelsModal(false); // 👈 FECHA CANAIS
+        setShowChannelsModal(false); // 👈 Fecha o modal de canais
         return; // Para aqui, não mexe na aba ainda
       }
 
@@ -340,7 +339,6 @@ const App = () => {
 
     window.addEventListener('popstate', handlePopState);
     return () => window.removeEventListener('popstate', handlePopState);
-  // 🆕 ADICIONADO showChannelsModal nas dependências
   }, [activeTab, showModal, showClienteModal, showSolicitantesModal, showConfigModal, showChannelsModal]);
 
   const salvarServico = async () => {
@@ -681,6 +679,7 @@ const handleExportarExcel = () => {
       atividade: '',
       solicitante: '',
       cliente: '',
+      canal_id: '', // 👈 LIMPA O CANAL AO RESETAR
       status: 'Pendente',
       numero_nfs: '',
       observacoes: ''
@@ -706,6 +705,7 @@ const handleExportarExcel = () => {
       atividade: servico.atividade,
       solicitante: servico.solicitante || '',
       cliente: servico.cliente,
+      canal_id: servico.canal_id || '', // 👈 CARREGA O CANAL NA EDIÇÃO
       status: servico.status,
       numero_nfs: servico.numero_nfs || '',
       observacoes: servico.observacoes || ''
@@ -831,7 +831,7 @@ const handleExportarExcel = () => {
             </div>
             <div className='flex items-center gap-2'>
               
-              {/* 🆕 BOTÃO DE CANAIS ADICIONADO AQUI */}
+              {/* 🆕 BOTÃO DE CANAIS */}
               <button 
                 onClick={() => setShowChannelsModal(true)} 
                 className="p-2 text-gray-600 hover:text-indigo-600 hover:bg-gray-100 rounded-full transition" 
@@ -1155,7 +1155,7 @@ const handleExportarExcel = () => {
         valorAtual={valorHoraPadrao}
       />
 
-      {/* 🆕 MODAL DE CANAIS (INSERIDO AQUI) */}
+      {/* 🆕 MODAL DE CANAIS (RENDERIZADO AQUI) */}
       <ChannelsModal 
         isOpen={showChannelsModal} 
         onClose={() => setShowChannelsModal(false)} 
