@@ -32,7 +32,8 @@ const App = () => {
   const [editingCliente, setEditingCliente] = useState(null);
   const [session, setSession] = useState(null);
   const [showConfigModal, setShowConfigModal] = useState(false);
-  const [valorHoraPadrao, setValorHoraPadrao] = useState('150.00'); // Começa com 150 fixo até carregar do banco
+  const [valorHoraPadrao, setValorHoraPadrao] = useState('120.00'); // Começa com 150 fixo até carregar do banco
+  const [nomeConsultor, setNomeConsultor] = useState('');
   const [showSolicitantesModal, setShowSolicitantesModal] = useState(false);
   const [clienteParaSolicitantes, setClienteParaSolicitantes] = useState(null);
   
@@ -147,65 +148,45 @@ const App = () => {
 
   const carregarConfiguracao = async () => {
     try {
-      // Busca a configuração onde a chave é 'valor_hora_padrao'
       const { data, error } = await supabase
         .from('configuracoes')
-        .select('valor')
-        .eq('chave', 'valor_hora_padrao')
-        .single();
+        .select('chave, valor')
+        .in('chave', ['valor_hora_padrao', 'nome_consultor']);
 
-      if (error && error.code !== 'PGRST116') { // Ignora erro se não existir ainda
-        console.error('Erro ao carregar config:', error);
-      }
+      if (error) console.error('Erro config:', error);
 
       if (data) {
-        setValorHoraPadrao(data.valor);
+        const valorConf = data.find(c => c.chave === 'valor_hora_padrao');
+        const nomeConf = data.find(c => c.chave === 'nome_consultor');
+        
+        if (valorConf) setValorHoraPadrao(valorConf.valor);
+        if (nomeConf) setNomeConsultor(nomeConf.valor);
       }
     } catch (error) {
       console.error('Erro config:', error);
     }
   };
 
-  const salvarConfiguracao = async (novoValor) => {
+const salvarConfiguracao = async (novoValor, novoNome) => {
     try {
       setLoading(true);
       
-      // Verifica se já existe para decidir se faz Update ou Insert
-      // O jeito mais fácil no Supabase é deletar a antiga e criar a nova (ou usar upsert), 
-      // mas vamos usar a lógica de consulta simples para garantir.
-      
-      const { data: existente } = await supabase
-        .from('configuracoes')
-        .select('id')
-        .eq('chave', 'valor_hora_padrao')
-        .single();
+      // Salva Valor Hora
+      await supabase.from('configuracoes').upsert(
+        { chave: 'valor_hora_padrao', valor: novoValor, user_id: session.user.id }, 
+        { onConflict: 'chave, user_id' }
+      );
 
-      let error;
-
-      if (existente) {
-        // Atualiza
-        const { error: updateError } = await supabase
-          .from('configuracoes')
-          .update({ valor: novoValor })
-          .eq('chave', 'valor_hora_padrao');
-        error = updateError;
-      } else {
-        // Cria (Insert)
-        const { error: insertError } = await supabase
-          .from('configuracoes')
-          .insert([{ 
-            chave: 'valor_hora_padrao', 
-            valor: novoValor,
-            user_id: session.user.id 
-          }]);
-        error = insertError;
-      }
-
-      if (error) throw error;
+      // Salva Nome Consultor
+      await supabase.from('configuracoes').upsert(
+        { chave: 'nome_consultor', valor: novoNome, user_id: session.user.id },
+        { onConflict: 'chave, user_id' }
+      );
 
       setValorHoraPadrao(novoValor);
+      setNomeConsultor(novoNome);
       setShowConfigModal(false);
-      showToast('Configuração salva!', 'sucesso');
+      showToast('Configurações salvas!', 'sucesso');
 
     } catch (error) {
       console.error('Erro ao salvar config:', error);
@@ -217,28 +198,19 @@ const App = () => {
 
   const carregarDados = async () => {
     try {
-      // 1. Buscar Serviços (Ordenado por data decrescente)
+      // Busca Serviços com JOIN em Canais
       const { data: dataServicos, error: errorServicos } = await supabase
         .from('servicos_prestados')
-        .select('*')
+        .select('*, canais(nome)') // 👈 Traz o nome do canal
         .order('data', { ascending: false });
 
       if (errorServicos) throw errorServicos;
       setServicos(dataServicos);
 
-      // 2. Buscar Clientes (Ordenado por nome)
-      const { data: dataClientes, error: errorClientes } = await supabase
-        .from('clientes')
-        .select('*')
-        .order('nome', { ascending: true });
-
+      const { data: dataClientes, error: errorClientes } = await supabase.from('clientes').select('*').order('nome', { ascending: true });
       if (errorClientes) throw errorClientes;
       setClientes(dataClientes);
-      
-    } catch (error) {
-      console.error('Erro ao carregar dados:', error);
-      alert('Erro ao carregar dados do sistema.');
-    }
+    } catch (error) { console.error('Erro dados:', error); alert('Erro ao carregar dados.'); }
   };
 
   // Carrega a sessão na montagem e monitora mudanças de estado
@@ -515,13 +487,10 @@ const App = () => {
 
   const handleGerarPDF = () => {
     const dadosParaRelatorio = servicosFiltrados(); 
-    
-    // Pega o nome do usuário da sessão (ou metadados)
-    const nomeConsultor = session?.user?.user_metadata?.nome || session?.user?.email || 'Consultor';
+    // Usa o nome das configurações OU do Auth OU um fallback
+    const nomeParaRelatorio = nomeConsultor || session?.user?.email || 'Consultor';
 
-    // Passa o nome como terceiro argumento 👇
-    const pdfBlob = gerarRelatorioPDF(dadosParaRelatorio, filtros, nomeConsultor);
-    
+    const pdfBlob = gerarRelatorioPDF(dadosParaRelatorio, filtros, nomeParaRelatorio);
     const url = URL.createObjectURL(pdfBlob);
     const a = document.createElement("a");
     a.href = url;
@@ -1159,6 +1128,7 @@ const handleExportarExcel = () => {
         onClose={() => setShowConfigModal(false)}
         onSave={salvarConfiguracao}
         valorAtual={valorHoraPadrao}
+        nomeAtual={nomeConsultor}
       />
 
       {/* 🆕 MODAL DE CANAIS (RENDERIZADO AQUI) */}
