@@ -1,7 +1,6 @@
 /* eslint-disable no-restricted-globals */
 import gerarRelatorioPDF from "./utils/gerarRelatorioPDF";
 import React, { useState, useEffect } from 'react';
-// 👇 CORREÇÃO AQUI: Adicionados LayoutDashboard e Briefcase nos imports
 import { Clock, DollarSign, User, FileText, Plus, Filter, Settings, Mail, Users, LayoutDashboard, Briefcase, Hourglass, Timer, CheckCircle, FileCheck, Building2, Menu } from 'lucide-react';
 import supabase from './services/supabase'; 
 import StatusCard from './components/StatusCard';
@@ -473,43 +472,67 @@ const App = () => {
             ) : activeTab === 'dashboard' ? (
               // --- CONTEÚDO DASHBOARD ---
               <div className="space-y-6">
-                <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                  <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 hover:shadow-md transition-shadow">
+                
+                {/* 🔴 MUDANÇA DE UI: Grid 2x2 no Mobile, Cards Delicados */}
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-6">
+                  
+                  <div className="bg-white p-4 md:p-6 rounded-2xl shadow-sm border border-gray-100 hover:shadow-md transition-shadow">
                     <div className="flex items-center justify-between mb-2">
-                      <div className="p-3 bg-indigo-50 rounded-xl"><Clock className="text-indigo-600" size={24} /></div>
-                      <span className="text-xs font-bold text-gray-400 uppercase tracking-wider">Horas</span>
+                      <div className="p-2 md:p-3 bg-indigo-50 rounded-xl">
+                        <Clock className="text-indigo-600" size={20} /> {/* Ícone menor */}
+                      </div>
+                      {/* Oculta label no mobile se quiser, ou mantém pequena */}
                     </div>
-                    <div><p className="text-2xl font-black text-gray-900">{formatHoursInt(stats.totalHoras)}</p><p className="text-xs text-gray-500 mt-1">Total acumulado</p></div>
+                    <div>
+                      <p className="text-sm md:text-xs font-bold text-gray-400 uppercase tracking-wider mb-1">Horas</p>
+                      <p className="text-xl md:text-2xl font-black text-gray-900">{formatHoursInt(stats.totalHoras)}</p>
+                    </div>
                   </div>
                   
-                  <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 hover:shadow-md transition-shadow">
+                  <div className="bg-white p-4 md:p-6 rounded-2xl shadow-sm border border-gray-100 hover:shadow-md transition-shadow">
                     <div className="flex items-center justify-between mb-2">
-                      <div className="p-3 bg-green-50 rounded-xl"><DollarSign className="text-green-600" size={24} /></div>
-                      <span className="text-xs font-bold text-gray-400 uppercase tracking-wider">Faturamento</span>
+                      <div className="p-2 md:p-3 bg-green-50 rounded-xl">
+                        <DollarSign className="text-green-600" size={20} />
+                      </div>
                     </div>
-                    <div><p className="text-2xl font-black text-gray-900">{formatCurrency(stats.totalValor)}</p><p className="text-xs text-gray-500 mt-1">Total acumulado</p></div>
+                    <div>
+                      <p className="text-sm md:text-xs font-bold text-gray-400 uppercase tracking-wider mb-1">Total</p>
+                      <p className="text-xl md:text-2xl font-black text-gray-900 truncate" title={formatCurrency(stats.totalValor)}>
+                        {/* Truque para caber valor grande no mobile */}
+                        <span className="text-base md:text-2xl">{formatCurrency(stats.totalValor).split(' ')[0]}</span> 
+                        {formatCurrency(stats.totalValor).split(' ')[1]}
+                      </p>
+                    </div>
                   </div>
 
-                  <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 hover:shadow-md transition-shadow">
+                  <div className="bg-white p-4 md:p-6 rounded-2xl shadow-sm border border-gray-100 hover:shadow-md transition-shadow">
                     <div className="flex items-center justify-between mb-2">
-                      <div className="p-3 bg-blue-50 rounded-xl"><FileText className="text-blue-600" size={24} /></div>
-                      <span className="text-xs font-bold text-gray-400 uppercase tracking-wider">Serviços</span>
+                      <div className="p-2 md:p-3 bg-blue-50 rounded-xl">
+                        <FileText className="text-blue-600" size={20} />
+                      </div>
                     </div>
-                    <div><p className="text-2xl font-black text-gray-900">{stats.totalServicos}</p><p className="text-xs text-gray-500 mt-1">Lançamentos</p></div>
+                    <div>
+                      <p className="text-sm md:text-xs font-bold text-gray-400 uppercase tracking-wider mb-1">Serviços</p>
+                      <p className="text-xl md:text-2xl font-black text-gray-900">{stats.totalServicos}</p>
+                    </div>
                   </div>
 
-                  <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 hover:shadow-md transition-shadow">
+                  <div className="bg-white p-4 md:p-6 rounded-2xl shadow-sm border border-gray-100 hover:shadow-md transition-shadow">
                     <div className="flex items-center justify-between mb-2">
-                      <div className="p-3 bg-purple-50 rounded-xl"><Users className="text-purple-600" size={24} /></div>
-                      <span className="text-xs font-bold text-gray-400 uppercase tracking-wider">Clientes</span>
+                      <div className="p-2 md:p-3 bg-purple-50 rounded-xl">
+                        <Users className="text-purple-600" size={20} />
+                      </div>
                     </div>
-                    <div><p className="text-2xl font-black text-gray-900">{clientes.length}</p><p className="text-xs text-gray-500 mt-1">Ativos</p></div>
+                    <div>
+                      <p className="text-sm md:text-xs font-bold text-gray-400 uppercase tracking-wider mb-1">Clientes</p>
+                      <p className="text-xl md:text-2xl font-black text-gray-900">{clientes.length}</p>
+                    </div>
                   </div>
                 </div>
 
                 <DashboardCharts servicos={servicosFiltradosData} />
 
-                <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
+                <div className="bg-white p-4 md:p-6 rounded-2xl shadow-sm border border-gray-100">
                   <h3 className="text-lg font-bold text-gray-800 mb-6">Status dos Serviços</h3>
                   <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4">
                     {Object.entries(stats.porStatus || {}).map(([status, dados]) => {
