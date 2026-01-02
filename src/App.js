@@ -1,8 +1,8 @@
 /* eslint-disable no-restricted-globals */
 import gerarRelatorioPDF from "./utils/gerarRelatorioPDF";
 import React, { useState, useEffect } from 'react';
-import { Clock, DollarSign, User, FileText, Plus, Filter, Settings, Mail, Users, LayoutDashboard, Briefcase, Hourglass, Timer, CheckCircle, FileCheck } from 'lucide-react';
-import supabase from './services/supabase'; // 
+import { Clock, DollarSign, User, FileText, Plus, Filter, Settings, Mail, Users, LayoutDashboard, Briefcase, Hourglass, Timer, CheckCircle, FileCheck, Building2 } from 'lucide-react'; // 👈 IMPORT Building2 ADICIONADO
+import supabase from './services/supabase'; 
 import StatusCard from './components/StatusCard';
 import ClientModal from './components/ClientModal';
 import ServicesTable from './components/ServicesTable';
@@ -13,8 +13,9 @@ import ConfigModal from './components/ConfigModal';
 import DashboardCharts from './components/DashboardCharts';
 import * as XLSX from 'xlsx';
 import SolicitantesModal from './components/SolicitantesModal'; 
-import MultiSelect from './components/MultiSelect'; // 👈 NOVO
-import { formatCurrency, formatHours, formatHoursInt } from './utils/formatters'; // Adicione formatHoursInt
+import MultiSelect from './components/MultiSelect'; 
+import ChannelsModal from './components/ChannelsModal'; // 👈 IMPORT ChannelsModal ADICIONADO
+import { formatCurrency, formatHours, formatHoursInt } from './utils/formatters'; 
 
 const App = () => {
   // --- ESTADOS ---
@@ -34,6 +35,10 @@ const App = () => {
   const [valorHoraPadrao, setValorHoraPadrao] = useState('150.00'); // Começa com 150 fixo até carregar do banco
   const [showSolicitantesModal, setShowSolicitantesModal] = useState(false);
   const [clienteParaSolicitantes, setClienteParaSolicitantes] = useState(null);
+  
+  // 🆕 Estado para Modal de Canais
+  const [showChannelsModal, setShowChannelsModal] = useState(false);
+
   // 🆕 Estado para as opções do MultiSelect
   const [todosSolicitantesDoCliente, setTodosSolicitantesDoCliente] = useState([]); 
   // 🆕 Estado para Ordenação da Tabela
@@ -297,7 +302,8 @@ const App = () => {
  // --- CONTROLE TOTAL DO BOTÃO VOLTAR (MODAIS + ABAS) ---
   useEffect(() => {
     // Verifica se algum modal está aberto
-    const algumModalAberto = showModal || showClienteModal || showSolicitantesModal || showConfigModal;
+    // 🆕 ADICIONADO showChannelsModal
+    const algumModalAberto = showModal || showClienteModal || showSolicitantesModal || showConfigModal || showChannelsModal;
 
     // LÓGICA DE EMPURRAR HISTÓRICO (CRIAR CAMADAS)
     // Se abriu um modal, cria um ponto no histórico '#modal'
@@ -316,11 +322,13 @@ const App = () => {
     // LÓGICA DE VOLTAR (DESCASCAR CAMADAS)
     const handlePopState = () => {
       // Nível 1: Se tem modal aberto, fecha ele e fica na tela atual
-      if (showModal || showClienteModal || showSolicitantesModal || showConfigModal) {
+      // 🆕 ADICIONADO showChannelsModal
+      if (showModal || showClienteModal || showSolicitantesModal || showConfigModal || showChannelsModal) {
         setShowModal(false);
         setShowClienteModal(false);
         setShowSolicitantesModal(false);
         setShowConfigModal(false);
+        setShowChannelsModal(false); // 👈 FECHA CANAIS
         return; // Para aqui, não mexe na aba ainda
       }
 
@@ -332,7 +340,8 @@ const App = () => {
 
     window.addEventListener('popstate', handlePopState);
     return () => window.removeEventListener('popstate', handlePopState);
-  }, [activeTab, showModal, showClienteModal, showSolicitantesModal, showConfigModal]);
+  // 🆕 ADICIONADO showChannelsModal nas dependências
+  }, [activeTab, showModal, showClienteModal, showSolicitantesModal, showConfigModal, showChannelsModal]);
 
   const salvarServico = async () => {
     try {
@@ -372,7 +381,7 @@ const App = () => {
   const deletarServico = async (id) => {
     if (!confirm('Tem certeza que deseja excluir este serviço?')) return;
     // Dentro de deletarServico:
-     
+      
     
     try {
       const { error } = await supabase
@@ -822,6 +831,15 @@ const handleExportarExcel = () => {
             </div>
             <div className='flex items-center gap-2'>
               
+              {/* 🆕 BOTÃO DE CANAIS ADICIONADO AQUI */}
+              <button 
+                onClick={() => setShowChannelsModal(true)} 
+                className="p-2 text-gray-600 hover:text-indigo-600 hover:bg-gray-100 rounded-full transition" 
+                title="Gerenciar Canais / Parceiros"
+              >
+                <Building2 size={20} />
+              </button>
+
               <button
                 onClick={() => setShowConfigModal(true)}
                 className="p-2 text-gray-600 hover:text-indigo-600 hover:bg-gray-100 rounded-full transition"
@@ -1137,6 +1155,13 @@ const handleExportarExcel = () => {
         valorAtual={valorHoraPadrao}
       />
 
+      {/* 🆕 MODAL DE CANAIS (INSERIDO AQUI) */}
+      <ChannelsModal 
+        isOpen={showChannelsModal} 
+        onClose={() => setShowChannelsModal(false)} 
+        userId={session?.user?.id} 
+      />
+
       {/* Toast */}
       <div 
         className={`fixed top-6 right-6 w-96 max-w-xs px-6 py-3 rounded-xl shadow-lg text-white transform transition-all duration-500
@@ -1161,5 +1186,3 @@ const handleExportarExcel = () => {
 }; // Fechamento do App
 
 export default App;
-
-  
