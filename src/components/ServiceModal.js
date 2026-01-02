@@ -7,15 +7,15 @@ const ServiceModal = ({ isOpen, onClose, onSave, formData, setFormData, clientes
   const [listaSolicitantes, setListaSolicitantes] = useState([]);
   const [loadingSolicitantes, setLoadingSolicitantes] = useState(false);
   
-  // 🆕 Estado local para o valor visual (ex: "120,00")
+  // 🆕 Estado local para o valor visual
   const [valorVisual, setValorVisual] = useState('');
 
-  // Sincroniza o valor visual APENAS quando o modal abre
-  // 🔴 CORREÇÃO AQUI: Removido formData.valor_hora da dependência para não travar a digitação
+  // Sincroniza o valor visual APENAS quando o modal abre (para edição)
   useEffect(() => {
     if (isOpen) {
       if (formData.valor_hora) {
-        setValorVisual(parseFloat(formData.valor_hora).toFixed(2).replace('.', ','));
+        // Transforma o número do banco (ex: 150.5) em visual (ex: 150,50)
+        setValorVisual(formData.valor_hora.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
       } else {
         setValorVisual('');
       }
@@ -40,18 +40,27 @@ const ServiceModal = ({ isOpen, onClose, onSave, formData, setFormData, clientes
 
   if (!isOpen) return null;
 
-  // Lógica de Mascara para Moeda (Permite digitar vírgula)
+  // 👇 LÓGICA BANCÁRIA: Digitação flui da direita para a esquerda
   const handleValorChange = (e) => {
-    let val = e.target.value;
-    // Permite apenas números e vírgula
-    val = val.replace(/[^0-9,]/g, '');
-    // Garante apenas uma vírgula
-    if ((val.match(/,/g) || []).length > 1) return;
-    
-    setValorVisual(val);
-    
-    // Atualiza o formData convertendo para ponto (120,00 -> 120.00) para salvar no banco
-    const valorFloat = parseFloat(val.replace(',', '.')) || 0;
+    // 1. Remove tudo que não é número
+    const apenasNumeros = e.target.value.replace(/\D/g, "");
+
+    if (apenasNumeros === "") {
+      setValorVisual("");
+      setFormData(prev => ({ ...prev, valor_hora: 0 }));
+      return;
+    }
+
+    // 2. Divide por 100 para considerar os centavos
+    const valorFloat = parseFloat(apenasNumeros) / 100;
+
+    // 3. Formata visualmente (ex: 1200 -> 12,00)
+    const valorFormatado = valorFloat.toLocaleString('pt-BR', {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2
+    });
+
+    setValorVisual(valorFormatado);
     setFormData(prev => ({ ...prev, valor_hora: valorFloat }));
   };
 
@@ -98,13 +107,14 @@ const ServiceModal = ({ isOpen, onClose, onSave, formData, setFormData, clientes
                 <label className="text-xs font-bold text-gray-500 uppercase tracking-wider flex items-center gap-1">
                   <DollarSign size={12} /> Valor Hora (R$)
                 </label>
-                {/* 👈 INPUT MUDADO PARA TEXT PARA ACEITAR VÍRGULA */}
+                {/* 👈 INPUT BANCÁRIO (Type Text + Lógica HandleChange) */}
                 <input 
-                  type="text" 
+                  type="text"
+                  inputMode="numeric" /* Melhora o teclado no mobile */
                   value={valorVisual} 
                   onChange={handleValorChange} 
                   placeholder="0,00"
-                  className="w-full border rounded px-3 py-2 outline-none focus:ring-2 focus:ring-indigo-500" 
+                  className="w-full border rounded px-3 py-2 outline-none focus:ring-2 focus:ring-indigo-500 text-right" 
                   required 
                 />
               </div>
