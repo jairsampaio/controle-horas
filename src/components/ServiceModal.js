@@ -10,7 +10,8 @@ const ServiceModal = ({ isOpen, onClose, onSave, formData, setFormData, clientes
   // 🆕 Estado local para o valor visual (ex: "120,00")
   const [valorVisual, setValorVisual] = useState('');
 
-  // Sincroniza o valor visual quando o modal abre
+  // Sincroniza o valor visual APENAS quando o modal abre
+  // 🔴 CORREÇÃO AQUI: Removido formData.valor_hora da dependência para não travar a digitação
   useEffect(() => {
     if (isOpen) {
       if (formData.valor_hora) {
@@ -19,7 +20,8 @@ const ServiceModal = ({ isOpen, onClose, onSave, formData, setFormData, clientes
         setValorVisual('');
       }
     }
-  }, [isOpen, formData.valor_hora]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen]); 
 
   // Busca solicitantes
   useEffect(() => {
