@@ -514,8 +514,14 @@ const App = () => {
     };
 
   const handleGerarPDF = () => {
-    const dadosParaRelatorio = servicosFiltrados(); // Usa a função de filtro
-    const pdfBlob = gerarRelatorioPDF(dadosParaRelatorio, filtros);
+    const dadosParaRelatorio = servicosFiltrados(); 
+    
+    // Pega o nome do usuário da sessão (ou metadados)
+    const nomeConsultor = session?.user?.user_metadata?.nome || session?.user?.email || 'Consultor';
+
+    // Passa o nome como terceiro argumento 👇
+    const pdfBlob = gerarRelatorioPDF(dadosParaRelatorio, filtros, nomeConsultor);
+    
     const url = URL.createObjectURL(pdfBlob);
     const a = document.createElement("a");
     a.href = url;
