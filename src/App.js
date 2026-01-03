@@ -12,6 +12,7 @@ import Auth from './components/Auth';
 import ConfigModal from './components/ConfigModal';
 import DashboardCharts from './components/DashboardCharts';
 import ConfirmModal from './components/ConfirmModal'; 
+import AdminModal from './components/AdminModal'; // 👈 IMPORTADO O PAINEL ADMIN
 import * as XLSX from 'xlsx';
 import SolicitantesModal from './components/SolicitantesModal'; 
 import MultiSelect from './components/MultiSelect'; 
@@ -40,6 +41,9 @@ const App = () => {
   const [confirmModalOpen, setConfirmModalOpen] = useState(false);
   const [clientToInactivate, setClientToInactivate] = useState(null);
   const [mostrarInativos, setMostrarInativos] = useState(false); 
+
+  // Estado para o Painel Admin (Botão Secreto)
+  const [showAdminModal, setShowAdminModal] = useState(false); // 👈 NOVO ESTADO
 
   // CONFIGURAÇÕES GERAIS
   const [valorHoraPadrao, setValorHoraPadrao] = useState('150.00'); 
@@ -190,22 +194,22 @@ const App = () => {
   }, [session]);
 
   useEffect(() => {
-    const algumModalAberto = showModal || showClienteModal || showSolicitantesModal || showConfigModal || showChannelsModal;
+    const algumModalAberto = showModal || showClienteModal || showSolicitantesModal || showConfigModal || showChannelsModal || showAdminModal;
     if (algumModalAberto) {
         if (window.location.hash !== '#modal') window.history.pushState({ type: 'modal' }, '', '#modal');
     } else if (activeTab !== 'dashboard') {
         if (window.location.hash !== `#${activeTab}`) window.history.pushState({ type: 'tab' }, '', `#${activeTab}`);
     }
     const handlePopState = () => {
-      if (showModal || showClienteModal || showSolicitantesModal || showConfigModal || showChannelsModal) {
-        setShowModal(false); setShowClienteModal(false); setShowSolicitantesModal(false); setShowConfigModal(false); setShowChannelsModal(false);
+      if (showModal || showClienteModal || showSolicitantesModal || showConfigModal || showChannelsModal || showAdminModal) {
+        setShowModal(false); setShowClienteModal(false); setShowSolicitantesModal(false); setShowConfigModal(false); setShowChannelsModal(false); setShowAdminModal(false);
         return;
       }
       if (activeTab !== 'dashboard') setActiveTab('dashboard');
     };
     window.addEventListener('popstate', handlePopState);
     return () => window.removeEventListener('popstate', handlePopState);
-  }, [activeTab, showModal, showClienteModal, showSolicitantesModal, showConfigModal, showChannelsModal]);
+  }, [activeTab, showModal, showClienteModal, showSolicitantesModal, showConfigModal, showChannelsModal, showAdminModal]);
 
   const salvarServico = async () => {
     try {
@@ -469,6 +473,9 @@ const App = () => {
         onLogout={handleLogout}
         onOpenConfig={() => setShowConfigModal(true)}
         onOpenChannels={() => setShowChannelsModal(true)}
+        // 🔴 PROPS DO PAINEL ADMIN ADICIONADAS
+        userEmail={session?.user?.email}
+        onOpenAdmin={() => setShowAdminModal(true)}
       />
 
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden relative">
@@ -629,6 +636,13 @@ const App = () => {
       <ConfigModal isOpen={showConfigModal} onClose={() => setShowConfigModal(false)} onSave={salvarConfiguracao} valorAtual={valorHoraPadrao} nomeAtual={nomeConsultor} />
       <ChannelsModal isOpen={showChannelsModal} onClose={() => setShowChannelsModal(false)} userId={session?.user?.id} />
       
+      {/* 🔴 MODAL DE ADMIN NO FINAL */}
+      <AdminModal 
+        isOpen={showAdminModal} 
+        onClose={() => setShowAdminModal(false)} 
+        userEmail={session?.user?.email} 
+      />
+
       {/* MODAL DE CONFIRMAÇÃO DE INATIVAÇÃO */}
       <ConfirmModal
         isOpen={confirmModalOpen}
