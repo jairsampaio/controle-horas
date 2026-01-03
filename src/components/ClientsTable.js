@@ -1,5 +1,5 @@
 import React from 'react';
-import { Edit2, Trash2, Phone, Users, RotateCcw, CheckCircle, Ban } from 'lucide-react'; // Ban para inativo
+import { Edit2, Trash2, Phone, Users, RotateCcw, CheckCircle, Ban } from 'lucide-react';
 
 const ClientsTable = ({ clientes, onEdit, onDeleteClick, onManageTeam, onReactivate }) => { 
   
@@ -25,7 +25,7 @@ const ClientsTable = ({ clientes, onEdit, onDeleteClick, onManageTeam, onReactiv
 
   return (
     <>
-      {/* --- VERSÃO MOBILE --- */}
+      {/* --- VERSÃO MOBILE (Cards Compactos) --- */}
       <div className="md:hidden space-y-4">
         {clientes.map(cliente => (
           <div key={cliente.id} className={`p-4 rounded-xl shadow-sm border flex flex-col gap-3 transition-colors ${cliente.ativo === false ? 'bg-gray-50 border-gray-200' : 'bg-white border-gray-100'}`}>
@@ -53,17 +53,43 @@ const ClientsTable = ({ clientes, onEdit, onDeleteClick, onManageTeam, onReactiv
                 </div>
             )}
 
-            <div className="pt-3 mt-2 border-t border-gray-200/50 flex justify-end gap-2">
-               {/* Botão Equipe (Sempre visível para consulta) */}
-               <button onClick={() => onManageTeam(cliente)} className="flex-1 flex items-center justify-center gap-2 px-3 py-2 text-indigo-600 bg-indigo-50 rounded-lg text-sm font-semibold active:scale-95 transition-transform"><Users size={16}/> Equipe</button>
-
-               <button onClick={() => onEdit(cliente)} className="p-2 text-blue-600 bg-blue-50 rounded-lg active:scale-95 transition-transform"><Edit2 size={18}/></button>
+            <div className="pt-3 mt-2 border-t border-gray-200/50 flex justify-end gap-3">
+               {/* 🔴 MUDANÇA AQUI: Botões padronizados e sem texto no mobile 
+                  Usei tooltip (title) para acessibilidade/hover
+               */}
                
-               {/* Lógica do Botão de Ação */}
+               <button 
+                 onClick={() => onManageTeam(cliente)} 
+                 className="p-2 text-indigo-600 bg-indigo-50 rounded-lg active:scale-95 transition-transform" 
+                 title="Gerenciar Equipe"
+               >
+                 <Users size={20}/>
+               </button>
+
+               <button 
+                 onClick={() => onEdit(cliente)} 
+                 className="p-2 text-blue-600 bg-blue-50 rounded-lg active:scale-95 transition-transform" 
+                 title="Editar"
+               >
+                 <Edit2 size={20}/>
+               </button>
+               
                {cliente.ativo !== false ? (
-                   <button onClick={() => onDeleteClick(cliente)} className="p-2 text-red-600 bg-red-50 rounded-lg active:scale-95 transition-transform" title="Inativar"><Trash2 size={18}/></button>
+                   <button 
+                     onClick={() => onDeleteClick(cliente)} 
+                     className="p-2 text-red-600 bg-red-50 rounded-lg active:scale-95 transition-transform" 
+                     title="Inativar"
+                   >
+                     <Trash2 size={20}/>
+                   </button>
                ) : (
-                   <button onClick={() => onReactivate(cliente.id)} className="p-2 text-orange-600 bg-orange-50 rounded-lg active:scale-95 transition-transform" title="Restaurar"><RotateCcw size={18}/></button>
+                   <button 
+                     onClick={() => onReactivate(cliente.id)} 
+                     className="p-2 text-orange-600 bg-orange-50 rounded-lg active:scale-95 transition-transform" 
+                     title="Restaurar"
+                   >
+                     <RotateCcw size={20}/>
+                   </button>
                )}
             </div>
           </div>
@@ -127,7 +153,6 @@ const ClientsTable = ({ clientes, onEdit, onDeleteClick, onManageTeam, onReactiv
                       <Edit2 size={18} />
                     </button>
                     
-                    {/* Botão de Ação Principal */}
                     {cliente.ativo !== false ? (
                         <button onClick={() => onDeleteClick(cliente)} className="text-gray-400 hover:text-red-600 p-1.5 hover:bg-red-50 rounded" title="Inativar">
                           <Trash2 size={18} />
