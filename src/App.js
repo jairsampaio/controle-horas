@@ -12,7 +12,7 @@ import Auth from './components/Auth';
 import ConfigModal from './components/ConfigModal';
 import DashboardCharts from './components/DashboardCharts';
 import ConfirmModal from './components/ConfirmModal'; 
-import AdminModal from './components/AdminModal'; // 👈 IMPORTADO O PAINEL ADMIN
+import AdminModal from './components/AdminModal'; 
 import * as XLSX from 'xlsx';
 import SolicitantesModal from './components/SolicitantesModal'; 
 import MultiSelect from './components/MultiSelect'; 
@@ -43,7 +43,7 @@ const App = () => {
   const [mostrarInativos, setMostrarInativos] = useState(false); 
 
   // Estado para o Painel Admin (Botão Secreto)
-  const [showAdminModal, setShowAdminModal] = useState(false); // 👈 NOVO ESTADO
+  const [showAdminModal, setShowAdminModal] = useState(false);
 
   // CONFIGURAÇÕES GERAIS
   const [valorHoraPadrao, setValorHoraPadrao] = useState('150.00'); 
@@ -473,7 +473,6 @@ const App = () => {
         onLogout={handleLogout}
         onOpenConfig={() => setShowConfigModal(true)}
         onOpenChannels={() => setShowChannelsModal(true)}
-        // 🔴 PROPS DO PAINEL ADMIN ADICIONADAS
         userEmail={session?.user?.email}
         onOpenAdmin={() => setShowAdminModal(true)}
       />
@@ -548,7 +547,6 @@ const App = () => {
                     
                     <MultiSelect options={opcoesStatus} selected={filtros.status} onChange={(novos) => setFiltros({...filtros, status: novos})} placeholder="Status..." />
                     
-                    {/* 🔴 CORREÇÃO AQUI: Placeholders/Labels para Datas */}
                     <div className="relative">
                         <label className="text-[10px] uppercase font-bold text-gray-400 absolute top-1 left-3">Data Inicial</label>
                         <input type="date" value={filtros.dataInicio} onChange={(e) => setFiltros({...filtros, dataInicio: e.target.value})} className="border border-gray-200 rounded-lg px-3 pb-2 pt-5 text-sm focus:ring-2 focus:ring-indigo-500 outline-none w-full h-[46px]" />
@@ -571,12 +569,10 @@ const App = () => {
                 <ServicesTable servicos={servicosFiltradosData} onStatusChange={alterarStatusRapido} onEdit={editarServico} onDelete={deletarServico} onSort={handleSort} sortConfig={sortConfig} /> 
               </div>
             ) : (
-              // --- CONTEÚDO CLIENTES ---
               <div className="space-y-6">
                 <div className="flex justify-between items-center bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
                   <h2 className="text-lg font-bold text-gray-800">Base de Clientes</h2>
                   <div className="flex gap-2 md:gap-3">
-                    {/* Botão Olho (Ver Inativos) - Mobile First */}
                     <button 
                       onClick={() => setMostrarInativos(!mostrarInativos)}
                       className={`px-3 md:px-4 py-2 rounded-lg text-sm font-medium border flex items-center gap-2 transition-colors ${mostrarInativos ? 'bg-orange-50 text-orange-700 border-orange-200' : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'}`}
@@ -597,7 +593,6 @@ const App = () => {
                   </div>
                 </div>
                 
-                {/* Tabela com filtro inteligente */}
                 <ClientsTable 
                     clientes={clientesParaTabela} 
                     onEdit={editarCliente} 
@@ -611,7 +606,6 @@ const App = () => {
         </main>
       </div>
 
-      {/* Modal de Serviço só permite ATIVOS */}
       <ServiceModal 
         isOpen={showModal} 
         onClose={() => { setShowModal(false); setEditingService(null); resetForm(); }} 
@@ -624,7 +618,6 @@ const App = () => {
       
       <ClientModal isOpen={showClienteModal} onClose={() => { setShowClienteModal(false); setEditingCliente(null); resetClienteForm(); }} onSave={salvarCliente} formData={clienteFormData} setFormData={setClienteFormData} isEditing={!!editingCliente} />
       
-      {/* Passando showToast para o Modal de Solicitantes */}
       <SolicitantesModal 
         isOpen={showSolicitantesModal} 
         onClose={() => { setShowSolicitantesModal(false); setClienteParaSolicitantes(null); }} 
@@ -636,14 +629,12 @@ const App = () => {
       <ConfigModal isOpen={showConfigModal} onClose={() => setShowConfigModal(false)} onSave={salvarConfiguracao} valorAtual={valorHoraPadrao} nomeAtual={nomeConsultor} />
       <ChannelsModal isOpen={showChannelsModal} onClose={() => setShowChannelsModal(false)} userId={session?.user?.id} />
       
-      {/* 🔴 MODAL DE ADMIN NO FINAL */}
       <AdminModal 
         isOpen={showAdminModal} 
         onClose={() => setShowAdminModal(false)} 
         userEmail={session?.user?.email} 
       />
 
-      {/* MODAL DE CONFIRMAÇÃO DE INATIVAÇÃO */}
       <ConfirmModal
         isOpen={confirmModalOpen}
         onClose={() => setConfirmModalOpen(false)}
