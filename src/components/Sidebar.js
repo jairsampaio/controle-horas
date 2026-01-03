@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
-import { LayoutDashboard, Briefcase, Users, Settings, LogOut, Building2, X, Shield } from 'lucide-react'; // 👈 Shield importado
+import { LayoutDashboard, Briefcase, Users, Settings, LogOut, Building2, X, Shield } from 'lucide-react'; 
 
-const Sidebar = ({ activeTab, setActiveTab, isOpen, onClose, onLogout, onOpenConfig, onOpenChannels, userEmail, onOpenAdmin }) => { // 👈 Props Admin recebidas
+const Sidebar = ({ activeTab, setActiveTab, isOpen, onClose, onLogout, onOpenConfig, onOpenChannels, userEmail, onOpenAdmin }) => { 
   
   // --- LÓGICA DE SWIPE (ARRASTAR) ---
   const [touchStart, setTouchStart] = useState(null);
@@ -84,8 +84,8 @@ const Sidebar = ({ activeTab, setActiveTab, isOpen, onClose, onLogout, onOpenCon
           </button>
         </div>
 
-        {/* Navegação */}
-        <nav className="p-4 space-y-2 overflow-y-auto h-[calc(100vh-140px)] scrollbar-hide">
+        {/* Navegação - Ajustada altura para remover o footer fixo */}
+        <nav className="p-4 space-y-2 overflow-y-auto h-[calc(100vh-80px)] scrollbar-hide">
           <p className="px-4 py-2 text-xs font-bold text-gray-400 uppercase tracking-wider">Principal</p>
           
           {menuItems.map((item) => (
@@ -126,7 +126,7 @@ const Sidebar = ({ activeTab, setActiveTab, isOpen, onClose, onLogout, onOpenCon
               Configurações
             </button>
 
-            {/* 🔴 BOTÃO SECRETO DE ADMIN (Só aparece para você) */}
+            {/* 🔴 BOTÃO SECRETO DE ADMIN */}
             {userEmail === ADMIN_EMAIL && (
               <button
                 onClick={() => { onOpenAdmin(); onClose(); }}
@@ -137,18 +137,19 @@ const Sidebar = ({ activeTab, setActiveTab, isOpen, onClose, onLogout, onOpenCon
               </button>
             )}
           </div>
-        </nav>
 
-        {/* Footer Logout */}
-        <div className="absolute bottom-0 left-0 right-0 p-4 border-t border-gray-100 bg-gray-50/50 backdrop-blur-sm">
-          <button
-            onClick={onLogout}
-            className="w-full flex items-center justify-center gap-2 px-4 py-3 text-sm font-bold text-red-600 hover:bg-red-50 rounded-xl transition-colors"
-          >
-            <LogOut size={20} />
-            Sair
-          </button>
-        </div>
+          {/* Botão Sair - Agora integrado na lista */}
+          <div className="pt-4 mt-4 border-t border-gray-100">
+            <button
+                onClick={onLogout}
+                className="w-full flex items-center gap-4 px-4 py-3.5 text-sm font-bold text-red-600 hover:bg-red-50 rounded-xl transition-colors group"
+            >
+                <LogOut size={22} className="group-hover:scale-110 transition-transform" />
+                Sair do Sistema
+            </button>
+          </div>
+
+        </nav>
       </aside>
     </>
   );
