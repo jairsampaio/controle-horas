@@ -1,13 +1,12 @@
 import React, { useState } from 'react';
-import { LayoutDashboard, Briefcase, Users, Settings, LogOut, Building2, X } from 'lucide-react';
+import { LayoutDashboard, Briefcase, Users, Settings, LogOut, Building2, X, Shield } from 'lucide-react'; // 👈 Shield importado
 
-const Sidebar = ({ activeTab, setActiveTab, isOpen, onClose, onLogout, onOpenConfig, onOpenChannels }) => {
+const Sidebar = ({ activeTab, setActiveTab, isOpen, onClose, onLogout, onOpenConfig, onOpenChannels, userEmail, onOpenAdmin }) => { // 👈 Props Admin recebidas
   
   // --- LÓGICA DE SWIPE (ARRASTAR) ---
   const [touchStart, setTouchStart] = useState(null);
   const [touchEnd, setTouchEnd] = useState(null);
 
-  // Distância mínima (em pixels) para considerar que foi um arrasto intencional
   const minSwipeDistance = 50;
 
   const onTouchStart = (e) => {
@@ -21,22 +20,14 @@ const Sidebar = ({ activeTab, setActiveTab, isOpen, onClose, onLogout, onOpenCon
 
   const onTouchEnd = () => {
     if (!touchStart || !touchEnd) return;
-    
     const distance = touchStart - touchEnd;
     const isLeftSwipe = distance > minSwipeDistance;
-
-    // Se arrastou para a esquerda (> 50px), fecha o menu
     if (isLeftSwipe) {
       onClose();
     }
   };
   
-  // Objeto com os eventos para espalhar nas tags (DRY - Don't Repeat Yourself)
-  const swipeHandlers = {
-    onTouchStart,
-    onTouchMove,
-    onTouchEnd
-  };
+  const swipeHandlers = { onTouchStart, onTouchMove, onTouchEnd };
   // ----------------------------------
 
   const menuItems = [
@@ -52,27 +43,24 @@ const Sidebar = ({ activeTab, setActiveTab, isOpen, onClose, onLogout, onOpenCon
     }
   };
 
+  // ⚠️ IMPORTANTE: Coloque aqui o e-mail que terá acesso mestre
+  const ADMIN_EMAIL = 'seu_email_admin@gmail.com'; 
+
   return (
     <>
-      {/* OVERLAY ESCURO 
-          - Agora aceita gestos de arrastar também (swipeHandlers)
-          - Adicionei uma transição suave de opacidade
-      */}
+      {/* OVERLAY ESCURO (Swipeable) */}
       <div 
         className={`
           fixed inset-0 z-40 md:hidden bg-black/50 backdrop-blur-sm transition-opacity duration-300
           ${isOpen ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'}
         `}
         onClick={onClose}
-        {...swipeHandlers} // 👈 AQUI: Permite arrastar no fundo escuro para fechar
+        {...swipeHandlers}
       />
 
-      {/* SIDEBAR 
-          - Mudança na animação para 'cubic-bezier' (mais fluida)
-          - duration-500 para um movimento mais elegante
-      */}
+      {/* SIDEBAR (Swipeable + Cubic Bezier) */}
       <aside 
-        {...swipeHandlers} // 👈 AQUI: Permite arrastar no próprio menu
+        {...swipeHandlers}
         className={`
           fixed top-0 left-0 z-50 h-screen w-72 bg-white border-r border-gray-200 shadow-2xl 
           transform transition-transform duration-500 ease-[cubic-bezier(0.32,0.72,0,1)]
@@ -80,7 +68,7 @@ const Sidebar = ({ activeTab, setActiveTab, isOpen, onClose, onLogout, onOpenCon
           md:translate-x-0 md:static md:shadow-none md:w-64 md:transform-none
         `}
       >
-        {/* Logo / Header do Menu */}
+        {/* Header */}
         <div className="flex items-center justify-between h-20 px-6 border-b border-gray-100">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 bg-indigo-600 rounded-xl flex items-center justify-center text-white font-bold text-lg shadow-indigo-200 shadow-lg">
@@ -96,7 +84,7 @@ const Sidebar = ({ activeTab, setActiveTab, isOpen, onClose, onLogout, onOpenCon
           </button>
         </div>
 
-        {/* Links de Navegação */}
+        {/* Navegação */}
         <nav className="p-4 space-y-2 overflow-y-auto h-[calc(100vh-140px)] scrollbar-hide">
           <p className="px-4 py-2 text-xs font-bold text-gray-400 uppercase tracking-wider">Principal</p>
           
@@ -137,10 +125,21 @@ const Sidebar = ({ activeTab, setActiveTab, isOpen, onClose, onLogout, onOpenCon
               <Settings size={22} className="group-hover:text-indigo-500 transition-colors" />
               Configurações
             </button>
+
+            {/* 🔴 BOTÃO SECRETO DE ADMIN (Só aparece para você) */}
+            {userEmail === ADMIN_EMAIL && (
+              <button
+                onClick={() => { onOpenAdmin(); onClose(); }}
+                className="w-full flex items-center gap-4 px-4 py-3.5 text-sm font-bold text-gray-900 bg-yellow-400 hover:bg-yellow-500 rounded-xl transition-all shadow-md mt-6"
+              >
+                <Shield size={22} className="text-black" />
+                CENTRAL ADMIN
+              </button>
+            )}
           </div>
         </nav>
 
-        {/* Footer do Menu (Logout) */}
+        {/* Footer Logout */}
         <div className="absolute bottom-0 left-0 right-0 p-4 border-t border-gray-100 bg-gray-50/50 backdrop-blur-sm">
           <button
             onClick={onLogout}
