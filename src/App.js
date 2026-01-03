@@ -555,10 +555,35 @@ const App = () => {
                 </div>
 
                 <div className="flex flex-wrap justify-end gap-3">
-                  <button onClick={handleExportarExcel} className="flex items-center gap-2 bg-white border border-gray-200 text-gray-700 hover:bg-gray-50 px-4 py-2 rounded-lg text-sm font-medium transition-colors" title="Exportar Excel"><FileText size={18} className="text-green-600" /> Excel</button>
-                  <button onClick={handleGerarPDF} className="flex items-center gap-2 bg-white border border-gray-200 text-gray-700 hover:bg-gray-50 px-4 py-2 rounded-lg text-sm font-medium transition-colors" title="Gerar PDF"><FileText size={18} className="text-red-600" /> PDF</button>
-                  <button onClick={async () => { setEmailEnviando(true); try { await handleEnviarEmail(); } catch { setToast({ mensagem: "Erro inesperado!", tipo: "erro", visivel: true }); } setEmailEnviando(false); setTimeout(() => setToast(prev => ({ ...prev, visivel: false })), 3000); }} disabled={emailEnviando} className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors text-white ${emailEnviando ? "bg-indigo-400 cursor-not-allowed" : "bg-indigo-600 hover:bg-indigo-700"}`}>{emailEnviando ? <Clock size={18} className="animate-spin" /> : <Mail size={18} />} {emailEnviando ? "Enviando..." : "Enviar p/ Cliente"}</button>
-                </div>
+                <button onClick={handleExportarExcel} className="flex items-center gap-2 bg-white border border-gray-200 text-gray-700 hover:bg-gray-50 px-4 py-2 rounded-lg text-sm font-medium transition-colors" title="Exportar Excel">
+                  <FileText size={18} className="text-green-600" /> Excel
+                </button>
+                
+                <button onClick={handleGerarPDF} className="flex items-center gap-2 bg-white border border-gray-200 text-gray-700 hover:bg-gray-50 px-4 py-2 rounded-lg text-sm font-medium transition-colors" title="Gerar PDF">
+                  <FileText size={18} className="text-red-600" /> PDF
+                </button>
+
+                {/* 🔴 BOTÃO DE EMAIL DESATIVADO TEMPORARIAMENTE (false &&) */}
+                {false && (
+                  <button 
+                    onClick={async () => { 
+                      setEmailEnviando(true); 
+                      try { 
+                        await handleEnviarEmail(); 
+                      } catch { 
+                        setToast({ mensagem: "Erro inesperado!", tipo: "erro", visivel: true }); 
+                      } 
+                      setEmailEnviando(false); 
+                      setTimeout(() => setToast(prev => ({ ...prev, visivel: false })), 3000); 
+                    }} 
+                    disabled={emailEnviando} 
+                    className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors text-white ${emailEnviando ? "bg-indigo-400 cursor-not-allowed" : "bg-indigo-600 hover:bg-indigo-700"}`}
+                  >
+                    {emailEnviando ? <Clock size={18} className="animate-spin" /> : <Mail size={18} />} 
+                    {emailEnviando ? "Enviando..." : "Enviar p/ Cliente"}
+                  </button>
+                )}
+              </div>
 
                 <ServicesTable servicos={servicosFiltradosData} onStatusChange={alterarStatusRapido} onEdit={editarServico} onDelete={deletarServico} onSort={handleSort} sortConfig={sortConfig} /> 
               </div>
