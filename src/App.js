@@ -22,6 +22,7 @@ const App = () => {
   // --- ESTADOS ---
   const [servicos, setServicos] = useState([]);
   const [clientes, setClientes] = useState([]);
+  const [canais, setCanais] = useState([]); 
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('dashboard');
   const [showModal, setShowModal] = useState(false);
@@ -44,12 +45,13 @@ const App = () => {
   const [todosSolicitantesDoCliente, setTodosSolicitantesDoCliente] = useState([]); 
   const [sortConfig, setSortConfig] = useState({ key: 'data', direction: 'desc' });
   
-  // Estado para controlar o Menu Mobile
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   
+  // 🔴 ATUALIZADO: Todos os filtros principais agora são arrays []
   const [filtros, setFiltros] = useState({
-    cliente: '',
-    status: '',
+    canal: [], 
+    cliente: [],
+    status: [], // 👈 Agora é MultiSelect
     dataInicio: '',
     dataFim: '',
     solicitantes: []
@@ -86,15 +88,23 @@ const App = () => {
 
   useEffect(() => {
     const carregarSolicitantesFiltro = async () => {
-      if (!filtros.cliente) {
+      // Lógica ajustada para MultiSelect de Clientes
+      if (filtros.cliente.length === 0) {
         setTodosSolicitantesDoCliente([]);
         setFiltros(prev => ({ ...prev, solicitantes: [] })); 
         return;
       }
-      const clienteObj = clientes.find(c => c.nome === filtros.cliente);
-      if (clienteObj) {
-        const { data } = await supabase.from('solicitantes').select('nome').eq('cliente_id', clienteObj.id).order('nome', { ascending: true });
-        if (data) setTodosSolicitantesDoCliente(data.map(s => s.nome));
+      
+      // Se tiver APENAS UM cliente selecionado, carregamos os solicitantes dele
+      if (filtros.cliente.length === 1) {
+          const nomeCliente = filtros.cliente[0];
+          const clienteObj = clientes.find(c => c.nome === nomeCliente);
+          if (clienteObj) {
+            const { data } = await supabase.from('solicitantes').select('nome').eq('cliente_id', clienteObj.id).order('nome', { ascending: true });
+            if (data) setTodosSolicitantesDoCliente(data.map(s => s.nome));
+          }
+      } else {
+          setTodosSolicitantesDoCliente([]); 
       }
     };
     carregarSolicitantesFiltro();
@@ -132,43 +142,28 @@ const App = () => {
   const salvarConfiguracao = async (novoValor, novoNome) => {
     try {
       setLoading(true);
-      
-      await supabase.from('configuracoes').upsert(
-        { chave: 'valor_hora_padrao', valor: novoValor, user_id: session.user.id }, 
-        { onConflict: 'chave, user_id' }
-      );
-
-      await supabase.from('configuracoes').upsert(
-        { chave: 'nome_consultor', valor: novoNome, user_id: session.user.id },
-        { onConflict: 'chave, user_id' }
-      );
-
+      await supabase.from('configuracoes').upsert({ chave: 'valor_hora_padrao', valor: novoValor, user_id: session.user.id }, { onConflict: 'chave, user_id' });
+      await supabase.from('configuracoes').upsert({ chave: 'nome_consultor', valor: novoNome, user_id: session.user.id }, { onConflict: 'chave, user_id' });
       setValorHoraPadrao(novoValor);
       setNomeConsultor(novoNome);
       setShowConfigModal(false);
       showToast('Configurações salvas!', 'sucesso');
-
-    } catch (error) {
-      console.error('Erro ao salvar config:', error);
-      showToast('Erro ao salvar configuração.', 'erro');
-    } finally {
-      setLoading(false);
-    }
+    } catch (error) { console.error('Erro ao salvar config:', error); showToast('Erro ao salvar configuração.', 'erro'); } finally { setLoading(false); }
   };
 
   const carregarDados = async () => {
     try {
-      const { data: dataServicos, error: errorServicos } = await supabase
-        .from('servicos_prestados')
-        .select('*, canais(nome)')
-        .order('data', { ascending: false });
-
+      const { data: dataServicos, error: errorServicos } = await supabase.from('servicos_prestados').select('*, canais(nome)').order('data', { ascending: false });
       if (errorServicos) throw errorServicos;
       setServicos(dataServicos);
 
       const { data: dataClientes, error: errorClientes } = await supabase.from('clientes').select('*').order('nome', { ascending: true });
       if (errorClientes) throw errorClientes;
       setClientes(dataClientes);
+
+      const { data: dataCanais, error: errorCanais } = await supabase.from('canais').select('*').eq('ativo', true).order('nome', { ascending: true });
+      if (!errorCanais) setCanais(dataCanais);
+
     } catch (error) { console.error('Erro dados:', error); alert('Erro ao carregar dados.'); }
   };
 
@@ -289,10 +284,13 @@ const App = () => {
   };
 
   const handleEnviarEmail = async () => {
-    if (!filtros.cliente) { showToast("Selecione um cliente no filtro para enviar e-mails.", "erro"); return; }
-    const clienteSelecionado = clientes.find(c => c.nome === filtros.cliente);
-    if (!clienteSelecionado || !clienteSelecionado.email) { showToast("Cliente sem e-mail principal cadastrado!", "erro"); return; }
-    if (servicosFiltradosData.length === 0) { showToast("Não há serviços listados para enviar.", "erro"); return; }
+    if (!filtros.cliente || filtros.cliente.length === 0) { showToast("Selecione pelo menos um cliente.", "erro"); return; }
+    // Só envia para o primeiro cliente selecionado por enquanto para garantir segurança
+    const nomeClienteAlvo = filtros.cliente[0];
+    const clienteSelecionado = clientes.find(c => c.nome === nomeClienteAlvo);
+    
+    if (!clienteSelecionado || !clienteSelecionado.email) { showToast("Cliente principal sem e-mail!", "erro"); return; }
+    if (servicosFiltradosData.length === 0) { showToast("Não há serviços listados.", "erro"); return; }
 
     setEmailEnviando(true);
     try {
@@ -301,6 +299,9 @@ const App = () => {
       
       const pacotesDeEnvio = {};
       servicosFiltradosData.forEach(servico => {
+        // Só processa serviços desse cliente específico
+        if (servico.cliente !== clienteSelecionado.nome) return;
+
         let emailDestino = clienteSelecionado.email;
         let emailCC = null;
         const solicitanteEncontrado = todosSolicitantes.find(s => s.nome.trim().toLowerCase() === (servico.solicitante || '').trim().toLowerCase());
@@ -378,8 +379,25 @@ const App = () => {
 
   const servicosFiltrados = () => {
     let result = servicos.filter(s => {
-      if (filtros.cliente && s.cliente !== filtros.cliente) return false;
-      if (filtros.status && s.status !== filtros.status) return false;
+      // 🔴 LÓGICA DE MULTI-SELECT (ARRAYS)
+      
+      // 1. CANAL
+      if (filtros.canal.length > 0) {
+          const nomeCanalServico = s.canais?.nome || 'Direto';
+          if (!filtros.canal.includes(nomeCanalServico)) return false;
+      }
+
+      // 2. CLIENTE
+      if (filtros.cliente.length > 0) {
+          if (!filtros.cliente.includes(s.cliente)) return false;
+      }
+
+      // 3. STATUS (Novo Multi)
+      if (filtros.status.length > 0) {
+          if (!filtros.status.includes(s.status)) return false;
+      }
+
+      // 4. DATAS E SOLICITANTES
       if (filtros.dataInicio && s.data < filtros.dataInicio) return false;
       if (filtros.dataFim && s.data > filtros.dataFim) return false;
       if (filtros.solicitantes && filtros.solicitantes.length > 0) {
@@ -388,6 +406,7 @@ const App = () => {
       }
       return true;
     });
+    
     if (sortConfig.key) {
       result.sort((a, b) => {
         let valA = a[sortConfig.key];
@@ -412,11 +431,14 @@ const App = () => {
   if (loading && !session) return <div className="min-h-screen bg-white flex items-center justify-center"><div className="animate-spin rounded-full h-16 w-16 border-t-2 border-b-2 border-indigo-600"></div></div>;
   if (!session) return <Auth />;
 
+  // Preparando opções para os MultiSelects
+  const opcoesCanais = ['Direto', ...canais.map(c => c.nome)];
+  const opcoesClientes = clientes.map(c => c.nome);
+  const opcoesStatus = ['Pendente', 'Em aprovação', 'Aprovado', 'NF Emitida', 'Pago'];
+
   return (
-    // 🆕 LAYOUT MODERNO (SHELL)
     <div className="flex h-screen bg-gray-50 overflow-hidden">
       
-      {/* 1. SIDEBAR (Lateral) */}
       <Sidebar 
         activeTab={activeTab} 
         setActiveTab={setActiveTab} 
@@ -427,111 +449,49 @@ const App = () => {
         onOpenChannels={() => setShowChannelsModal(true)}
       />
 
-      {/* 2. CONTEÚDO PRINCIPAL (Direita) */}
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden relative">
         
-        {/* Top Bar (Cabeçalho do Conteúdo) */}
         <header className="bg-white border-b border-gray-200 h-16 flex items-center justify-between px-6 shadow-sm z-10">
           <div className="flex items-center gap-4">
-            {/* Botão Menu Hamburguer (Só Mobile) */}
-            <button 
-              onClick={() => setIsMobileMenuOpen(true)}
-              className="md:hidden p-2 -ml-2 text-gray-500 hover:text-gray-700 rounded-lg hover:bg-gray-100"
-            >
+            <button onClick={() => setIsMobileMenuOpen(true)} className="md:hidden p-2 -ml-2 text-gray-500 hover:text-gray-700 rounded-lg hover:bg-gray-100">
               <Menu size={24} />
             </button>
-            
             <h1 className="text-xl font-bold text-gray-800 flex items-center gap-2">
               {activeTab === 'dashboard' && <><LayoutDashboard className="text-indigo-600" /> Dashboard</>}
               {activeTab === 'servicos' && <><Briefcase className="text-indigo-600" /> Meus Serviços</>}
               {activeTab === 'clientes' && <><Users className="text-indigo-600" /> Clientes</>}
             </h1>
           </div>
-
-          {/* Botão de Ação Principal (Novo Serviço) - Sempre visível */}
-          <button
-            onClick={() => { resetForm(); setShowModal(true); }}
-            className="bg-indigo-600 text-white px-4 py-2 rounded-xl flex items-center gap-2 
-                      hover:bg-indigo-700 transition-all duration-200 
-                      hover:scale-105 active:scale-95 text-sm font-bold shadow-md shadow-indigo-200"
-          >
-            <Plus size={18} />
-            <span className="hidden sm:inline">Novo Serviço</span>
+          <button onClick={() => { resetForm(); setShowModal(true); }} className="bg-indigo-600 text-white px-4 py-2 rounded-xl flex items-center gap-2 hover:bg-indigo-700 transition-all duration-200 hover:scale-105 active:scale-95 text-sm font-bold shadow-md shadow-indigo-200">
+            <Plus size={18} /><span className="hidden sm:inline">Novo Serviço</span>
           </button>
         </header>
 
-        {/* Área de Scroll (Conteúdo das Abas) */}
         <main className="flex-1 overflow-y-auto p-4 md:p-8 scroll-smooth">
-          
           <div className="max-w-7xl mx-auto animate-fade-in-up pb-10">
             {loading ? (
-              <div className="text-center py-12">
-                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600 mx-auto"></div>
-                <p className="mt-4 text-gray-600">Carregando Dados...</p>
-              </div>
+              <div className="text-center py-12"><div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600 mx-auto"></div><p className="mt-4 text-gray-600">Carregando Dados...</p></div>
             ) : activeTab === 'dashboard' ? (
-              // --- CONTEÚDO DASHBOARD ---
               <div className="space-y-6">
-                
-                {/* 🔴 MUDANÇA DE UI: Grid 2x2 no Mobile, Cards Delicados */}
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-6">
-                  
                   <div className="bg-white p-4 md:p-6 rounded-2xl shadow-sm border border-gray-100 hover:shadow-md transition-shadow">
-                    <div className="flex items-center justify-between mb-2">
-                      <div className="p-2 md:p-3 bg-indigo-50 rounded-xl">
-                        <Clock className="text-indigo-600" size={20} /> {/* Ícone menor */}
-                      </div>
-                      {/* Oculta label no mobile se quiser, ou mantém pequena */}
-                    </div>
-                    <div>
-                      <p className="text-sm md:text-xs font-bold text-gray-400 uppercase tracking-wider mb-1">Horas</p>
-                      <p className="text-xl md:text-2xl font-black text-gray-900">{formatHoursInt(stats.totalHoras)}</p>
-                    </div>
+                    <div className="flex items-center justify-between mb-2"><div className="p-2 md:p-3 bg-indigo-50 rounded-xl"><Clock className="text-indigo-600" size={20} /></div></div>
+                    <div><p className="text-sm md:text-xs font-bold text-gray-400 uppercase tracking-wider mb-1">Horas</p><p className="text-xl md:text-2xl font-black text-gray-900">{formatHoursInt(stats.totalHoras)}</p></div>
                   </div>
-                  
                   <div className="bg-white p-4 md:p-6 rounded-2xl shadow-sm border border-gray-100 hover:shadow-md transition-shadow">
-                    <div className="flex items-center justify-between mb-2">
-                      <div className="p-2 md:p-3 bg-green-50 rounded-xl">
-                        <DollarSign className="text-green-600" size={20} />
-                      </div>
-                    </div>
-                    <div>
-                      <p className="text-sm md:text-xs font-bold text-gray-400 uppercase tracking-wider mb-1">Total</p>
-                      <p className="text-xl md:text-2xl font-black text-gray-900 truncate" title={formatCurrency(stats.totalValor)}>
-                        {/* Truque para caber valor grande no mobile */}
-                        <span className="text-base md:text-2xl">{formatCurrency(stats.totalValor).split(' ')[0]}</span> 
-                        {formatCurrency(stats.totalValor).split(' ')[1]}
-                      </p>
-                    </div>
+                    <div className="flex items-center justify-between mb-2"><div className="p-2 md:p-3 bg-green-50 rounded-xl"><DollarSign className="text-green-600" size={20} /></div></div>
+                    <div><p className="text-sm md:text-xs font-bold text-gray-400 uppercase tracking-wider mb-1">Total</p><p className="text-xl md:text-2xl font-black text-gray-900 truncate" title={formatCurrency(stats.totalValor)}><span className="text-base md:text-2xl">{formatCurrency(stats.totalValor).split(' ')[0]}</span> {formatCurrency(stats.totalValor).split(' ')[1]}</p></div>
                   </div>
-
                   <div className="bg-white p-4 md:p-6 rounded-2xl shadow-sm border border-gray-100 hover:shadow-md transition-shadow">
-                    <div className="flex items-center justify-between mb-2">
-                      <div className="p-2 md:p-3 bg-blue-50 rounded-xl">
-                        <FileText className="text-blue-600" size={20} />
-                      </div>
-                    </div>
-                    <div>
-                      <p className="text-sm md:text-xs font-bold text-gray-400 uppercase tracking-wider mb-1">Serviços</p>
-                      <p className="text-xl md:text-2xl font-black text-gray-900">{stats.totalServicos}</p>
-                    </div>
+                    <div className="flex items-center justify-between mb-2"><div className="p-2 md:p-3 bg-blue-50 rounded-xl"><FileText className="text-blue-600" size={20} /></div></div>
+                    <div><p className="text-sm md:text-xs font-bold text-gray-400 uppercase tracking-wider mb-1">Serviços</p><p className="text-xl md:text-2xl font-black text-gray-900">{stats.totalServicos}</p></div>
                   </div>
-
                   <div className="bg-white p-4 md:p-6 rounded-2xl shadow-sm border border-gray-100 hover:shadow-md transition-shadow">
-                    <div className="flex items-center justify-between mb-2">
-                      <div className="p-2 md:p-3 bg-purple-50 rounded-xl">
-                        <Users className="text-purple-600" size={20} />
-                      </div>
-                    </div>
-                    <div>
-                      <p className="text-sm md:text-xs font-bold text-gray-400 uppercase tracking-wider mb-1">Clientes</p>
-                      <p className="text-xl md:text-2xl font-black text-gray-900">{clientes.length}</p>
-                    </div>
+                    <div className="flex items-center justify-between mb-2"><div className="p-2 md:p-3 bg-purple-50 rounded-xl"><Users className="text-purple-600" size={20} /></div></div>
+                    <div><p className="text-sm md:text-xs font-bold text-gray-400 uppercase tracking-wider mb-1">Clientes</p><p className="text-xl md:text-2xl font-black text-gray-900">{clientes.length}</p></div>
                   </div>
                 </div>
-
                 <DashboardCharts servicos={servicosFiltradosData} />
-
                 <div className="bg-white p-4 md:p-6 rounded-2xl shadow-sm border border-gray-100">
                   <h3 className="text-lg font-bold text-gray-800 mb-6">Status dos Serviços</h3>
                   <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4">
@@ -542,26 +502,54 @@ const App = () => {
                   </div>
                 </div>
               </div>
-
             ) : activeTab === 'servicos' ? (
-              // --- CONTEÚDO SERVIÇOS ---
               <div className="space-y-6">
                 
-                {/* Filtros em Card */}
+                {/* 🔴 FILTROS AVANÇADOS - TODOS MULTISELECT AGORA */}
                 <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 space-y-4">
                   <div className="flex items-center gap-2 text-gray-800 font-bold mb-2">
                     <Filter size={20} className="text-indigo-600" /> Filtros Avançados
                   </div>
-                  <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
-                    <MultiSelect options={todosSolicitantesDoCliente} selected={filtros.solicitantes} onChange={(novos) => setFiltros({...filtros, solicitantes: novos})} placeholder={filtros.cliente ? "Filtrar Solicitantes..." : "Selecione Cliente"} />
-                    <select value={filtros.cliente} onChange={(e) => setFiltros({...filtros, cliente: e.target.value})} className="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 outline-none"><option value="">Todos os clientes</option>{clientes.map(c => (<option key={c.id} value={c.nome}>{c.nome}</option>))}</select>
-                    <select value={filtros.status} onChange={(e) => setFiltros({...filtros, status: e.target.value})} className="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 outline-none"><option value="">Todos os status</option><option value="Pendente">Pendente</option><option value="Em aprovação">Em aprovação</option><option value="Aprovado">Aprovado</option><option value="NF Emitida">NF Emitida</option><option value="Pago">Pago</option></select>
-                    <input type="date" value={filtros.dataInicio} onChange={(e) => setFiltros({...filtros, dataInicio: e.target.value})} className="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 outline-none" />
-                    <input type="date" value={filtros.dataFim} onChange={(e) => setFiltros({...filtros, dataFim: e.target.value})} className="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 outline-none" />
+                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+                    
+                    {/* 1. CANAL (Multi) */}
+                    <MultiSelect 
+                        options={opcoesCanais} 
+                        selected={filtros.canal} 
+                        onChange={(novos) => setFiltros({...filtros, canal: novos})} 
+                        placeholder="Canais..." 
+                    />
+
+                    {/* 2. CLIENTE (Multi) */}
+                    <MultiSelect 
+                        options={opcoesClientes} 
+                        selected={filtros.cliente} 
+                        onChange={(novos) => setFiltros({...filtros, cliente: novos})} 
+                        placeholder="Clientes..." 
+                    />
+                    
+                    {/* 3. SOLICITANTE (Multi) */}
+                    <MultiSelect 
+                        options={todosSolicitantesDoCliente} 
+                        selected={filtros.solicitantes} 
+                        onChange={(novos) => setFiltros({...filtros, solicitantes: novos})} 
+                        placeholder={filtros.cliente.length === 1 ? "Solicitantes..." : (filtros.cliente.length > 1 ? "Selecione 1 Cliente" : "Selecione Cliente")} 
+                    />
+                    
+                    {/* 4. STATUS (Multi - AGORA ATUALIZADO) */}
+                    <MultiSelect 
+                        options={opcoesStatus} 
+                        selected={filtros.status} 
+                        onChange={(novos) => setFiltros({...filtros, status: novos})} 
+                        placeholder="Status..." 
+                    />
+                    
+                    {/* 5 e 6. DATAS */}
+                    <input type="date" value={filtros.dataInicio} onChange={(e) => setFiltros({...filtros, dataInicio: e.target.value})} className="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 outline-none w-full" />
+                    <input type="date" value={filtros.dataFim} onChange={(e) => setFiltros({...filtros, dataFim: e.target.value})} className="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 outline-none w-full" />
                   </div>
                 </div>
 
-                {/* Barra de Ações */}
                 <div className="flex flex-wrap justify-end gap-3">
                   <button onClick={handleExportarExcel} className="flex items-center gap-2 bg-white border border-gray-200 text-gray-700 hover:bg-gray-50 px-4 py-2 rounded-lg text-sm font-medium transition-colors" title="Exportar Excel"><FileText size={18} className="text-green-600" /> Excel</button>
                   <button onClick={handleGerarPDF} className="flex items-center gap-2 bg-white border border-gray-200 text-gray-700 hover:bg-gray-50 px-4 py-2 rounded-lg text-sm font-medium transition-colors" title="Gerar PDF"><FileText size={18} className="text-red-600" /> PDF</button>
@@ -570,9 +558,7 @@ const App = () => {
 
                 <ServicesTable servicos={servicosFiltradosData} onStatusChange={alterarStatusRapido} onEdit={editarServico} onDelete={deletarServico} onSort={handleSort} sortConfig={sortConfig} /> 
               </div>
-
             ) : (
-              // --- CONTEÚDO CLIENTES ---
               <div className="space-y-6">
                 <div className="flex justify-between items-center bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
                   <h2 className="text-lg font-bold text-gray-800">Base de Clientes</h2>
@@ -585,15 +571,27 @@ const App = () => {
         </main>
       </div>
 
-      {/* --- MODAIS E UTILITÁRIOS --- */}
       <ServiceModal isOpen={showModal} onClose={() => { setShowModal(false); setEditingService(null); resetForm(); }} onSave={salvarServico} formData={formData} setFormData={setFormData} clientes={clientes} isEditing={!!editingService} />
       <ClientModal isOpen={showClienteModal} onClose={() => { setShowClienteModal(false); setEditingCliente(null); resetClienteForm(); }} onSave={salvarCliente} formData={clienteFormData} setFormData={setClienteFormData} isEditing={!!editingCliente} />
       <SolicitantesModal isOpen={showSolicitantesModal} onClose={() => { setShowSolicitantesModal(false); setClienteParaSolicitantes(null); }} cliente={clienteParaSolicitantes} userId={session?.user?.id} />
       <ConfigModal isOpen={showConfigModal} onClose={() => setShowConfigModal(false)} onSave={salvarConfiguracao} valorAtual={valorHoraPadrao} nomeAtual={nomeConsultor} />
       <ChannelsModal isOpen={showChannelsModal} onClose={() => setShowChannelsModal(false)} userId={session?.user?.id} />
       
-      <div className={`fixed top-6 right-6 w-96 max-w-xs px-6 py-3 rounded-xl shadow-lg text-white transform transition-all duration-500 z-[60] ${toast.visivel ? "translate-x-0 opacity-100" : "translate-x-24 opacity-0"} ${toast.tipo === 'sucesso' ? 'bg-green-600' : 'bg-red-600'}`}>{toast.mensagem}</div>
-      {aviso.mensagem && (<div className={`fixed top-4 right-4 px-4 py-2 rounded shadow-lg text-white transition-all z-[60] ${aviso.tipo === "sucesso" ? "bg-green-600" : "bg-red-600"}`} onAnimationEnd={() => setAviso({ mensagem: "", tipo: "" })}>{aviso.mensagem}</div>)}
+      <div className={`fixed top-6 right-6 w-96 max-w-xs px-6 py-3 rounded-xl shadow-lg text-white transform transition-all duration-500 z-[60] 
+        ${toast.visivel ? "translate-x-0 opacity-100" : "translate-x-24 opacity-0 pointer-events-none"} 
+        ${toast.tipo === 'sucesso' ? 'bg-green-600' : 'bg-red-600'}`}
+      >
+        {toast.mensagem}
+      </div>
+
+      {aviso.mensagem && (
+        <div className={`fixed top-4 right-4 px-4 py-2 rounded shadow-lg text-white transition-all z-[60] pointer-events-auto
+          ${aviso.tipo === "sucesso" ? "bg-green-600" : "bg-red-600"}`} 
+          onAnimationEnd={() => setAviso({ mensagem: "", tipo: "" })}
+        >
+          {aviso.mensagem}
+        </div>
+      )}
     </div>
   );
 };
