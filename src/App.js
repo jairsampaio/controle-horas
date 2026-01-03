@@ -185,13 +185,7 @@ const App = () => {
     else { setServicos([]); setClientes([]); }
   }, [session]);
 
-  useEffect(() => {
-    if (session) {
-      const handleBeforeUnload = (e) => { supabase.auth.signOut(); localStorage.clear(); delete e.returnValue; };
-      window.addEventListener('beforeunload', handleBeforeUnload);
-      return () => { window.removeEventListener('beforeunload', handleBeforeUnload); };
-    }
-  }, [session]);
+  // 🔴 AQUI ESTAVA O PROBLEMA: REMOVIDO O BLOCO QUE FAZIA LOGOUT NO REFRESH
 
   useEffect(() => {
     const algumModalAberto = showModal || showClienteModal || showSolicitantesModal || showConfigModal || showChannelsModal || showAdminModal;
