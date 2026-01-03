@@ -181,13 +181,7 @@ const App = () => {
     else { setServicos([]); setClientes([]); }
   }, [session]);
 
-  useEffect(() => {
-    if (session) {
-      const handleBeforeUnload = (e) => { supabase.auth.signOut(); localStorage.clear(); delete e.returnValue; };
-      window.addEventListener('beforeunload', handleBeforeUnload);
-      return () => { window.removeEventListener('beforeunload', handleBeforeUnload); };
-    }
-  }, [session]);
+  // 🔴 BLOCO REMOVIDO: O código que forçava logout ao fechar a janela foi apagado daqui.
 
   useEffect(() => {
     const algumModalAberto = showModal || showClienteModal || showSolicitantesModal || showConfigModal || showChannelsModal;
@@ -455,8 +449,8 @@ const App = () => {
   const opcoesClientes = clientes.map(c => c.nome);
   const opcoesStatus = ['Pendente', 'Em aprovação', 'Aprovado', 'NF Emitida', 'Pago'];
 
-  // 🔴 CORREÇÃO AQUI: Definindo a variável corretamente
-  const clientesAtivos = clientes.filter(c => c.ativo !== false); // Usada para Cards e Modais
+  // Definindo clientes ativos
+  const clientesAtivos = clientes.filter(c => c.ativo !== false); 
   
   // Lista para a tabela (depende do botão "Olho")
   const clientesParaTabela = mostrarInativos ? clientes : clientesAtivos;
@@ -575,7 +569,7 @@ const App = () => {
                   </div>
                 </div>
                 
-                {/* 🔴 CORREÇÃO AQUI: Tabela com filtro inteligente */}
+                {/* Tabela com filtro inteligente */}
                 <ClientsTable 
                     clientes={clientesParaTabela} 
                     onEdit={editarCliente} 
@@ -589,7 +583,7 @@ const App = () => {
         </main>
       </div>
 
-      {/* 🔴 CORREÇÃO AQUI: Modal de Serviço só permite ATIVOS */}
+      {/* Modal de Serviço só permite ATIVOS */}
       <ServiceModal 
         isOpen={showModal} 
         onClose={() => { setShowModal(false); setEditingService(null); resetForm(); }} 
@@ -602,7 +596,7 @@ const App = () => {
       
       <ClientModal isOpen={showClienteModal} onClose={() => { setShowClienteModal(false); setEditingCliente(null); resetClienteForm(); }} onSave={salvarCliente} formData={clienteFormData} setFormData={setClienteFormData} isEditing={!!editingCliente} />
       
-      {/* 🔴 Passando showToast para o Modal de Solicitantes */}
+      {/* Passando showToast para o Modal de Solicitantes */}
       <SolicitantesModal 
         isOpen={showSolicitantesModal} 
         onClose={() => { setShowSolicitantesModal(false); setClienteParaSolicitantes(null); }} 
@@ -614,7 +608,7 @@ const App = () => {
       <ConfigModal isOpen={showConfigModal} onClose={() => setShowConfigModal(false)} onSave={salvarConfiguracao} valorAtual={valorHoraPadrao} nomeAtual={nomeConsultor} />
       <ChannelsModal isOpen={showChannelsModal} onClose={() => setShowChannelsModal(false)} userId={session?.user?.id} />
       
-      {/* 🔴 MODAL DE CONFIRMAÇÃO DE INATIVAÇÃO */}
+      {/* MODAL DE CONFIRMAÇÃO DE INATIVAÇÃO */}
       <ConfirmModal
         isOpen={confirmModalOpen}
         onClose={() => setConfirmModalOpen(false)}
