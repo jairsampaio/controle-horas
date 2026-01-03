@@ -44,7 +44,7 @@ const Sidebar = ({ activeTab, setActiveTab, isOpen, onClose, onLogout, onOpenCon
   };
 
   // ⚠️ IMPORTANTE: Coloque aqui o e-mail que terá acesso mestre
-  const ADMIN_EMAIL = 'contatosampaiojairgmail.com'; 
+  const ADMIN_EMAIL = 'contatosampaiojair@gmail.com'; 
 
   return (
     <>
