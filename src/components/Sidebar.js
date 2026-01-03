@@ -1,8 +1,37 @@
-import React from 'react';
+import React, { useState } from 'react'; // 👈 Importar useState
 import { LayoutDashboard, Briefcase, Users, Settings, LogOut, Building2, X } from 'lucide-react';
 
 const Sidebar = ({ activeTab, setActiveTab, isOpen, onClose, onLogout, onOpenConfig, onOpenChannels }) => {
   
+  // --- LÓGICA DE SWIPE (ARRASTAR) ---
+  const [touchStart, setTouchStart] = useState(null);
+  const [touchEnd, setTouchEnd] = useState(null);
+
+  // Mínimo de pixels para considerar que foi um "arrasto" intencional
+  const minSwipeDistance = 50;
+
+  const onTouchStart = (e) => {
+    setTouchEnd(null); // Reseta o fim para evitar bugs
+    setTouchStart(e.targetTouches[0].clientX); // Pega a posição X inicial
+  };
+
+  const onTouchMove = (e) => {
+    setTouchEnd(e.targetTouches[0].clientX); // Atualiza a posição X enquanto move
+  };
+
+  const onTouchEnd = () => {
+    if (!touchStart || !touchEnd) return;
+    
+    const distance = touchStart - touchEnd;
+    const isLeftSwipe = distance > minSwipeDistance;
+
+    // Se arrastou pra esquerda (positivo) e passou do limite
+    if (isLeftSwipe) {
+      onClose();
+    }
+  };
+  // ----------------------------------
+
   const menuItems = [
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
     { id: 'servicos', label: 'Serviços', icon: Briefcase },
@@ -11,7 +40,7 @@ const Sidebar = ({ activeTab, setActiveTab, isOpen, onClose, onLogout, onOpenCon
 
   const handleNavigation = (id) => {
     setActiveTab(id);
-    if (window.innerWidth < 768) { // Fecha o menu no mobile ao clicar
+    if (window.innerWidth < 768) { 
       onClose();
     }
   };
@@ -21,13 +50,17 @@ const Sidebar = ({ activeTab, setActiveTab, isOpen, onClose, onLogout, onOpenCon
       {/* Overlay Escuro para Mobile */}
       {isOpen && (
         <div 
-          className="fixed inset-0 bg-black bg-opacity-50 z-40 md:hidden glass"
+          className="fixed inset-0 bg-black bg-opacity-50 z-40 md:hidden glass transition-opacity duration-300"
           onClick={onClose}
         />
       )}
 
       {/* Sidebar Container */}
       <aside 
+        // 👇 ADICIONAMOS OS EVENTOS DE TOQUE AQUI
+        onTouchStart={onTouchStart}
+        onTouchMove={onTouchMove}
+        onTouchEnd={onTouchEnd}
         className={`
           fixed top-0 left-0 z-50 h-screen w-64 bg-white border-r border-gray-200 shadow-lg transform transition-transform duration-300 ease-in-out
           ${isOpen ? 'translate-x-0' : '-translate-x-full'}

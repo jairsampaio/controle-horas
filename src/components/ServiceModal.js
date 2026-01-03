@@ -1,59 +1,55 @@
 import React, { useState, useEffect } from 'react';
-import { X, Save, Clock, DollarSign, User, FileText, Calendar, Activity, List, RotateCcw, Building2 } from 'lucide-react'; // 👈 BUILDING2 ADICIONADO
+import { X, Save, Clock, DollarSign, User, FileText, Calendar, Activity, List, RotateCcw, Building2, AlertCircle } from 'lucide-react'; // 👈 AlertCircle adicionado
 import supabase from '../services/supabase';
 
 const ServiceModal = ({ isOpen, onClose, onSave, formData, setFormData, clientes, isEditing }) => {
   const [loading, setLoading] = useState(false);
   const [listaSolicitantes, setListaSolicitantes] = useState([]);
   const [loadingSolicitantes, setLoadingSolicitantes] = useState(false);
-  
-  // 🆕 Estado para Canais (V2)
   const [listaCanais, setListaCanais] = useState([]);
-
-  // Estado local para o valor visual
   const [valorVisual, setValorVisual] = useState('');
+  const [erroValidacao, setErroValidacao] = useState(''); // 🆕 Estado para mensagem de erro
 
-  // Sincroniza o valor visual APENAS quando o modal abre (para edição)
+  // Sincroniza valor visual
   useEffect(() => {
     if (isOpen) {
       if (formData.valor_hora) {
-        // Transforma o número do banco (ex: 150.5) em visual (ex: 150,50)
         setValorVisual(formData.valor_hora.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
       } else {
         setValorVisual('');
       }
+      setErroValidacao(''); // Limpa erro ao abrir
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen]); 
 
-  // 🆕 Busca a lista de Canais (V2)
+  // Busca Canais
   useEffect(() => {
     const carregarCanais = async () => {
-      const { data, error } = await supabase
-        .from('canais')
-        .select('*')
-        .eq('ativo', true) // Apenas ativos
-        .order('nome', { ascending: true });
-      
-      if (!error) {
-        setListaCanais(data || []);
-      }
+      const { data, error } = await supabase.from('canais').select('*').eq('ativo', true).order('nome', { ascending: true });
+      if (!error) setListaCanais(data || []);
     };
-    
-    if (isOpen) {
-        carregarCanais();
-    }
+    if (isOpen) carregarCanais();
   }, [isOpen]);
 
-  // Busca solicitantes
+  // 🆕 Busca Solicitantes (Filtrando apenas ATIVOS)
   useEffect(() => {
     const carregarSolicitantesDoCliente = async () => {
-      if (!formData.cliente) { setListaSolicitantes([]); return; }
+      setListaSolicitantes([]); // Limpa lista anterior
+      
+      if (!formData.cliente) return;
+      
       const clienteObj = clientes.find(c => c.nome === formData.cliente);
       if (!clienteObj) return;
 
       setLoadingSolicitantes(true);
-      const { data, error } = await supabase.from('solicitantes').select('nome').eq('cliente_id', clienteObj.id).order('nome', { ascending: true });
+      const { data, error } = await supabase
+        .from('solicitantes')
+        .select('nome')
+        .eq('cliente_id', clienteObj.id)
+        .eq('ativo', true) // 🔴 Só traz quem está ativo
+        .order('nome', { ascending: true });
+      
       if (!error) setListaSolicitantes(data || []);
       setLoadingSolicitantes(false);
     };
@@ -62,39 +58,39 @@ const ServiceModal = ({ isOpen, onClose, onSave, formData, setFormData, clientes
 
   if (!isOpen) return null;
 
-  // Lógica Bancária: Digitação flui da direita para a esquerda
+  // Lógica Bancária
   const handleValorChange = (e) => {
-    // 1. Remove tudo que não é número
     const apenasNumeros = e.target.value.replace(/\D/g, "");
-
     if (apenasNumeros === "") {
       setValorVisual("");
       setFormData(prev => ({ ...prev, valor_hora: 0 }));
       return;
     }
-
-    // 2. Divide por 100 para considerar os centavos
     const valorFloat = parseFloat(apenasNumeros) / 100;
-
-    // 3. Formata visualmente (ex: 1200 -> 12,00)
-    const valorFormatado = valorFloat.toLocaleString('pt-BR', {
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2
-    });
-
+    const valorFormatado = valorFloat.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
     setValorVisual(valorFormatado);
     setFormData(prev => ({ ...prev, valor_hora: valorFloat }));
   };
 
+  // 🆕 Validação e Envio
   const handleSubmit = async (e) => {
     e.preventDefault();
+    setErroValidacao('');
+
+    // Validação de Obrigatoriedade
+    if (!formData.solicitante || formData.solicitante.trim() === '') {
+      setErroValidacao('É obrigatório selecionar um solicitante.');
+      return;
+    }
+
     setLoading(true);
-    await onSave();
+    await onSave(); // Chama a função do pai
     setLoading(false);
   };
 
   const handleChange = (field, value) => {
     setFormData(prev => ({ ...prev, [field]: value }));
+    if (field === 'solicitante') setErroValidacao(''); // Limpa erro ao selecionar
   };
 
   const headerColor = isEditing ? 'bg-orange-500' : 'bg-indigo-600';
@@ -111,56 +107,80 @@ const ServiceModal = ({ isOpen, onClose, onSave, formData, setFormData, clientes
 
         <div className="p-6 overflow-y-auto flex-1">
           <form onSubmit={handleSubmit} className="space-y-6">
+            
+            {/* Aviso de Erro de Validação */}
+            {erroValidacao && (
+                <div className="bg-red-50 text-red-600 p-3 rounded-lg text-sm flex items-center gap-2 animate-pulse">
+                    <AlertCircle size={16} /> {erroValidacao}
+                </div>
+            )}
+
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div className="space-y-1"><label className="text-xs font-bold text-gray-500 uppercase tracking-wider flex items-center gap-1"><Calendar size={12} /> Data</label><input type="date" value={formData.data} onChange={(e) => handleChange('data', e.target.value)} className="w-full border rounded px-3 py-2 outline-none focus:ring-2 focus:ring-indigo-500" required /></div>
               <div className="space-y-1"><label className="text-xs font-bold text-gray-500 uppercase tracking-wider flex items-center gap-1"><Clock size={12} /> Início</label><input type="time" value={formData.hora_inicial} onChange={(e) => handleChange('hora_inicial', e.target.value)} className="w-full border rounded px-3 py-2 outline-none focus:ring-2 focus:ring-indigo-500" required /></div>
               <div className="space-y-1"><label className="text-xs font-bold text-gray-500 uppercase tracking-wider flex items-center gap-1"><Clock size={12} /> Fim</label><input type="time" value={formData.hora_final} onChange={(e) => handleChange('hora_final', e.target.value)} className="w-full border rounded px-3 py-2 outline-none focus:ring-2 focus:ring-indigo-500" required /></div>
             </div>
 
-            {/* 🆕 BLOCO DO CANAL + CLIENTE + SOLICITANTE */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               
-              {/* 1. CANAL / PARCEIRO (V2) */}
               <div className="space-y-1">
-                <label className="text-xs font-bold text-gray-500 uppercase tracking-wider flex items-center gap-1">
-                    <Building2 size={12} /> Canal / Parceiro
-                </label>
-                <select 
-                    value={formData.canal_id || ''} 
-                    onChange={(e) => handleChange('canal_id', e.target.value)} 
-                    className="w-full border rounded px-3 py-2 outline-none focus:ring-2 focus:ring-indigo-500 bg-white"
-                >
+                <label className="text-xs font-bold text-gray-500 uppercase tracking-wider flex items-center gap-1"><Building2 size={12} /> Canal / Parceiro</label>
+                <select value={formData.canal_id || ''} onChange={(e) => handleChange('canal_id', e.target.value)} className="w-full border rounded px-3 py-2 outline-none focus:ring-2 focus:ring-indigo-500 bg-white">
                     <option value="">-- Direto (Sem Canal) --</option>
-                    {listaCanais.map(canal => (
-                        <option key={canal.id} value={canal.id}>{canal.nome}</option>
-                    ))}
+                    {listaCanais.map(canal => (<option key={canal.id} value={canal.id}>{canal.nome}</option>))}
                 </select>
               </div>
 
-              {/* 2. CLIENTE */}
-              <div className="space-y-1"><label className="text-xs font-bold text-gray-500 uppercase tracking-wider flex items-center gap-1"><User size={12} /> Cliente</label><select value={formData.cliente} onChange={(e) => setFormData(prev => ({ ...prev, cliente: e.target.value, solicitante: '' }))} className="w-full border rounded px-3 py-2 outline-none focus:ring-2 focus:ring-indigo-500 bg-white" required><option value="">Selecione...</option>{clientes.map(c => <option key={c.id} value={c.nome}>{c.nome}</option>)}</select></div>
+              <div className="space-y-1">
+                  <label className="text-xs font-bold text-gray-500 uppercase tracking-wider flex items-center gap-1"><User size={12} /> Cliente</label>
+                  <select 
+                    value={formData.cliente} 
+                    onChange={(e) => setFormData(prev => ({ ...prev, cliente: e.target.value, solicitante: '' }))} 
+                    className="w-full border rounded px-3 py-2 outline-none focus:ring-2 focus:ring-indigo-500 bg-white" 
+                    required
+                  >
+                    <option value="">Selecione...</option>
+                    {clientes.map(c => <option key={c.id} value={c.nome}>{c.nome}</option>)}
+                  </select>
+              </div>
               
-              {/* 3. SOLICITANTE */}
-              <div className="space-y-1"><label className="text-xs font-bold text-gray-500 uppercase tracking-wider flex items-center gap-1"><User size={12} /> Solicitante</label>{loadingSolicitantes ? (<div className="text-xs text-gray-500 p-2 border rounded">Buscando...</div>) : listaSolicitantes.length > 0 ? (<select value={formData.solicitante} onChange={(e) => handleChange('solicitante', e.target.value)} className="w-full border rounded px-3 py-2 outline-none focus:ring-2 focus:ring-indigo-500 bg-white" required><option value="">Quem pediu?</option>{listaSolicitantes.map((sol, i) => <option key={i} value={sol.nome}>{sol.nome}</option>)}</select>) : (<input type="text" placeholder="Nome" value={formData.solicitante} onChange={(e) => handleChange('solicitante', e.target.value)} className="w-full border rounded px-3 py-2 outline-none focus:ring-2 focus:ring-indigo-500 disabled:bg-gray-100" disabled={!formData.cliente} required />)}</div>
+              {/* 🔴 SOLICITANTE AGORA É OBRIGATÓRIO E COMBOBOX */}
+              <div className="space-y-1">
+                  <label className="text-xs font-bold text-gray-500 uppercase tracking-wider flex items-center gap-1">
+                    <User size={12} /> Solicitante <span className="text-red-500">*</span>
+                  </label>
+                  <select 
+                    value={formData.solicitante} 
+                    onChange={(e) => handleChange('solicitante', e.target.value)} 
+                    className={`w-full border rounded px-3 py-2 outline-none focus:ring-2 focus:ring-indigo-500 bg-white ${!formData.cliente ? 'bg-gray-100 text-gray-400 cursor-not-allowed' : ''}`} 
+                    disabled={!formData.cliente || loadingSolicitantes}
+                    required // Validação HTML5
+                  >
+                    {/* Lógica de Opções */}
+                    {!formData.cliente ? (
+                        <option value="">Selecione um cliente primeiro</option>
+                    ) : loadingSolicitantes ? (
+                        <option value="">Carregando...</option>
+                    ) : listaSolicitantes.length === 0 ? (
+                        <option value="">Nenhum solicitante ativo</option>
+                    ) : (
+                        <>
+                            <option value="">Quem pediu?</option>
+                            {listaSolicitantes.map((sol, i) => (
+                                <option key={i} value={sol.nome}>{sol.nome}</option>
+                            ))}
+                        </>
+                    )}
+                  </select>
+              </div>
             </div>
 
             <div className="space-y-1"><label className="text-xs font-bold text-gray-500 uppercase tracking-wider flex items-center gap-1"><Activity size={12} /> Atividade</label><input type="text" value={formData.atividade} onChange={(e) => handleChange('atividade', e.target.value)} className="w-full border rounded px-3 py-2 outline-none focus:ring-2 focus:ring-indigo-500" required /></div>
 
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div className="space-y-1">
-                <label className="text-xs font-bold text-gray-500 uppercase tracking-wider flex items-center gap-1">
-                  <DollarSign size={12} /> Valor Hora (R$)
-                </label>
-                {/* INPUT BANCÁRIO */}
-                <input 
-                  type="text"
-                  inputMode="numeric" 
-                  value={valorVisual} 
-                  onChange={handleValorChange} 
-                  placeholder="0,00"
-                  className="w-full border rounded px-3 py-2 outline-none focus:ring-2 focus:ring-indigo-500 text-right" 
-                  required 
-                />
+                <label className="text-xs font-bold text-gray-500 uppercase tracking-wider flex items-center gap-1"><DollarSign size={12} /> Valor Hora (R$)</label>
+                <input type="text" inputMode="numeric" value={valorVisual} onChange={handleValorChange} placeholder="0,00" className="w-full border rounded px-3 py-2 outline-none focus:ring-2 focus:ring-indigo-500 text-right" required />
               </div>
               <div className="space-y-1"><label className="text-xs font-bold text-gray-500 uppercase tracking-wider flex items-center gap-1"><FileText size={12} /> N.F.</label><input type="text" value={formData.numero_nfs} onChange={(e) => handleChange('numero_nfs', e.target.value)} className="w-full border rounded px-3 py-2 outline-none focus:ring-2 focus:ring-indigo-500" /></div>
               <div className="space-y-1"><label className="text-xs font-bold text-gray-500 uppercase tracking-wider flex items-center gap-1"><List size={12} /> Status</label><select value={formData.status} onChange={(e) => handleChange('status', e.target.value)} className="w-full border rounded px-3 py-2 outline-none focus:ring-2 focus:ring-indigo-500 bg-white"><option value="Pendente">Pendente</option><option value="Em aprovação">Em aprovação</option><option value="Aprovado">Aprovado</option><option value="NF Emitida">NF Emitida</option><option value="Pago">Pago</option></select></div>

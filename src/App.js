@@ -1,7 +1,7 @@
 /* eslint-disable no-restricted-globals */
 import gerarRelatorioPDF from "./utils/gerarRelatorioPDF";
 import React, { useState, useEffect } from 'react';
-import { Clock, DollarSign, User, FileText, Plus, Filter, Settings, Mail, Users, LayoutDashboard, Briefcase, Hourglass, Timer, CheckCircle, FileCheck, Building2, Menu } from 'lucide-react';
+import { Clock, DollarSign, User, FileText, Plus, Filter, Settings, Mail, Users, LayoutDashboard, Briefcase, Hourglass, Timer, CheckCircle, FileCheck, Building2, Menu, Eye, EyeOff } from 'lucide-react'; 
 import supabase from './services/supabase'; 
 import StatusCard from './components/StatusCard';
 import ClientModal from './components/ClientModal';
@@ -11,6 +11,7 @@ import ServiceModal from './components/ServiceModal';
 import Auth from './components/Auth';
 import ConfigModal from './components/ConfigModal';
 import DashboardCharts from './components/DashboardCharts';
+import ConfirmModal from './components/ConfirmModal'; 
 import * as XLSX from 'xlsx';
 import SolicitantesModal from './components/SolicitantesModal'; 
 import MultiSelect from './components/MultiSelect'; 
@@ -35,6 +36,11 @@ const App = () => {
   const [session, setSession] = useState(null);
   const [showConfigModal, setShowConfigModal] = useState(false);
   
+  // Estados para Inativação de Cliente
+  const [confirmModalOpen, setConfirmModalOpen] = useState(false);
+  const [clientToInactivate, setClientToInactivate] = useState(null);
+  const [mostrarInativos, setMostrarInativos] = useState(false); 
+
   // CONFIGURAÇÕES GERAIS
   const [valorHoraPadrao, setValorHoraPadrao] = useState('150.00'); 
   const [nomeConsultor, setNomeConsultor] = useState(''); 
@@ -47,11 +53,10 @@ const App = () => {
   
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   
-  // 🔴 ATUALIZADO: Todos os filtros principais agora são arrays []
   const [filtros, setFiltros] = useState({
     canal: [], 
     cliente: [],
-    status: [], // 👈 Agora é MultiSelect
+    status: [], 
     dataInicio: '',
     dataFim: '',
     solicitantes: []
@@ -73,7 +78,7 @@ const App = () => {
 
   const [clienteFormData, setClienteFormData] = useState({
     nome: '',
-    email: '',
+    email: '', 
     telefone: '',
     ativo: true
   });
@@ -88,14 +93,12 @@ const App = () => {
 
   useEffect(() => {
     const carregarSolicitantesFiltro = async () => {
-      // Lógica ajustada para MultiSelect de Clientes
       if (filtros.cliente.length === 0) {
         setTodosSolicitantesDoCliente([]);
         setFiltros(prev => ({ ...prev, solicitantes: [] })); 
         return;
       }
       
-      // Se tiver APENAS UM cliente selecionado, carregamos os solicitantes dele
       if (filtros.cliente.length === 1) {
           const nomeCliente = filtros.cliente[0];
           const clienteObj = clientes.find(c => c.nome === nomeCliente);
@@ -236,30 +239,52 @@ const App = () => {
     } catch (error) { console.error('Erro status:', error); alert('Erro ao alterar status!'); }
   };
 
+  // --- CLIENTES: SALVAR ---
   const salvarCliente = async () => {
     if (!clienteFormData.nome.trim()) { showToast('Nome do cliente é obrigatório!', 'erro'); return; }
     try {
-      let error;
+      setLoading(true);
+      let clienteSalvo = null; 
       if (editingCliente) {
-        const { error: updateError } = await supabase.from('clientes').update(clienteFormData).eq('id', editingCliente.id);
-        error = updateError;
+        const { error } = await supabase.from('clientes').update(clienteFormData).eq('id', editingCliente.id);
+        if (error) throw error;
+        showToast('Cliente atualizado!', 'sucesso');
       } else {
-        const { error: insertError } = await supabase.from('clientes').insert([{...clienteFormData, user_id: session.user.id }]);
-        error = insertError;
+        const { data, error } = await supabase.from('clientes').insert([{...clienteFormData, user_id: session.user.id }]).select().single();
+        if (error) throw error;
+        clienteSalvo = data;
+        showToast('Cliente criado! Cadastre a equipe agora.', 'sucesso');
       }
-      if (error) throw error;
-      showToast(editingCliente ? 'Cliente atualizado!' : 'Cliente cadastrado!', 'sucesso');
-      setShowClienteModal(false); setEditingCliente(null); resetClienteForm(); carregarDados();
-    } catch (error) { console.error('Erro cliente:', error); showToast('Erro ao salvar cliente!', 'erro'); }
+      setShowClienteModal(false); setEditingCliente(null); resetClienteForm(); await carregarDados(); 
+      if (clienteSalvo) { setTimeout(() => { handleManageTeam(clienteSalvo); }, 500); }
+    } catch (error) { console.error('Erro ao salvar cliente:', error); showToast('Erro ao salvar cliente!', 'erro'); } finally { setLoading(false); }
   };
 
-  const deletarCliente = async (id) => {
-    if (!confirm('Tem certeza que deseja excluir este cliente?')) return;
+  // --- CLIENTES: INATIVAR (Prepara o modal) ---
+  const handleRequestInactivate = (cliente) => {
+    setClientToInactivate(cliente);
+    setConfirmModalOpen(true);
+  };
+
+  // --- CLIENTES: CONFIRMAR INATIVAÇÃO (Ação do Modal) ---
+  const confirmInactivation = async () => {
+    if (!clientToInactivate) return;
     try {
-      const { error } = await supabase.from('clientes').delete().eq('id', id);
+      const { error } = await supabase.from('clientes').update({ ativo: false }).eq('id', clientToInactivate.id);
       if (error) throw error;
-      showToast('Cliente excluído!', 'sucesso'); carregarDados();
-    } catch (error) { console.error('Erro deletar:', error); showToast('Erro ao excluir cliente!', 'erro'); }
+      showToast('Cliente inativado e oculto da lista.', 'sucesso');
+      carregarDados();
+    } catch (error) { console.error('Erro deletar:', error); showToast('Erro ao inativar cliente!', 'erro'); }
+  };
+
+  // --- CLIENTES: REATIVAR ---
+  const reativarCliente = async (id) => {
+    try {
+      const { error } = await supabase.from('clientes').update({ ativo: true }).eq('id', id);
+      if (error) throw error;
+      showToast('Cliente restaurado com sucesso!', 'sucesso');
+      carregarDados();
+    } catch (error) { console.error('Erro reativar:', error); showToast('Erro ao reativar cliente.', 'erro'); }
   };
 
   const handleLogout = async () => { setLoading(true); const { error } = await supabase.auth.signOut(); if (error) console.error(error); else setSession(null); setLoading(false); };
@@ -284,13 +309,12 @@ const App = () => {
   };
 
   const handleEnviarEmail = async () => {
-    if (!filtros.cliente || filtros.cliente.length === 0) { showToast("Selecione pelo menos um cliente.", "erro"); return; }
-    // Só envia para o primeiro cliente selecionado por enquanto para garantir segurança
+    if (!filtros.cliente || filtros.cliente.length === 0) { showToast("Selecione um cliente no filtro.", "erro"); return; }
     const nomeClienteAlvo = filtros.cliente[0];
     const clienteSelecionado = clientes.find(c => c.nome === nomeClienteAlvo);
     
-    if (!clienteSelecionado || !clienteSelecionado.email) { showToast("Cliente principal sem e-mail!", "erro"); return; }
-    if (servicosFiltradosData.length === 0) { showToast("Não há serviços listados.", "erro"); return; }
+    if (!clienteSelecionado) { showToast("Cliente não encontrado.", "erro"); return; }
+    if (servicosFiltradosData.length === 0) { showToast("Não há serviços listados para enviar.", "erro"); return; }
 
     setEmailEnviando(true);
     try {
@@ -298,46 +322,62 @@ const App = () => {
       if (error) throw error;
       
       const pacotesDeEnvio = {};
+      let servicosSemDestino = 0;
+
       servicosFiltradosData.forEach(servico => {
-        // Só processa serviços desse cliente específico
         if (servico.cliente !== clienteSelecionado.nome) return;
 
-        let emailDestino = clienteSelecionado.email;
+        let emailDestino = null;
         let emailCC = null;
+
         const solicitanteEncontrado = todosSolicitantes.find(s => s.nome.trim().toLowerCase() === (servico.solicitante || '').trim().toLowerCase());
+
         if (solicitanteEncontrado) {
-          if (solicitanteEncontrado.email) emailCC = solicitanteEncontrado.email;
           if (solicitanteEncontrado.coordenador_id) {
             const chefe = todosSolicitantes.find(s => s.id === solicitanteEncontrado.coordenador_id);
-            if (chefe && chefe.email) emailDestino = chefe.email;
+            if (chefe && chefe.email) {
+              emailDestino = chefe.email;
+              if (solicitanteEncontrado.email) emailCC = solicitanteEncontrado.email;
+            }
+          } else if (solicitanteEncontrado.email) {
+            emailDestino = solicitanteEncontrado.email;
           }
         }
+
+        if (!emailDestino) { servicosSemDestino++; return; }
+
         if (!pacotesDeEnvio[emailDestino]) { pacotesDeEnvio[emailDestino] = { destinatario: emailDestino, servicos: [], ccs: new Set() }; }
         pacotesDeEnvio[emailDestino].servicos.push(servico);
         if (emailCC) pacotesDeEnvio[emailDestino].ccs.add(emailCC);
       });
 
+      if (Object.keys(pacotesDeEnvio).length === 0) { showToast("Nenhum e-mail de gestor/solicitante encontrado.", "erro"); return; }
+
       let enviados = 0;
       for (const [emailDestino, pacote] of Object.entries(pacotesDeEnvio)) {
         const listaCCs = Array.from(pacote.ccs);
         showToast(`Enviando para ${emailDestino}...`, "sucesso");
-        
+
         const nomeParaRelatorio = nomeConsultor || session?.user?.email || 'Consultor';
         const pdfBlob = gerarRelatorioPDF(pacote.servicos, filtros, nomeParaRelatorio);
         
-        if (!pdfBlob) throw new Error("Falha PDF");
+        if (!pdfBlob) throw new Error("Falha ao gerar PDF");
         const pdfBase64 = await blobToBase64(pdfBlob);
         
-        console.log("📨 ENVIO:", { Para: emailDestino, Servicos: pacote.servicos.length });
+        console.log("📨 ENVIO:", { Para: emailDestino, CC: listaCCs, Qtd: pacote.servicos.length });
         
         const response = await fetch("/api/enviar-email", {
           method: "POST", headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ email: emailDestino, cc: listaCCs, nomeCliente: clienteSelecionado.nome, pdfBase64: pdfBase64, periodo: filtros.dataInicio ? `${new Date(filtros.dataInicio).toLocaleDateString()} a ...` : 'Período Geral' })
         });
+
         if (response.ok) enviados++;
       }
-      showToast(`Sucesso! ${enviados} e-mail(s) enviado(s).`, "sucesso");
-    } catch (error) { console.error("Erro:", error); showToast("Erro no envio.", "erro"); } finally { setEmailEnviando(false); }
+
+      if (servicosSemDestino > 0) { showToast(`Sucesso! ${enviados} emails enviados. (${servicosSemDestino} itens sem contato ignorados)`, "sucesso"); } 
+      else { showToast(`Sucesso Total! ${enviados} email(s) enviados.`, "sucesso"); }
+
+    } catch (error) { console.error("Erro:", error); showToast("Erro no processo de envio.", "erro"); } finally { setEmailEnviando(false); }
   };
   
   const resetForm = () => { 
@@ -379,34 +419,14 @@ const App = () => {
 
   const servicosFiltrados = () => {
     let result = servicos.filter(s => {
-      // 🔴 LÓGICA DE MULTI-SELECT (ARRAYS)
-      
-      // 1. CANAL
-      if (filtros.canal.length > 0) {
-          const nomeCanalServico = s.canais?.nome || 'Direto';
-          if (!filtros.canal.includes(nomeCanalServico)) return false;
-      }
-
-      // 2. CLIENTE
-      if (filtros.cliente.length > 0) {
-          if (!filtros.cliente.includes(s.cliente)) return false;
-      }
-
-      // 3. STATUS (Novo Multi)
-      if (filtros.status.length > 0) {
-          if (!filtros.status.includes(s.status)) return false;
-      }
-
-      // 4. DATAS E SOLICITANTES
+      if (filtros.canal.length > 0) { const nomeCanalServico = s.canais?.nome || 'Direto'; if (!filtros.canal.includes(nomeCanalServico)) return false; }
+      if (filtros.cliente.length > 0) { if (!filtros.cliente.includes(s.cliente)) return false; }
+      if (filtros.status.length > 0) { if (!filtros.status.includes(s.status)) return false; }
       if (filtros.dataInicio && s.data < filtros.dataInicio) return false;
       if (filtros.dataFim && s.data > filtros.dataFim) return false;
-      if (filtros.solicitantes && filtros.solicitantes.length > 0) {
-        const solNome = (s.solicitante || '').trim();
-        if (!filtros.solicitantes.includes(solNome)) return false;
-      }
+      if (filtros.solicitantes && filtros.solicitantes.length > 0) { const solNome = (s.solicitante || '').trim(); if (!filtros.solicitantes.includes(solNome)) return false; }
       return true;
     });
-    
     if (sortConfig.key) {
       result.sort((a, b) => {
         let valA = a[sortConfig.key];
@@ -431,10 +451,15 @@ const App = () => {
   if (loading && !session) return <div className="min-h-screen bg-white flex items-center justify-center"><div className="animate-spin rounded-full h-16 w-16 border-t-2 border-b-2 border-indigo-600"></div></div>;
   if (!session) return <Auth />;
 
-  // Preparando opções para os MultiSelects
   const opcoesCanais = ['Direto', ...canais.map(c => c.nome)];
   const opcoesClientes = clientes.map(c => c.nome);
   const opcoesStatus = ['Pendente', 'Em aprovação', 'Aprovado', 'NF Emitida', 'Pago'];
+
+  // 🔴 CORREÇÃO AQUI: Definindo a variável corretamente
+  const clientesAtivos = clientes.filter(c => c.ativo !== false); // Usada para Cards e Modais
+  
+  // Lista para a tabela (depende do botão "Olho")
+  const clientesParaTabela = mostrarInativos ? clientes : clientesAtivos;
 
   return (
     <div className="flex h-screen bg-gray-50 overflow-hidden">
@@ -488,7 +513,7 @@ const App = () => {
                   </div>
                   <div className="bg-white p-4 md:p-6 rounded-2xl shadow-sm border border-gray-100 hover:shadow-md transition-shadow">
                     <div className="flex items-center justify-between mb-2"><div className="p-2 md:p-3 bg-purple-50 rounded-xl"><Users className="text-purple-600" size={20} /></div></div>
-                    <div><p className="text-sm md:text-xs font-bold text-gray-400 uppercase tracking-wider mb-1">Clientes</p><p className="text-xl md:text-2xl font-black text-gray-900">{clientes.length}</p></div>
+                    <div><p className="text-sm md:text-xs font-bold text-gray-400 uppercase tracking-wider mb-1">Clientes</p><p className="text-xl md:text-2xl font-black text-gray-900">{clientesAtivos.length}</p></div>
                   </div>
                 </div>
                 <DashboardCharts servicos={servicosFiltradosData} />
@@ -505,46 +530,20 @@ const App = () => {
             ) : activeTab === 'servicos' ? (
               <div className="space-y-6">
                 
-                {/* 🔴 FILTROS AVANÇADOS - TODOS MULTISELECT AGORA */}
                 <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 space-y-4">
                   <div className="flex items-center gap-2 text-gray-800 font-bold mb-2">
                     <Filter size={20} className="text-indigo-600" /> Filtros Avançados
                   </div>
                   <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
                     
-                    {/* 1. CANAL (Multi) */}
-                    <MultiSelect 
-                        options={opcoesCanais} 
-                        selected={filtros.canal} 
-                        onChange={(novos) => setFiltros({...filtros, canal: novos})} 
-                        placeholder="Canais..." 
-                    />
-
-                    {/* 2. CLIENTE (Multi) */}
-                    <MultiSelect 
-                        options={opcoesClientes} 
-                        selected={filtros.cliente} 
-                        onChange={(novos) => setFiltros({...filtros, cliente: novos})} 
-                        placeholder="Clientes..." 
-                    />
+                    <MultiSelect options={opcoesCanais} selected={filtros.canal} onChange={(novos) => setFiltros({...filtros, canal: novos})} placeholder="Canais..." />
                     
-                    {/* 3. SOLICITANTE (Multi) */}
-                    <MultiSelect 
-                        options={todosSolicitantesDoCliente} 
-                        selected={filtros.solicitantes} 
-                        onChange={(novos) => setFiltros({...filtros, solicitantes: novos})} 
-                        placeholder={filtros.cliente.length === 1 ? "Solicitantes..." : (filtros.cliente.length > 1 ? "Selecione 1 Cliente" : "Selecione Cliente")} 
-                    />
+                    <MultiSelect options={opcoesClientes} selected={filtros.cliente} onChange={(novos) => setFiltros({...filtros, cliente: novos})} placeholder="Clientes..." />
                     
-                    {/* 4. STATUS (Multi - AGORA ATUALIZADO) */}
-                    <MultiSelect 
-                        options={opcoesStatus} 
-                        selected={filtros.status} 
-                        onChange={(novos) => setFiltros({...filtros, status: novos})} 
-                        placeholder="Status..." 
-                    />
+                    <MultiSelect options={todosSolicitantesDoCliente} selected={filtros.solicitantes} onChange={(novos) => setFiltros({...filtros, solicitantes: novos})} placeholder={filtros.cliente.length === 1 ? "Solicitantes..." : (filtros.cliente.length > 1 ? "Selecione 1 Cliente" : "Selecione Cliente")} />
                     
-                    {/* 5 e 6. DATAS */}
+                    <MultiSelect options={opcoesStatus} selected={filtros.status} onChange={(novos) => setFiltros({...filtros, status: novos})} placeholder="Status..." />
+                    
                     <input type="date" value={filtros.dataInicio} onChange={(e) => setFiltros({...filtros, dataInicio: e.target.value})} className="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 outline-none w-full" />
                     <input type="date" value={filtros.dataFim} onChange={(e) => setFiltros({...filtros, dataFim: e.target.value})} className="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 outline-none w-full" />
                   </div>
@@ -559,25 +558,75 @@ const App = () => {
                 <ServicesTable servicos={servicosFiltradosData} onStatusChange={alterarStatusRapido} onEdit={editarServico} onDelete={deletarServico} onSort={handleSort} sortConfig={sortConfig} /> 
               </div>
             ) : (
+              // --- CONTEÚDO CLIENTES ---
               <div className="space-y-6">
                 <div className="flex justify-between items-center bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
                   <h2 className="text-lg font-bold text-gray-800">Base de Clientes</h2>
-                  <button onClick={() => { resetClienteForm(); setShowClienteModal(true); }} className="bg-indigo-50 text-indigo-700 px-4 py-2 rounded-lg text-sm font-bold hover:bg-indigo-100 transition-colors flex items-center gap-2"><Plus size={18} /> Cadastrar</button>
+                  <div className="flex gap-3">
+                    {/* Botão Olho (Ver Inativos) */}
+                    <button 
+                      onClick={() => setMostrarInativos(!mostrarInativos)}
+                      className={`px-4 py-2 rounded-lg text-sm font-medium border flex items-center gap-2 transition-colors ${mostrarInativos ? 'bg-orange-50 text-orange-700 border-orange-200' : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'}`}
+                    >
+                      {mostrarInativos ? <EyeOff size={18} /> : <Eye size={18} />}
+                      {mostrarInativos ? 'Ocultar Inativos' : 'Exibir Inativos'}
+                    </button>
+                    <button onClick={() => { resetClienteForm(); setShowClienteModal(true); }} className="bg-indigo-50 text-indigo-700 px-4 py-2 rounded-lg text-sm font-bold hover:bg-indigo-100 transition-colors flex items-center gap-2"><Plus size={18} /> Cadastrar</button>
+                  </div>
                 </div>
-                <ClientsTable clientes={clientes} onEdit={editarCliente} onDelete={deletarCliente} onManageTeam={handleManageTeam} />
+                
+                {/* 🔴 CORREÇÃO AQUI: Tabela com filtro inteligente */}
+                <ClientsTable 
+                    clientes={clientesParaTabela} 
+                    onEdit={editarCliente} 
+                    onDeleteClick={handleRequestInactivate} // 👈 Abre o Modal
+                    onReactivate={reativarCliente} 
+                    onManageTeam={handleManageTeam} 
+                />
               </div>
             )}
           </div>
         </main>
       </div>
 
-      <ServiceModal isOpen={showModal} onClose={() => { setShowModal(false); setEditingService(null); resetForm(); }} onSave={salvarServico} formData={formData} setFormData={setFormData} clientes={clientes} isEditing={!!editingService} />
+      {/* 🔴 CORREÇÃO AQUI: Modal de Serviço só permite ATIVOS */}
+      <ServiceModal 
+        isOpen={showModal} 
+        onClose={() => { setShowModal(false); setEditingService(null); resetForm(); }} 
+        onSave={salvarServico} 
+        formData={formData} 
+        setFormData={setFormData} 
+        clientes={clientesAtivos} 
+        isEditing={!!editingService} 
+      />
+      
       <ClientModal isOpen={showClienteModal} onClose={() => { setShowClienteModal(false); setEditingCliente(null); resetClienteForm(); }} onSave={salvarCliente} formData={clienteFormData} setFormData={setClienteFormData} isEditing={!!editingCliente} />
-      <SolicitantesModal isOpen={showSolicitantesModal} onClose={() => { setShowSolicitantesModal(false); setClienteParaSolicitantes(null); }} cliente={clienteParaSolicitantes} userId={session?.user?.id} />
+      
+      {/* 🔴 Passando showToast para o Modal de Solicitantes */}
+      <SolicitantesModal 
+        isOpen={showSolicitantesModal} 
+        onClose={() => { setShowSolicitantesModal(false); setClienteParaSolicitantes(null); }} 
+        cliente={clienteParaSolicitantes} 
+        userId={session?.user?.id} 
+        showToast={showToast} 
+      />
+      
       <ConfigModal isOpen={showConfigModal} onClose={() => setShowConfigModal(false)} onSave={salvarConfiguracao} valorAtual={valorHoraPadrao} nomeAtual={nomeConsultor} />
       <ChannelsModal isOpen={showChannelsModal} onClose={() => setShowChannelsModal(false)} userId={session?.user?.id} />
       
-      <div className={`fixed top-6 right-6 w-96 max-w-xs px-6 py-3 rounded-xl shadow-lg text-white transform transition-all duration-500 z-[60] 
+      {/* 🔴 MODAL DE CONFIRMAÇÃO DE INATIVAÇÃO */}
+      <ConfirmModal
+        isOpen={confirmModalOpen}
+        onClose={() => setConfirmModalOpen(false)}
+        onConfirm={confirmInactivation}
+        title="Inativar Cliente?"
+        message={`Deseja realmente inativar "${clientToInactivate?.nome}"? Ele ficará oculto das novas seleções, mas o histórico financeiro será mantido.`}
+        confirmText="Sim, inativar"
+        cancelText="Cancelar"
+        type="danger"
+      />
+
+      <div className={`fixed top-6 right-6 w-96 max-w-xs px-6 py-3 rounded-xl shadow-lg text-white transform transition-all duration-500 z-[90] 
         ${toast.visivel ? "translate-x-0 opacity-100" : "translate-x-24 opacity-0 pointer-events-none"} 
         ${toast.tipo === 'sucesso' ? 'bg-green-600' : 'bg-red-600'}`}
       >
@@ -585,7 +634,7 @@ const App = () => {
       </div>
 
       {aviso.mensagem && (
-        <div className={`fixed top-4 right-4 px-4 py-2 rounded shadow-lg text-white transition-all z-[60] pointer-events-auto
+        <div className={`fixed top-4 right-4 px-4 py-2 rounded shadow-lg text-white transition-all z-[90] pointer-events-auto
           ${aviso.tipo === "sucesso" ? "bg-green-600" : "bg-red-600"}`} 
           onAnimationEnd={() => setAviso({ mensagem: "", tipo: "" })}
         >
