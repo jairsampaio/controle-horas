@@ -181,7 +181,13 @@ const App = () => {
     else { setServicos([]); setClientes([]); }
   }, [session]);
 
-  // 🔴 BLOCO REMOVIDO: O código que forçava logout ao fechar a janela foi apagado daqui.
+  useEffect(() => {
+    if (session) {
+      const handleBeforeUnload = (e) => { supabase.auth.signOut(); localStorage.clear(); delete e.returnValue; };
+      window.addEventListener('beforeunload', handleBeforeUnload);
+      return () => { window.removeEventListener('beforeunload', handleBeforeUnload); };
+    }
+  }, [session]);
 
   useEffect(() => {
     const algumModalAberto = showModal || showClienteModal || showSolicitantesModal || showConfigModal || showChannelsModal;
@@ -449,10 +455,7 @@ const App = () => {
   const opcoesClientes = clientes.map(c => c.nome);
   const opcoesStatus = ['Pendente', 'Em aprovação', 'Aprovado', 'NF Emitida', 'Pago'];
 
-  // Definindo clientes ativos
   const clientesAtivos = clientes.filter(c => c.ativo !== false); 
-  
-  // Lista para a tabela (depende do botão "Olho")
   const clientesParaTabela = mostrarInativos ? clientes : clientesAtivos;
 
   return (
@@ -538,8 +541,17 @@ const App = () => {
                     
                     <MultiSelect options={opcoesStatus} selected={filtros.status} onChange={(novos) => setFiltros({...filtros, status: novos})} placeholder="Status..." />
                     
-                    <input type="date" value={filtros.dataInicio} onChange={(e) => setFiltros({...filtros, dataInicio: e.target.value})} className="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 outline-none w-full" />
-                    <input type="date" value={filtros.dataFim} onChange={(e) => setFiltros({...filtros, dataFim: e.target.value})} className="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 outline-none w-full" />
+                    {/* 🔴 CORREÇÃO AQUI: Placeholders/Labels para Datas */}
+                    <div className="relative">
+                        <label className="text-[10px] uppercase font-bold text-gray-400 absolute top-1 left-3">Data Inicial</label>
+                        <input type="date" value={filtros.dataInicio} onChange={(e) => setFiltros({...filtros, dataInicio: e.target.value})} className="border border-gray-200 rounded-lg px-3 pb-2 pt-5 text-sm focus:ring-2 focus:ring-indigo-500 outline-none w-full h-[46px]" />
+                    </div>
+                    
+                    <div className="relative">
+                        <label className="text-[10px] uppercase font-bold text-gray-400 absolute top-1 left-3">Data Final</label>
+                        <input type="date" value={filtros.dataFim} onChange={(e) => setFiltros({...filtros, dataFim: e.target.value})} className="border border-gray-200 rounded-lg px-3 pb-2 pt-5 text-sm focus:ring-2 focus:ring-indigo-500 outline-none w-full h-[46px]" />
+                    </div>
+
                   </div>
                 </div>
 
@@ -556,16 +568,25 @@ const App = () => {
               <div className="space-y-6">
                 <div className="flex justify-between items-center bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
                   <h2 className="text-lg font-bold text-gray-800">Base de Clientes</h2>
-                  <div className="flex gap-3">
-                    {/* Botão Olho (Ver Inativos) */}
+                  <div className="flex gap-2 md:gap-3">
+                    {/* Botão Olho (Ver Inativos) - Mobile First */}
                     <button 
                       onClick={() => setMostrarInativos(!mostrarInativos)}
-                      className={`px-4 py-2 rounded-lg text-sm font-medium border flex items-center gap-2 transition-colors ${mostrarInativos ? 'bg-orange-50 text-orange-700 border-orange-200' : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'}`}
+                      className={`px-3 md:px-4 py-2 rounded-lg text-sm font-medium border flex items-center gap-2 transition-colors ${mostrarInativos ? 'bg-orange-50 text-orange-700 border-orange-200' : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'}`}
+                      title={mostrarInativos ? "Ocultar Inativos" : "Ver Inativos"}
                     >
                       {mostrarInativos ? <EyeOff size={18} /> : <Eye size={18} />}
-                      {mostrarInativos ? 'Ocultar Inativos' : 'Exibir Inativos'}
+                      <span className="hidden md:inline">{mostrarInativos ? 'Ocultar Inativos' : 'Exibir Inativos'}</span>
                     </button>
-                    <button onClick={() => { resetClienteForm(); setShowClienteModal(true); }} className="bg-indigo-50 text-indigo-700 px-4 py-2 rounded-lg text-sm font-bold hover:bg-indigo-100 transition-colors flex items-center gap-2"><Plus size={18} /> Cadastrar</button>
+
+                    <button 
+                        onClick={() => { resetClienteForm(); setShowClienteModal(true); }} 
+                        className="bg-indigo-50 text-indigo-700 px-3 md:px-4 py-2 rounded-lg text-sm font-bold hover:bg-indigo-100 transition-colors flex items-center gap-2"
+                        title="Cadastrar Novo"
+                    >
+                        <Plus size={18} /> 
+                        <span className="hidden md:inline">Cadastrar</span>
+                    </button>
                   </div>
                 </div>
                 
@@ -573,7 +594,7 @@ const App = () => {
                 <ClientsTable 
                     clientes={clientesParaTabela} 
                     onEdit={editarCliente} 
-                    onDeleteClick={handleRequestInactivate} // 👈 Abre o Modal
+                    onDeleteClick={handleRequestInactivate} 
                     onReactivate={reativarCliente} 
                     onManageTeam={handleManageTeam} 
                 />
