@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import ThemeToggle from './ThemeToggle';
-import { LayoutDashboard, Briefcase, Users, Settings, LogOut, Building2, X, Shield } from 'lucide-react'; 
+import { LayoutDashboard, Briefcase, Users, Settings, LogOut, Building2, X, Shield, Moon, Sun } from 'lucide-react'; 
 
 const Sidebar = ({ activeTab, setActiveTab, isOpen, onClose, onLogout, onOpenConfig, onOpenChannels, userEmail, onOpenAdmin }) => { 
   
@@ -84,7 +84,7 @@ const Sidebar = ({ activeTab, setActiveTab, isOpen, onClose, onLogout, onOpenCon
             </div>
           </div>
 
-          {/* AQUI ENTRA A LÂMPADA 💡 */}
+          {/* LÂMPADA - VISÍVEL APENAS NO DESKTOP AQUI */}
           <div className="hidden md:block">
              <ThemeToggle />
           </div>       
@@ -96,6 +96,13 @@ const Sidebar = ({ activeTab, setActiveTab, isOpen, onClose, onLogout, onOpenCon
 
         {/* Navegação - Ajustada altura para remover o footer fixo */}
         <nav className="p-4 space-y-2 overflow-y-auto h-[calc(100vh-80px)] scrollbar-hide">
+          
+          {/* LÂMPADA - VISÍVEL APENAS NO MOBILE AQUI (NO TOPO DA LISTA) */}
+          <div className="md:hidden flex items-center justify-between px-4 py-3 mb-4 bg-gray-50 dark:bg-gray-800 rounded-xl border border-gray-100 dark:border-gray-700">
+             <span className="text-sm font-medium text-gray-600 dark:text-gray-300">Modo Escuro</span>
+             <ThemeToggle />
+          </div>
+
           <p className="px-4 py-2 text-xs font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wider">Principal</p>
           
           {menuItems.map((item) => (
