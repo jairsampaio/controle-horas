@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import ThemeToggle from './ThemeToggle';
 import { LayoutDashboard, Briefcase, Users, Settings, LogOut, Building2, X, Shield } from 'lucide-react'; 
 
 const Sidebar = ({ activeTab, setActiveTab, isOpen, onClose, onLogout, onOpenConfig, onOpenChannels, userEmail, onOpenAdmin }) => { 
@@ -79,6 +80,12 @@ const Sidebar = ({ activeTab, setActiveTab, isOpen, onClose, onLogout, onOpenCon
               <span className="text-xs font-semibold text-indigo-500 uppercase tracking-widest">Horas</span>
             </div>
           </div>
+
+         {/* AQUI ENTRA A LÂMPADA 💡 */}
+          <div className="hidden md:block">
+             <ThemeToggle />
+          </div>       
+
           <button onClick={onClose} className="md:hidden p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors">
             <X size={24} />
           </button>

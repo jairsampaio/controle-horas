@@ -457,7 +457,7 @@ const App = () => {
   const clientesParaTabela = mostrarInativos ? clientes : clientesAtivos;
 
   return (
-    <div className="flex h-screen bg-gray-50 overflow-hidden">
+    <div className="flex h-screen bg-gray-50 dark:bg-gray-900 overflow-hidden">
       
       <Sidebar 
         activeTab={activeTab} 
@@ -478,7 +478,8 @@ const App = () => {
             <button onClick={() => setIsMobileMenuOpen(true)} className="md:hidden p-2 -ml-2 text-gray-500 hover:text-gray-700 rounded-lg hover:bg-gray-100">
               <Menu size={24} />
             </button>
-            <h1 className="text-xl font-bold text-gray-800 flex items-center gap-2">
+            {/*<h1 className="text-xl font-bold text-gray-800 flex items-center gap-2">*/}
+            <h1 className="text-gray-800 dark:text-gray-100 font-bold">  
               {activeTab === 'dashboard' && <><LayoutDashboard className="text-indigo-600" /> Dashboard</>}
               {activeTab === 'servicos' && <><Briefcase className="text-indigo-600" /> Meus Serviços</>}
               {activeTab === 'clientes' && <><Users className="text-indigo-600" /> Clientes</>}
@@ -527,7 +528,7 @@ const App = () => {
             ) : activeTab === 'servicos' ? (
               <div className="space-y-6">
                 
-                <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 space-y-4">
+                <div className="bg-white dark:bg-gray-800 p-6 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 space-y-4">  
                   <div className="flex items-center gap-2 text-gray-800 font-bold mb-2">
                     <Filter size={20} className="text-indigo-600" /> Filtros Avançados
                   </div>
