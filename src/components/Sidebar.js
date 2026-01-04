@@ -63,37 +63,40 @@ const Sidebar = ({ activeTab, setActiveTab, isOpen, onClose, onLogout, onOpenCon
       <aside 
         {...swipeHandlers}
         className={`
-          fixed top-0 left-0 z-50 h-screen w-72 bg-white border-r border-gray-200 shadow-2xl 
+          fixed top-0 left-0 z-50 h-screen w-72 
+          bg-white dark:bg-gray-900 
+          border-r border-gray-200 dark:border-gray-800 
+          shadow-2xl md:shadow-none 
           transform transition-transform duration-500 ease-[cubic-bezier(0.32,0.72,0,1)]
           ${isOpen ? 'translate-x-0' : '-translate-x-full'}
-          md:translate-x-0 md:static md:shadow-none md:w-64 md:transform-none
+          md:translate-x-0 md:static md:w-64 md:transform-none
         `}
       >
         {/* Header */}
-        <div className="flex items-center justify-between h-20 px-6 border-b border-gray-100">
+        <div className="flex items-center justify-between h-20 px-6 border-b border-gray-100 dark:border-gray-800">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 bg-indigo-600 rounded-xl flex items-center justify-center text-white font-bold text-lg shadow-indigo-200 shadow-lg">
               CH
             </div>
             <div>
-              <span className="text-xl font-bold text-gray-800 block leading-tight">Controle</span>
-              <span className="text-xs font-semibold text-indigo-500 uppercase tracking-widest">Horas</span>
+              <span className="text-xl font-bold text-gray-800 dark:text-gray-100 block leading-tight">Controle</span>
+              <span className="text-xs font-semibold text-indigo-500 dark:text-indigo-400 uppercase tracking-widest">Horas</span>
             </div>
           </div>
 
-         {/* AQUI ENTRA A LÂMPADA 💡 */}
+          {/* AQUI ENTRA A LÂMPADA 💡 */}
           <div className="hidden md:block">
              <ThemeToggle />
           </div>       
 
-          <button onClick={onClose} className="md:hidden p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors">
+          <button onClick={onClose} className="md:hidden p-2 text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-colors">
             <X size={24} />
           </button>
         </div>
 
         {/* Navegação - Ajustada altura para remover o footer fixo */}
         <nav className="p-4 space-y-2 overflow-y-auto h-[calc(100vh-80px)] scrollbar-hide">
-          <p className="px-4 py-2 text-xs font-bold text-gray-400 uppercase tracking-wider">Principal</p>
+          <p className="px-4 py-2 text-xs font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wider">Principal</p>
           
           {menuItems.map((item) => (
             <button
@@ -101,8 +104,8 @@ const Sidebar = ({ activeTab, setActiveTab, isOpen, onClose, onLogout, onOpenCon
               onClick={() => handleNavigation(item.id)}
               className={`w-full flex items-center gap-4 px-4 py-3.5 text-sm font-medium rounded-xl transition-all duration-300 group
                 ${activeTab === item.id 
-                  ? 'bg-indigo-50 text-indigo-700 shadow-sm' 
-                  : 'text-gray-500 hover:bg-gray-50 hover:text-gray-900'}
+                  ? 'bg-indigo-50 dark:bg-indigo-900/20 text-indigo-700 dark:text-indigo-400 shadow-sm' 
+                  : 'text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800 hover:text-gray-900 dark:hover:text-gray-100'}
               `}
             >
               <item.icon 
@@ -114,22 +117,22 @@ const Sidebar = ({ activeTab, setActiveTab, isOpen, onClose, onLogout, onOpenCon
             </button>
           ))}
 
-          <div className="pt-4 mt-4 border-t border-gray-100">
-            <p className="px-4 py-2 text-xs font-bold text-gray-400 uppercase tracking-wider">Gestão</p>
+          <div className="pt-4 mt-4 border-t border-gray-100 dark:border-gray-800">
+            <p className="px-4 py-2 text-xs font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wider">Gestão</p>
             
             <button
               onClick={() => { onOpenChannels(); onClose(); }}
-              className="w-full flex items-center gap-4 px-4 py-3.5 text-sm font-medium text-gray-500 rounded-xl hover:bg-gray-50 hover:text-gray-900 transition-all group"
+              className="w-full flex items-center gap-4 px-4 py-3.5 text-sm font-medium text-gray-500 dark:text-gray-400 rounded-xl hover:bg-gray-50 dark:hover:bg-gray-800 hover:text-gray-900 dark:hover:text-gray-100 transition-all group"
             >
-              <Building2 size={22} className="group-hover:text-indigo-500 transition-colors" />
+              <Building2 size={22} className="group-hover:text-indigo-500 dark:group-hover:text-indigo-400 transition-colors" />
               Canais / Parceiros
             </button>
 
             <button
               onClick={() => { onOpenConfig(); onClose(); }}
-              className="w-full flex items-center gap-4 px-4 py-3.5 text-sm font-medium text-gray-500 rounded-xl hover:bg-gray-50 hover:text-gray-900 transition-all group"
+              className="w-full flex items-center gap-4 px-4 py-3.5 text-sm font-medium text-gray-500 dark:text-gray-400 rounded-xl hover:bg-gray-50 dark:hover:bg-gray-800 hover:text-gray-900 dark:hover:text-gray-100 transition-all group"
             >
-              <Settings size={22} className="group-hover:text-indigo-500 transition-colors" />
+              <Settings size={22} className="group-hover:text-indigo-500 dark:group-hover:text-indigo-400 transition-colors" />
               Configurações
             </button>
 
@@ -146,10 +149,10 @@ const Sidebar = ({ activeTab, setActiveTab, isOpen, onClose, onLogout, onOpenCon
           </div>
 
           {/* Botão Sair - Agora integrado na lista */}
-          <div className="pt-4 mt-4 border-t border-gray-100">
+          <div className="pt-4 mt-4 border-t border-gray-100 dark:border-gray-800">
             <button
                 onClick={onLogout}
-                className="w-full flex items-center gap-4 px-4 py-3.5 text-sm font-bold text-red-600 hover:bg-red-50 rounded-xl transition-colors group"
+                className="w-full flex items-center gap-4 px-4 py-3.5 text-sm font-bold text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-xl transition-colors group"
             >
                 <LogOut size={22} className="group-hover:scale-110 transition-transform" />
                 Sair do Sistema

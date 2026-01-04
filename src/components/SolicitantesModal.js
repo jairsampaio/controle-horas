@@ -140,44 +140,87 @@ const SolicitantesModal = ({ isOpen, onClose, cliente, userId, showToast }) => {
 
   return (
     <>
-      <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50 animate-fade-in">
-        <div className="bg-white rounded-xl shadow-xl w-full max-w-lg overflow-hidden flex flex-col max-h-[90vh]">
+      <div className="fixed inset-0 bg-black bg-opacity-50 dark:bg-opacity-80 flex items-center justify-center p-4 z-50 animate-fade-in backdrop-blur-sm">
+        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-xl w-full max-w-lg overflow-hidden flex flex-col max-h-[90vh] border dark:border-gray-700">
           
+          {/* Header */}
           <div className={`p-4 flex justify-between items-center text-white transition-colors duration-300 ${headerColor}`}>
-            <div><h2 className="text-lg font-bold">{editingId ? 'Editando' : 'Gestão de Equipe'}</h2><p className="text-xs opacity-90 truncate max-w-[200px]">{cliente?.nome}</p></div>
+            <div>
+                <h2 className="text-lg font-bold">{editingId ? 'Editando' : 'Gestão de Equipe'}</h2>
+                <p className="text-xs opacity-90 truncate max-w-[200px]">{cliente?.nome}</p>
+            </div>
             <button onClick={onClose} className="hover:bg-white/20 p-1 rounded-full"><X size={20} /></button>
           </div>
 
           <div className="p-6 overflow-y-auto flex-1">
             
-            <form onSubmit={handleSalvar} className={`form-area p-4 rounded-lg mb-6 border transition-colors space-y-3 ${editingId ? 'bg-orange-50 border-orange-200' : 'bg-gray-50 border-gray-200'}`}>
-              <h3 className={`text-sm font-bold flex items-center gap-2 ${editingId ? 'text-orange-700' : 'text-gray-700'}`}>{editingId ? <Edit2 size={16} /> : <Plus size={16} />} {editingId ? 'Editar' : 'Cadastrar'}</h3>
+            {/* Formulário */}
+            <form onSubmit={handleSalvar} className={`form-area p-4 rounded-lg mb-6 border transition-colors space-y-3 
+                ${editingId 
+                    ? 'bg-orange-50 dark:bg-orange-900/20 border-orange-200 dark:border-orange-800' 
+                    : 'bg-gray-50 dark:bg-gray-900/50 border-gray-200 dark:border-gray-700'}`}>
+              
+              <h3 className={`text-sm font-bold flex items-center gap-2 
+                ${editingId ? 'text-orange-700 dark:text-orange-400' : 'text-gray-700 dark:text-gray-300'}`}>
+                {editingId ? <Edit2 size={16} /> : <Plus size={16} />} 
+                {editingId ? 'Editar' : 'Cadastrar'}
+              </h3>
               
               <div className="flex items-center gap-2 mb-2">
-                  <input type="checkbox" id="checkCoord" checked={isCoordenador} onChange={e => setIsCoordenador(e.target.checked)} className="w-4 h-4 text-indigo-600 rounded" />
-                  <label htmlFor="checkCoord" className="text-sm text-gray-700 font-medium cursor-pointer flex items-center gap-1">
-                      Perfil de Gestão / Aprovador? <Shield size={14} className="text-indigo-500"/>
+                  <input 
+                    type="checkbox" 
+                    id="checkCoord" 
+                    checked={isCoordenador} 
+                    onChange={e => setIsCoordenador(e.target.checked)} 
+                    className="w-4 h-4 text-indigo-600 rounded cursor-pointer bg-white dark:bg-gray-800 border-gray-300 dark:border-gray-600" 
+                  />
+                  <label htmlFor="checkCoord" className="text-sm text-gray-700 dark:text-gray-300 font-medium cursor-pointer flex items-center gap-1">
+                      Perfil de Gestão / Aprovador? <Shield size={14} className="text-indigo-500 dark:text-indigo-400"/>
                   </label>
               </div>
               
               <div className="space-y-3">
-                  <input type="text" placeholder="Nome Completo" value={novoNome} onChange={(e) => setNovoNome(e.target.value)} className="w-full border rounded px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-indigo-500" required />
+                  <input 
+                    type="text" 
+                    placeholder="Nome Completo" 
+                    value={novoNome} 
+                    onChange={(e) => setNovoNome(e.target.value)} 
+                    className="w-full border rounded px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-indigo-500 bg-white dark:bg-gray-800 border-gray-300 dark:border-gray-600 text-gray-900 dark:text-white" 
+                    required 
+                  />
+                  
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                       <div className="space-y-1">
-                          <label className="text-xs font-bold text-gray-500 flex items-center gap-1"><Mail size={10}/> Email</label>
-                          <input type="email" placeholder="email@empresa.com" value={novoEmail} onChange={(e) => setNovoEmail(e.target.value)} className="w-full border rounded px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-indigo-500" />
+                          <label className="text-xs font-bold text-gray-500 dark:text-gray-400 flex items-center gap-1"><Mail size={10}/> Email</label>
+                          <input 
+                            type="email" 
+                            placeholder="email@empresa.com" 
+                            value={novoEmail} 
+                            onChange={(e) => setNovoEmail(e.target.value)} 
+                            className="w-full border rounded px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-indigo-500 bg-white dark:bg-gray-800 border-gray-300 dark:border-gray-600 text-gray-900 dark:text-white" 
+                          />
                       </div>
                       <div className="space-y-1">
-                          <label className="text-xs font-bold text-gray-500 flex items-center gap-1"><Phone size={10}/> Celular/Whatsapp</label>
-                          <input type="text" placeholder="(11) 99999-9999" value={novoTelefone} onChange={(e) => setNovoTelefone(maskPhone(e.target.value))} className="w-full border rounded px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-indigo-500" />
+                          <label className="text-xs font-bold text-gray-500 dark:text-gray-400 flex items-center gap-1"><Phone size={10}/> Celular/Whatsapp</label>
+                          <input 
+                            type="text" 
+                            placeholder="(11) 99999-9999" 
+                            value={novoTelefone} 
+                            onChange={(e) => setNovoTelefone(maskPhone(e.target.value))} 
+                            className="w-full border rounded px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-indigo-500 bg-white dark:bg-gray-800 border-gray-300 dark:border-gray-600 text-gray-900 dark:text-white" 
+                          />
                       </div>
                   </div>
               </div>
               
               {!isCoordenador && (
                   <div className="animate-fade-in-up mt-2">
-                      <label className="text-xs font-bold text-gray-500 ml-1 flex items-center gap-1"><GitFork size={12} /> Reporta-se a</label>
-                      <select value={coordenadorId} onChange={e => setCoordenadorId(e.target.value)} className="w-full border rounded px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-indigo-500 bg-white">
+                      <label className="text-xs font-bold text-gray-500 dark:text-gray-400 ml-1 flex items-center gap-1"><GitFork size={12} /> Reporta-se a</label>
+                      <select 
+                        value={coordenadorId} 
+                        onChange={e => setCoordenadorId(e.target.value)} 
+                        className="w-full border rounded px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-indigo-500 bg-white dark:bg-gray-800 border-gray-300 dark:border-gray-600 text-gray-900 dark:text-white cursor-pointer"
+                      >
                           <option value="">-- Sem vínculo --</option>
                           {listaCoordenadores.map(coord => (<option key={coord.id} value={coord.id}>{coord.nome}</option>))}
                       </select>
@@ -185,19 +228,35 @@ const SolicitantesModal = ({ isOpen, onClose, cliente, userId, showToast }) => {
               )}
 
               <div className="flex gap-2 pt-2">
-                {editingId && (<button type="button" onClick={resetForm} className="flex-1 bg-gray-200 text-gray-700 py-2 rounded text-sm font-medium hover:bg-gray-300 flex justify-center items-center gap-2"><RotateCcw size={16} /> Cancelar</button>)}
-                <button type="submit" className={`flex-1 text-white py-2 rounded text-sm font-medium flex justify-center items-center gap-2 transition-colors ${editingId ? 'bg-orange-500 hover:bg-orange-600' : 'bg-indigo-600 hover:bg-indigo-700'}`}><Save size={16} /> Salvar</button>
+                {editingId && (
+                    <button 
+                        type="button" 
+                        onClick={resetForm} 
+                        className="flex-1 bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 py-2 rounded text-sm font-medium hover:bg-gray-300 dark:hover:bg-gray-600 flex justify-center items-center gap-2"
+                    >
+                        <RotateCcw size={16} /> Cancelar
+                    </button>
+                )}
+                <button 
+                    type="submit" 
+                    className={`flex-1 text-white py-2 rounded text-sm font-medium flex justify-center items-center gap-2 transition-colors ${editingId ? 'bg-orange-500 hover:bg-orange-600' : 'bg-indigo-600 hover:bg-indigo-700'}`}
+                >
+                    <Save size={16} /> Salvar
+                </button>
               </div>
             </form>
 
             <div className="flex justify-between items-center mb-3">
-                <h3 className="text-sm font-bold text-gray-700 flex items-center gap-2">
+                <h3 className="text-sm font-bold text-gray-700 dark:text-gray-300 flex items-center gap-2">
                     Equipe
-                    <span className="bg-gray-200 text-gray-600 text-xs px-2 py-0.5 rounded-full">{solicitantes.filter(s => s.ativo !== false).length} ativos</span>
+                    <span className="bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-300 text-xs px-2 py-0.5 rounded-full">{solicitantes.filter(s => s.ativo !== false).length} ativos</span>
                 </h3>
                 <button 
                     onClick={() => setMostrarInativos(!mostrarInativos)}
-                    className={`text-xs flex items-center gap-1 px-2 py-1 rounded transition-colors ${mostrarInativos ? 'bg-orange-100 text-orange-700' : 'text-gray-400 hover:bg-gray-100'}`}
+                    className={`text-xs flex items-center gap-1 px-2 py-1 rounded transition-colors 
+                        ${mostrarInativos 
+                            ? 'bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-400' 
+                            : 'text-gray-400 dark:text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800'}`}
                     title={mostrarInativos ? "Ocultar Inativos" : "Ver Inativos"}
                 >
                     {mostrarInativos ? <EyeOff size={14}/> : <Eye size={14}/>}
@@ -206,7 +265,7 @@ const SolicitantesModal = ({ isOpen, onClose, cliente, userId, showToast }) => {
             </div>
 
             <div className="space-y-2">
-              {solicitantes.length === 0 && <p className="text-center text-gray-400 text-sm py-4">Nenhum colaborador encontrado.</p>}
+              {solicitantes.length === 0 && <p className="text-center text-gray-400 dark:text-gray-500 text-sm py-4">Nenhum colaborador encontrado.</p>}
               
               {solicitantes.map(sol => {
                 const nomeChefe = solicitantes.find(s => s.id === sol.coordenador_id)?.nome;
@@ -214,35 +273,42 @@ const SolicitantesModal = ({ isOpen, onClose, cliente, userId, showToast }) => {
                 const isInactive = sol.ativo === false;
                 
                 return (
-                  <div key={sol.id} className={`flex justify-between items-center p-3 rounded-lg border transition-all ${isEditingItem ? 'border-orange-400 bg-orange-50 shadow-md ring-1 ring-orange-200' : isInactive ? 'bg-gray-100 border-gray-200 opacity-75' : 'hover:shadow-sm bg-white'}`}>
+                  <div key={sol.id} className={`flex justify-between items-center p-3 rounded-lg border transition-all 
+                    ${isEditingItem 
+                        ? 'border-orange-400 bg-orange-50 dark:bg-orange-900/20 shadow-md ring-1 ring-orange-200 dark:ring-orange-800' 
+                        : isInactive 
+                            ? 'bg-gray-100 dark:bg-gray-900/50 border-gray-200 dark:border-gray-800 opacity-75' 
+                            : 'hover:shadow-sm bg-white dark:bg-gray-800 border-gray-100 dark:border-gray-700'}
+                  `}>
                     
                     <div className="flex flex-col flex-1 min-w-0 mr-2">
-                      <span className={`font-bold flex items-center gap-2 truncate ${isInactive ? 'text-gray-500 decoration-gray-400 line-through' : 'text-gray-800'}`}>
-                        {sol.is_coordenador ? <Shield size={14} className={isInactive ? "text-gray-400" : "text-indigo-600"} /> : <User size={14} className="text-gray-400" />}
+                      <span className={`font-bold flex items-center gap-2 truncate ${isInactive ? 'text-gray-500 dark:text-gray-500 decoration-gray-400 dark:decoration-gray-600 line-through' : 'text-gray-800 dark:text-white'}`}>
+                        {sol.is_coordenador 
+                            ? <Shield size={14} className={isInactive ? "text-gray-400 dark:text-gray-600" : "text-indigo-600 dark:text-indigo-400"} /> 
+                            : <User size={14} className="text-gray-400 dark:text-gray-500" />}
                         <span className="truncate">{sol.nome}</span>
-                        {sol.is_coordenador && !isInactive && <span className="text-[10px] bg-indigo-200 text-indigo-800 px-1.5 rounded uppercase font-bold flex-shrink-0">Gestor</span>}
-                        {isInactive && <span className="text-[10px] bg-gray-200 text-gray-600 px-1.5 rounded uppercase font-bold flex-shrink-0 no-underline">Inativo</span>}
+                        {sol.is_coordenador && !isInactive && <span className="text-[10px] bg-indigo-100 dark:bg-indigo-900/50 text-indigo-800 dark:text-indigo-300 px-1.5 rounded uppercase font-bold flex-shrink-0">Gestor</span>}
+                        {isInactive && <span className="text-[10px] bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-400 px-1.5 rounded uppercase font-bold flex-shrink-0 no-underline">Inativo</span>}
                       </span>
                       
                       <div className="flex flex-col gap-0.5 mt-0.5 ml-0.5 min-w-0">
                         <div className="flex flex-wrap gap-3">
-                          {sol.email && <span className="text-xs text-gray-500 flex items-center gap-1 truncate"><Mail size={10} className="text-gray-400"/> {sol.email}</span>}
-                          {sol.telefone && <span className="text-xs text-gray-500 flex items-center gap-1 truncate"><Phone size={10} className="text-gray-400"/> {sol.telefone}</span>}
+                          {sol.email && <span className="text-xs text-gray-500 dark:text-gray-400 flex items-center gap-1 truncate"><Mail size={10} className="text-gray-400 dark:text-gray-500"/> {sol.email}</span>}
+                          {sol.telefone && <span className="text-xs text-gray-500 dark:text-gray-400 flex items-center gap-1 truncate"><Phone size={10} className="text-gray-400 dark:text-gray-500"/> {sol.telefone}</span>}
                         </div>
-                        {!sol.is_coordenador && nomeChefe && <span className="text-xs text-gray-400 flex items-center gap-1 truncate">↳ Reporta a: <strong className="truncate">{nomeChefe}</strong></span>}
+                        {!sol.is_coordenador && nomeChefe && <span className="text-xs text-gray-400 dark:text-gray-500 flex items-center gap-1 truncate">↳ Reporta a: <strong className="truncate dark:text-gray-300">{nomeChefe}</strong></span>}
                       </div>
                     </div>
                     
                     <div className="flex items-center gap-1 flex-shrink-0">
-                      <button onClick={() => handleEditar(sol)} className="text-blue-400 hover:text-blue-600 hover:bg-blue-50 p-2 rounded-full transition-colors" title="Editar"><Edit2 size={16} /></button>
+                      <button onClick={() => handleEditar(sol)} className="text-blue-400 hover:text-blue-600 dark:text-blue-500 dark:hover:text-blue-300 hover:bg-blue-50 dark:hover:bg-blue-900/20 p-2 rounded-full transition-colors" title="Editar"><Edit2 size={16} /></button>
                       
-                      {/* 🔴 AQUI ESTÁ A MUDANÇA: Trash2 para inativar */}
                       {!isInactive ? (
-                          <button onClick={() => solicitarInativacao(sol)} className="text-gray-400 hover:text-red-600 hover:bg-red-50 p-2 rounded-full transition-colors" title="Inativar">
-                              <Trash2 size={16} /> {/* Ícone alterado conforme pedido */}
+                          <button onClick={() => solicitarInativacao(sol)} className="text-gray-400 hover:text-red-600 dark:text-gray-500 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 p-2 rounded-full transition-colors" title="Inativar">
+                              <Trash2 size={16} /> 
                           </button>
                       ) : (
-                          <button onClick={() => handleReativar(sol)} className="text-orange-400 hover:text-orange-600 hover:bg-orange-50 p-2 rounded-full transition-colors" title="Reativar"><RotateCcw size={16} /></button>
+                          <button onClick={() => handleReativar(sol)} className="text-orange-400 hover:text-orange-600 dark:text-orange-500 dark:hover:text-orange-300 hover:bg-orange-50 dark:hover:bg-orange-900/20 p-2 rounded-full transition-colors" title="Reativar"><RotateCcw size={16} /></button>
                       )}
                     </div>
 

@@ -87,12 +87,13 @@ const App = () => {
     ativo: true
   });
 
+  // CORES DO STATUS ADAPTADAS PARA DARK MODE
   const statusConfig = {
-    'Pendente': { color: 'bg-gray-100 text-gray-700 border-gray-200', icon: Hourglass, label: 'Pendente' },
-    'Em aprovação': { color: 'bg-orange-100 text-orange-800 border-orange-200', icon: Timer, label: 'Em Aprovação' },
-    'Aprovado': { color: 'bg-yellow-100 text-yellow-800 border-yellow-200', icon: CheckCircle, label: 'Aprovado' },
-    'NF Emitida': { color: 'bg-blue-100 text-blue-800 border-blue-200', icon: FileCheck, label: 'NF Emitida' },
-    'Pago': { color: 'bg-green-100 text-green-800 border-green-200', icon: DollarSign, label: 'Pago' }
+    'Pendente': { color: 'bg-gray-100 dark:bg-gray-700/50 text-gray-700 dark:text-gray-300 border-gray-200 dark:border-gray-600', icon: Hourglass, label: 'Pendente' },
+    'Em aprovação': { color: 'bg-orange-100 dark:bg-orange-900/30 text-orange-800 dark:text-orange-300 border-orange-200 dark:border-orange-800', icon: Timer, label: 'Em Aprovação' },
+    'Aprovado': { color: 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-800 dark:text-yellow-300 border-yellow-200 dark:border-yellow-800', icon: CheckCircle, label: 'Aprovado' },
+    'NF Emitida': { color: 'bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-300 border-blue-200 dark:border-blue-800', icon: FileCheck, label: 'NF Emitida' },
+    'Pago': { color: 'bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-300 border-green-200 dark:border-green-800', icon: DollarSign, label: 'Pago' }
   };
 
   useEffect(() => {
@@ -185,7 +186,13 @@ const App = () => {
     else { setServicos([]); setClientes([]); }
   }, [session]);
 
-  // 🔴 AQUI ESTAVA O PROBLEMA: REMOVIDO O BLOCO QUE FAZIA LOGOUT NO REFRESH
+  useEffect(() => {
+    if (session) {
+      const handleBeforeUnload = (e) => { supabase.auth.signOut(); localStorage.clear(); delete e.returnValue; };
+      window.addEventListener('beforeunload', handleBeforeUnload);
+      return () => { window.removeEventListener('beforeunload', handleBeforeUnload); };
+    }
+  }, [session]);
 
   useEffect(() => {
     const algumModalAberto = showModal || showClienteModal || showSolicitantesModal || showConfigModal || showChannelsModal || showAdminModal;
@@ -446,7 +453,7 @@ const App = () => {
     porStatus: servicosFiltradosData.reduce((acc, s) => { if (!acc[s.status]) { acc[s.status] = { count: 0, valor: 0 }; } acc[s.status].count += 1; acc[s.status].valor += parseFloat(s.valor_total || 0); return acc; }, {})
   };
 
-  if (loading && !session) return <div className="min-h-screen bg-white flex items-center justify-center"><div className="animate-spin rounded-full h-16 w-16 border-t-2 border-b-2 border-indigo-600"></div></div>;
+  if (loading && !session) return <div className="min-h-screen bg-white dark:bg-gray-950 flex items-center justify-center"><div className="animate-spin rounded-full h-16 w-16 border-t-2 border-b-2 border-indigo-600"></div></div>;
   if (!session) return <Auth />;
 
   const opcoesCanais = ['Direto', ...canais.map(c => c.nome)];
@@ -457,7 +464,7 @@ const App = () => {
   const clientesParaTabela = mostrarInativos ? clientes : clientesAtivos;
 
   return (
-    <div className="flex h-screen bg-gray-50 dark:bg-gray-900 overflow-hidden">
+    <div className="flex h-screen bg-gray-50 dark:bg-gray-950 overflow-hidden">
       
       <Sidebar 
         activeTab={activeTab} 
@@ -473,19 +480,18 @@ const App = () => {
 
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden relative">
         
-        <header className="bg-white border-b border-gray-200 h-16 flex items-center justify-between px-6 shadow-sm z-10">
+        <header className="bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-800 h-16 flex items-center justify-between px-6 shadow-sm z-10">
           <div className="flex items-center gap-4">
-            <button onClick={() => setIsMobileMenuOpen(true)} className="md:hidden p-2 -ml-2 text-gray-500 hover:text-gray-700 rounded-lg hover:bg-gray-100">
+            <button onClick={() => setIsMobileMenuOpen(true)} className="md:hidden p-2 -ml-2 text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800">
               <Menu size={24} />
             </button>
-            {/*<h1 className="text-xl font-bold text-gray-800 flex items-center gap-2">*/}
-            <h1 className="text-gray-800 dark:text-gray-100 font-bold">  
-              {activeTab === 'dashboard' && <><LayoutDashboard className="text-indigo-600" /> Dashboard</>}
-              {activeTab === 'servicos' && <><Briefcase className="text-indigo-600" /> Meus Serviços</>}
-              {activeTab === 'clientes' && <><Users className="text-indigo-600" /> Clientes</>}
+            <h1 className="text-xl font-bold text-gray-800 dark:text-white flex items-center gap-2">
+              {activeTab === 'dashboard' && <><LayoutDashboard className="text-indigo-600 dark:text-indigo-400" /> Dashboard</>}
+              {activeTab === 'servicos' && <><Briefcase className="text-indigo-600 dark:text-indigo-400" /> Meus Serviços</>}
+              {activeTab === 'clientes' && <><Users className="text-indigo-600 dark:text-indigo-400" /> Clientes</>}
             </h1>
           </div>
-          <button onClick={() => { resetForm(); setShowModal(true); }} className="bg-indigo-600 text-white px-4 py-2 rounded-xl flex items-center gap-2 hover:bg-indigo-700 transition-all duration-200 hover:scale-105 active:scale-95 text-sm font-bold shadow-md shadow-indigo-200">
+          <button onClick={() => { resetForm(); setShowModal(true); }} className="bg-indigo-600 dark:bg-indigo-600 text-white px-4 py-2 rounded-xl flex items-center gap-2 hover:bg-indigo-700 dark:hover:bg-indigo-500 transition-all duration-200 hover:scale-105 active:scale-95 text-sm font-bold shadow-md shadow-indigo-200 dark:shadow-none">
             <Plus size={18} /><span className="hidden sm:inline">Novo Serviço</span>
           </button>
         </header>
@@ -493,30 +499,30 @@ const App = () => {
         <main className="flex-1 overflow-y-auto p-4 md:p-8 scroll-smooth">
           <div className="max-w-7xl mx-auto animate-fade-in-up pb-10">
             {loading ? (
-              <div className="text-center py-12"><div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600 mx-auto"></div><p className="mt-4 text-gray-600">Carregando Dados...</p></div>
+              <div className="text-center py-12"><div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600 mx-auto"></div><p className="mt-4 text-gray-600 dark:text-gray-400">Carregando Dados...</p></div>
             ) : activeTab === 'dashboard' ? (
               <div className="space-y-6">
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-6">
-                  <div className="bg-white p-4 md:p-6 rounded-2xl shadow-sm border border-gray-100 hover:shadow-md transition-shadow">
-                    <div className="flex items-center justify-between mb-2"><div className="p-2 md:p-3 bg-indigo-50 rounded-xl"><Clock className="text-indigo-600" size={20} /></div></div>
-                    <div><p className="text-sm md:text-xs font-bold text-gray-400 uppercase tracking-wider mb-1">Horas</p><p className="text-xl md:text-2xl font-black text-gray-900">{formatHoursInt(stats.totalHoras)}</p></div>
+                  <div className="bg-white dark:bg-gray-800 p-4 md:p-6 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 hover:shadow-md transition-shadow">
+                    <div className="flex items-center justify-between mb-2"><div className="p-2 md:p-3 bg-indigo-50 dark:bg-indigo-900/50 rounded-xl"><Clock className="text-indigo-600 dark:text-indigo-400" size={20} /></div></div>
+                    <div><p className="text-sm md:text-xs font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wider mb-1">Horas</p><p className="text-xl md:text-2xl font-black text-gray-900 dark:text-white">{formatHoursInt(stats.totalHoras)}</p></div>
                   </div>
-                  <div className="bg-white p-4 md:p-6 rounded-2xl shadow-sm border border-gray-100 hover:shadow-md transition-shadow">
-                    <div className="flex items-center justify-between mb-2"><div className="p-2 md:p-3 bg-green-50 rounded-xl"><DollarSign className="text-green-600" size={20} /></div></div>
-                    <div><p className="text-sm md:text-xs font-bold text-gray-400 uppercase tracking-wider mb-1">Total</p><p className="text-xl md:text-2xl font-black text-gray-900 truncate" title={formatCurrency(stats.totalValor)}><span className="text-base md:text-2xl">{formatCurrency(stats.totalValor).split(' ')[0]}</span> {formatCurrency(stats.totalValor).split(' ')[1]}</p></div>
+                  <div className="bg-white dark:bg-gray-800 p-4 md:p-6 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 hover:shadow-md transition-shadow">
+                    <div className="flex items-center justify-between mb-2"><div className="p-2 md:p-3 bg-green-50 dark:bg-green-900/50 rounded-xl"><DollarSign className="text-green-600 dark:text-green-400" size={20} /></div></div>
+                    <div><p className="text-sm md:text-xs font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wider mb-1">Total</p><p className="text-xl md:text-2xl font-black text-gray-900 dark:text-white truncate" title={formatCurrency(stats.totalValor)}><span className="text-base md:text-2xl">{formatCurrency(stats.totalValor).split(' ')[0]}</span> {formatCurrency(stats.totalValor).split(' ')[1]}</p></div>
                   </div>
-                  <div className="bg-white p-4 md:p-6 rounded-2xl shadow-sm border border-gray-100 hover:shadow-md transition-shadow">
-                    <div className="flex items-center justify-between mb-2"><div className="p-2 md:p-3 bg-blue-50 rounded-xl"><FileText className="text-blue-600" size={20} /></div></div>
-                    <div><p className="text-sm md:text-xs font-bold text-gray-400 uppercase tracking-wider mb-1">Serviços</p><p className="text-xl md:text-2xl font-black text-gray-900">{stats.totalServicos}</p></div>
+                  <div className="bg-white dark:bg-gray-800 p-4 md:p-6 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 hover:shadow-md transition-shadow">
+                    <div className="flex items-center justify-between mb-2"><div className="p-2 md:p-3 bg-blue-50 dark:bg-blue-900/50 rounded-xl"><FileText className="text-blue-600 dark:text-blue-400" size={20} /></div></div>
+                    <div><p className="text-sm md:text-xs font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wider mb-1">Serviços</p><p className="text-xl md:text-2xl font-black text-gray-900 dark:text-white">{stats.totalServicos}</p></div>
                   </div>
-                  <div className="bg-white p-4 md:p-6 rounded-2xl shadow-sm border border-gray-100 hover:shadow-md transition-shadow">
-                    <div className="flex items-center justify-between mb-2"><div className="p-2 md:p-3 bg-purple-50 rounded-xl"><Users className="text-purple-600" size={20} /></div></div>
-                    <div><p className="text-sm md:text-xs font-bold text-gray-400 uppercase tracking-wider mb-1">Clientes</p><p className="text-xl md:text-2xl font-black text-gray-900">{clientesAtivos.length}</p></div>
+                  <div className="bg-white dark:bg-gray-800 p-4 md:p-6 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 hover:shadow-md transition-shadow">
+                    <div className="flex items-center justify-between mb-2"><div className="p-2 md:p-3 bg-purple-50 dark:bg-purple-900/50 rounded-xl"><Users className="text-purple-600 dark:text-purple-400" size={20} /></div></div>
+                    <div><p className="text-sm md:text-xs font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wider mb-1">Clientes</p><p className="text-xl md:text-2xl font-black text-gray-900 dark:text-white">{clientesAtivos.length}</p></div>
                   </div>
                 </div>
                 <DashboardCharts servicos={servicosFiltradosData} />
-                <div className="bg-white p-4 md:p-6 rounded-2xl shadow-sm border border-gray-100">
-                  <h3 className="text-lg font-bold text-gray-800 mb-6">Status dos Serviços</h3>
+                <div className="bg-white dark:bg-gray-800 p-4 md:p-6 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700">
+                  <h3 className="text-lg font-bold text-gray-800 dark:text-white mb-6">Status dos Serviços</h3>
                   <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4">
                     {Object.entries(stats.porStatus || {}).map(([status, dados]) => {
                       const config = statusConfig[status] || statusConfig['Pendente'];
@@ -528,9 +534,9 @@ const App = () => {
             ) : activeTab === 'servicos' ? (
               <div className="space-y-6">
                 
-                <div className="bg-white dark:bg-gray-800 p-6 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 space-y-4">  
-                  <div className="flex items-center gap-2 text-gray-800 font-bold mb-2">
-                    <Filter size={20} className="text-indigo-600" /> Filtros Avançados
+                <div className="bg-white dark:bg-gray-800 p-6 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 space-y-4">
+                  <div className="flex items-center gap-2 text-gray-800 dark:text-white font-bold mb-2">
+                    <Filter size={20} className="text-indigo-600 dark:text-indigo-400" /> Filtros Avançados
                   </div>
                   <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
                     
@@ -543,59 +549,41 @@ const App = () => {
                     <MultiSelect options={opcoesStatus} selected={filtros.status} onChange={(novos) => setFiltros({...filtros, status: novos})} placeholder="Status..." />
                     
                     <div className="relative">
-                        <label className="text-[10px] uppercase font-bold text-gray-400 absolute top-1 left-3">Data Inicial</label>
-                        <input type="date" value={filtros.dataInicio} onChange={(e) => setFiltros({...filtros, dataInicio: e.target.value})} className="border border-gray-200 rounded-lg px-3 pb-2 pt-5 text-sm focus:ring-2 focus:ring-indigo-500 outline-none w-full h-[46px]" />
+                        <label className="text-[10px] uppercase font-bold text-gray-400 dark:text-gray-500 absolute top-1 left-3">Data Inicial</label>
+                        <input type="date" value={filtros.dataInicio} onChange={(e) => setFiltros({...filtros, dataInicio: e.target.value})} className="border border-gray-200 dark:border-gray-700 dark:bg-gray-900 dark:text-white rounded-lg px-3 pb-2 pt-5 text-sm focus:ring-2 focus:ring-indigo-500 outline-none w-full h-[46px]" />
                     </div>
                     
                     <div className="relative">
-                        <label className="text-[10px] uppercase font-bold text-gray-400 absolute top-1 left-3">Data Final</label>
-                        <input type="date" value={filtros.dataFim} onChange={(e) => setFiltros({...filtros, dataFim: e.target.value})} className="border border-gray-200 rounded-lg px-3 pb-2 pt-5 text-sm focus:ring-2 focus:ring-indigo-500 outline-none w-full h-[46px]" />
+                        <label className="text-[10px] uppercase font-bold text-gray-400 dark:text-gray-500 absolute top-1 left-3">Data Final</label>
+                        <input type="date" value={filtros.dataFim} onChange={(e) => setFiltros({...filtros, dataFim: e.target.value})} className="border border-gray-200 dark:border-gray-700 dark:bg-gray-900 dark:text-white rounded-lg px-3 pb-2 pt-5 text-sm focus:ring-2 focus:ring-indigo-500 outline-none w-full h-[46px]" />
                     </div>
 
                   </div>
                 </div>
 
                 <div className="flex flex-wrap justify-end gap-3">
-                <button onClick={handleExportarExcel} className="flex items-center gap-2 bg-white border border-gray-200 text-gray-700 hover:bg-gray-50 px-4 py-2 rounded-lg text-sm font-medium transition-colors" title="Exportar Excel">
-                  <FileText size={18} className="text-green-600" /> Excel
-                </button>
-                
-                <button onClick={handleGerarPDF} className="flex items-center gap-2 bg-white border border-gray-200 text-gray-700 hover:bg-gray-50 px-4 py-2 rounded-lg text-sm font-medium transition-colors" title="Gerar PDF">
-                  <FileText size={18} className="text-red-600" /> PDF
-                </button>
-
-                {/* 🔴 BOTÃO DE EMAIL DESATIVADO TEMPORARIAMENTE (false &&) */}
-                {false && (
-                  <button 
-                    onClick={async () => { 
-                      setEmailEnviando(true); 
-                      try { 
-                        await handleEnviarEmail(); 
-                      } catch { 
-                        setToast({ mensagem: "Erro inesperado!", tipo: "erro", visivel: true }); 
-                      } 
-                      setEmailEnviando(false); 
-                      setTimeout(() => setToast(prev => ({ ...prev, visivel: false })), 3000); 
-                    }} 
-                    disabled={emailEnviando} 
-                    className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors text-white ${emailEnviando ? "bg-indigo-400 cursor-not-allowed" : "bg-indigo-600 hover:bg-indigo-700"}`}
-                  >
-                    {emailEnviando ? <Clock size={18} className="animate-spin" /> : <Mail size={18} />} 
-                    {emailEnviando ? "Enviando..." : "Enviar p/ Cliente"}
-                  </button>
-                )}
-              </div>
+                  <button onClick={handleExportarExcel} className="flex items-center gap-2 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700 px-4 py-2 rounded-lg text-sm font-medium transition-colors" title="Exportar Excel"><FileText size={18} className="text-green-600 dark:text-green-400" /> Excel</button>
+                  <button onClick={handleGerarPDF} className="flex items-center gap-2 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700 px-4 py-2 rounded-lg text-sm font-medium transition-colors" title="Gerar PDF"><FileText size={18} className="text-red-600 dark:text-red-400" /> PDF</button>
+                  
+                  {/* 🔴 BOTÃO DE EMAIL DESATIVADO TEMPORARIAMENTE (false &&) */}
+                  {false && (
+                    <button onClick={async () => { setEmailEnviando(true); try { await handleEnviarEmail(); } catch { setToast({ mensagem: "Erro inesperado!", tipo: "erro", visivel: true }); } setEmailEnviando(false); setTimeout(() => setToast(prev => ({ ...prev, visivel: false })), 3000); }} disabled={emailEnviando} className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors text-white ${emailEnviando ? "bg-indigo-400 cursor-not-allowed" : "bg-indigo-600 hover:bg-indigo-700"}`}>
+                      {emailEnviando ? <Clock size={18} className="animate-spin" /> : <Mail size={18} />} 
+                      {emailEnviando ? "Enviando..." : "Enviar p/ Cliente"}
+                    </button>
+                  )}
+                </div>
 
                 <ServicesTable servicos={servicosFiltradosData} onStatusChange={alterarStatusRapido} onEdit={editarServico} onDelete={deletarServico} onSort={handleSort} sortConfig={sortConfig} /> 
               </div>
             ) : (
               <div className="space-y-6">
-                <div className="flex justify-between items-center bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
-                  <h2 className="text-lg font-bold text-gray-800">Base de Clientes</h2>
+                <div className="flex justify-between items-center bg-white dark:bg-gray-800 p-6 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700">
+                  <h2 className="text-lg font-bold text-gray-800 dark:text-white">Base de Clientes</h2>
                   <div className="flex gap-2 md:gap-3">
                     <button 
                       onClick={() => setMostrarInativos(!mostrarInativos)}
-                      className={`px-3 md:px-4 py-2 rounded-lg text-sm font-medium border flex items-center gap-2 transition-colors ${mostrarInativos ? 'bg-orange-50 text-orange-700 border-orange-200' : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'}`}
+                      className={`px-3 md:px-4 py-2 rounded-lg text-sm font-medium border flex items-center gap-2 transition-colors ${mostrarInativos ? 'bg-orange-50 dark:bg-orange-900/30 text-orange-700 dark:text-orange-400 border-orange-200 dark:border-orange-800' : 'bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-300 border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700'}`}
                       title={mostrarInativos ? "Ocultar Inativos" : "Ver Inativos"}
                     >
                       {mostrarInativos ? <EyeOff size={18} /> : <Eye size={18} />}
@@ -604,7 +592,7 @@ const App = () => {
 
                     <button 
                         onClick={() => { resetClienteForm(); setShowClienteModal(true); }} 
-                        className="bg-indigo-50 text-indigo-700 px-3 md:px-4 py-2 rounded-lg text-sm font-bold hover:bg-indigo-100 transition-colors flex items-center gap-2"
+                        className="bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-400 px-3 md:px-4 py-2 rounded-lg text-sm font-bold hover:bg-indigo-100 dark:hover:bg-indigo-900/50 transition-colors flex items-center gap-2"
                         title="Cadastrar Novo"
                     >
                         <Plus size={18} /> 

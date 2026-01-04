@@ -1,12 +1,12 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { X, Plus, Trash2, Edit2, Save, RotateCcw, Building2, Eye, EyeOff, Ban } from 'lucide-react'; // 👈 Novos ícones
+import { X, Plus, Trash2, Edit2, Save, RotateCcw, Building2, Eye, EyeOff, Ban } from 'lucide-react'; 
 import supabase from '../services/supabase';
-import ConfirmModal from './ConfirmModal'; // 👈 Importando o Modal de Confirmação
+import ConfirmModal from './ConfirmModal'; 
 
-const ChannelsModal = ({ isOpen, onClose, userId, showToast }) => { // 👈 Recebendo showToast se disponível
+const ChannelsModal = ({ isOpen, onClose, userId, showToast }) => { 
   const [canais, setCanais] = useState([]);
   const [loading, setLoading] = useState(false);
-  const [mostrarInativos, setMostrarInativos] = useState(false); // 👈 Toggle do Olho
+  const [mostrarInativos, setMostrarInativos] = useState(false); 
   
   // Estados do Formulário
   const [nome, setNome] = useState('');
@@ -129,8 +129,8 @@ const ChannelsModal = ({ isOpen, onClose, userId, showToast }) => { // 👈 Rece
 
   return (
     <>
-      <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50 animate-fade-in">
-        <div className="bg-white rounded-xl shadow-xl w-full max-w-lg overflow-hidden flex flex-col max-h-[90vh]">
+      <div className="fixed inset-0 bg-black bg-opacity-50 dark:bg-opacity-80 flex items-center justify-center p-4 z-50 animate-fade-in backdrop-blur-sm">
+        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-xl w-full max-w-lg overflow-hidden flex flex-col max-h-[90vh] border dark:border-gray-700">
           
           {/* Cabeçalho */}
           <div className={`p-4 flex justify-between items-center text-white transition-colors duration-300 ${headerColor}`}>
@@ -147,8 +147,13 @@ const ChannelsModal = ({ isOpen, onClose, userId, showToast }) => { // 👈 Rece
           <div className="p-6 overflow-y-auto flex-1">
             
             {/* Formulário */}
-            <form onSubmit={handleSalvar} className={`form-area-canal p-4 rounded-lg mb-6 border transition-colors space-y-3 ${editingId ? 'bg-orange-50 border-orange-200' : 'bg-gray-50 border-gray-200'}`}>
-              <h3 className={`text-sm font-bold flex items-center gap-2 ${editingId ? 'text-orange-700' : 'text-gray-700'}`}>
+            <form onSubmit={handleSalvar} className={`form-area-canal p-4 rounded-lg mb-6 border transition-colors space-y-3 
+                ${editingId 
+                    ? 'bg-orange-50 dark:bg-orange-900/20 border-orange-200 dark:border-orange-800' 
+                    : 'bg-gray-50 dark:bg-gray-900/50 border-gray-200 dark:border-gray-700'}`}>
+              
+              <h3 className={`text-sm font-bold flex items-center gap-2 
+                ${editingId ? 'text-orange-700 dark:text-orange-400' : 'text-gray-700 dark:text-gray-300'}`}>
                 {editingId ? <Edit2 size={16} /> : <Plus size={16} />} 
                 {editingId ? 'Editar Dados' : 'Novo Canal / Parceiro'}
               </h3>
@@ -159,7 +164,7 @@ const ChannelsModal = ({ isOpen, onClose, userId, showToast }) => { // 👈 Rece
                   placeholder="Nome da Consultoria / Canal"
                   value={nome}
                   onChange={(e) => setNome(e.target.value)}
-                  className="border rounded px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-indigo-500 w-full"
+                  className="border rounded px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-indigo-500 w-full bg-white dark:bg-gray-800 border-gray-300 dark:border-gray-600 text-gray-900 dark:text-white"
                   required
                 />
                 
@@ -169,9 +174,9 @@ const ChannelsModal = ({ isOpen, onClose, userId, showToast }) => { // 👈 Rece
                     id="checkAtivo" 
                     checked={ativo} 
                     onChange={e => setAtivo(e.target.checked)}
-                    className="w-4 h-4 text-indigo-600 rounded focus:ring-indigo-500 cursor-pointer"
+                    className="w-4 h-4 text-indigo-600 rounded focus:ring-indigo-500 cursor-pointer bg-white dark:bg-gray-800 border-gray-300 dark:border-gray-600"
                   />
-                  <label htmlFor="checkAtivo" className="text-sm text-gray-700 font-medium select-none cursor-pointer flex items-center gap-1">
+                  <label htmlFor="checkAtivo" className="text-sm text-gray-700 dark:text-gray-300 font-medium select-none cursor-pointer flex items-center gap-1">
                     Canal Ativo?
                   </label>
                 </div>
@@ -182,7 +187,7 @@ const ChannelsModal = ({ isOpen, onClose, userId, showToast }) => { // 👈 Rece
                   <button 
                     type="button"
                     onClick={resetForm}
-                    className="flex-1 bg-gray-200 text-gray-700 py-2 rounded-lg text-sm font-medium hover:bg-gray-300 flex justify-center items-center gap-2"
+                    className="flex-1 bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 py-2 rounded-lg text-sm font-medium hover:bg-gray-300 dark:hover:bg-gray-600 flex justify-center items-center gap-2"
                   >
                     <RotateCcw size={16} /> Cancelar
                   </button>
@@ -199,12 +204,15 @@ const ChannelsModal = ({ isOpen, onClose, userId, showToast }) => { // 👈 Rece
 
             {/* Cabeçalho da Lista + Toggle Olho */}
             <div className="flex justify-between items-center mb-3">
-                <h3 className="text-sm font-bold text-gray-700 flex items-center gap-2">
+                <h3 className="text-sm font-bold text-gray-700 dark:text-gray-300 flex items-center gap-2">
                     Canais ({canais.length})
                 </h3>
                 <button 
                     onClick={() => setMostrarInativos(!mostrarInativos)}
-                    className={`text-xs flex items-center gap-1 px-2 py-1 rounded transition-colors ${mostrarInativos ? 'bg-orange-100 text-orange-700' : 'text-gray-400 hover:bg-gray-100'}`}
+                    className={`text-xs flex items-center gap-1 px-2 py-1 rounded transition-colors 
+                        ${mostrarInativos 
+                            ? 'bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-400' 
+                            : 'text-gray-400 dark:text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800'}`}
                     title={mostrarInativos ? "Ocultar Inativos" : "Ver Inativos"}
                 >
                     {mostrarInativos ? <EyeOff size={14}/> : <Eye size={14}/>}
@@ -213,10 +221,10 @@ const ChannelsModal = ({ isOpen, onClose, userId, showToast }) => { // 👈 Rece
             </div>
             
             {loading ? (
-               <div className="text-center py-4 text-gray-500 text-sm">Carregando...</div>
+               <div className="text-center py-4 text-gray-500 dark:text-gray-400 text-sm">Carregando...</div>
             ) : (
               <div className="space-y-2">
-                {canais.length === 0 && <p className="text-xs text-gray-400 text-center py-2">Nenhum canal encontrado.</p>}
+                {canais.length === 0 && <p className="text-xs text-gray-400 dark:text-gray-500 text-center py-2">Nenhum canal encontrado.</p>}
                 
                 {canais.map(canal => {
                   const isEditingItem = canal.id === editingId;
@@ -224,14 +232,16 @@ const ChannelsModal = ({ isOpen, onClose, userId, showToast }) => { // 👈 Rece
 
                   return (
                     <div key={canal.id} className={`flex justify-between items-center p-3 rounded-lg border transition-all 
-                      ${isEditingItem ? 'border-orange-400 bg-orange-50 shadow-md ring-1 ring-orange-200' : 'hover:shadow-sm bg-white'} 
-                      ${isInactive && !isEditingItem ? 'bg-gray-100 border-gray-200 opacity-75' : ''}
+                      ${isEditingItem 
+                          ? 'border-orange-400 bg-orange-50 dark:bg-orange-900/20 shadow-md ring-1 ring-orange-200 dark:ring-orange-800' 
+                          : 'hover:shadow-sm bg-white dark:bg-gray-800 border-gray-100 dark:border-gray-700'} 
+                      ${isInactive && !isEditingItem ? 'bg-gray-100 dark:bg-gray-900/50 border-gray-200 dark:border-gray-800 opacity-75' : ''}
                     `}>
                       <div className="flex flex-col flex-1 min-w-0 mr-2">
-                        <span className={`font-bold flex items-center gap-2 truncate ${isInactive ? 'text-gray-500 decoration-gray-400 line-through' : 'text-gray-800'}`}>
-                          <Building2 size={16} className={isInactive ? "text-gray-400" : "text-indigo-500"} />
+                        <span className={`font-bold flex items-center gap-2 truncate ${isInactive ? 'text-gray-500 dark:text-gray-500 decoration-gray-400 dark:decoration-gray-600 line-through' : 'text-gray-800 dark:text-white'}`}>
+                          <Building2 size={16} className={isInactive ? "text-gray-400 dark:text-gray-600" : "text-indigo-500 dark:text-indigo-400"} />
                           <span className="truncate">{canal.nome}</span>
-                          {isInactive && <span className="text-[10px] bg-gray-200 text-gray-600 px-1.5 rounded font-bold no-underline">Inativo</span>}
+                          {isInactive && <span className="text-[10px] bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-400 px-1.5 rounded font-bold no-underline">Inativo</span>}
                         </span>
                       </div>
                       
@@ -239,7 +249,7 @@ const ChannelsModal = ({ isOpen, onClose, userId, showToast }) => { // 👈 Rece
                       <div className="flex items-center gap-1 flex-shrink-0">
                         <button 
                           onClick={() => handleEditar(canal)} 
-                          className="text-blue-400 hover:text-blue-600 hover:bg-blue-50 p-2 rounded-full transition-colors"
+                          className="text-blue-400 hover:text-blue-600 dark:text-blue-500 dark:hover:text-blue-300 hover:bg-blue-50 dark:hover:bg-blue-900/20 p-2 rounded-full transition-colors"
                           title="Editar"
                         >
                           <Edit2 size={16} />
@@ -249,7 +259,7 @@ const ChannelsModal = ({ isOpen, onClose, userId, showToast }) => { // 👈 Rece
                         {!isInactive ? (
                             <button 
                               onClick={() => solicitarInativacao(canal)} 
-                              className="text-gray-400 hover:text-red-600 hover:bg-red-50 p-2 rounded-full transition-colors"
+                              className="text-gray-400 dark:text-gray-500 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 p-2 rounded-full transition-colors"
                               title="Inativar"
                             >
                               <Trash2 size={16} />
@@ -257,7 +267,7 @@ const ChannelsModal = ({ isOpen, onClose, userId, showToast }) => { // 👈 Rece
                         ) : (
                             <button 
                               onClick={() => handleReativar(canal.id)} 
-                              className="text-orange-400 hover:text-orange-600 hover:bg-orange-50 p-2 rounded-full transition-colors"
+                              className="text-orange-400 hover:text-orange-600 dark:text-orange-500 dark:hover:text-orange-300 hover:bg-orange-50 dark:hover:bg-orange-900/20 p-2 rounded-full transition-colors"
                               title="Restaurar"
                             >
                               <RotateCcw size={16} />

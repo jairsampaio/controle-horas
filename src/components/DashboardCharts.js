@@ -1,150 +1,132 @@
 import React from 'react';
-import { Bar, Doughnut } from 'react-chartjs-2';
-import { Chart as ChartJS, CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend, ArcElement } from 'chart.js';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend } from 'recharts';
 import { formatCurrency } from '../utils/formatters';
-
-ChartJS.register(CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend, ArcElement);
 
 const DashboardCharts = ({ servicos }) => {
   
-  // --- 1. GRÁFICO PRINCIPAL (ESQUERDA): FATURAMENTO POR STATUS (BARRAS) ---
-  
-  // Define a ordem lógica do processo
-  const statusOrdem = ['Pendente', 'Em aprovação', 'Aprovado', 'NF Emitida', 'Pago'];
-  
-  // Cores fixas iguais às dos cards/badges
-  const statusCores = {
-    'Pendente': 'rgba(156, 163, 175, 0.8)', // Cinza
-    'Em aprovação': 'rgba(249, 115, 22, 0.8)', // Laranja
-    'Aprovado': 'rgba(234, 179, 8, 0.8)',   // Amarelo
-    'NF Emitida': 'rgba(59, 130, 246, 0.8)', // Azul
-    'Pago': 'rgba(34, 197, 94, 0.8)'       // Verde
-  };
-
-  // Calcula o valor total (R$) para cada status
-  const dadosStatus = statusOrdem.map(status => {
-    return servicos
-      .filter(s => s.status === status)
-      .reduce((acc, curr) => acc + parseFloat(curr.valor_total || 0), 0);
-  });
-
-  const dataStatus = {
-    labels: statusOrdem,
-    datasets: [
-      {
-        label: 'Valor Total (R$)',
-        data: dadosStatus,
-        backgroundColor: statusOrdem.map(s => statusCores[s]),
-        borderRadius: 4,
-        barPercentage: 0.6, // Barras um pouco mais grossas
-      },
-    ],
-  };
-
-  const optionsStatus = {
-    responsive: true,
-    maintainAspectRatio: false,
-    plugins: {
-      legend: { display: false },
-      title: { 
-        display: true, 
-        text: 'Faturamento por Status (R$)',
-        font: { size: 16 }
-      },
-      tooltip: {
-        callbacks: {
-          label: function(context) {
-            let label = context.dataset.label || '';
-            if (label) label += ': ';
-            if (context.parsed.y !== null) label += formatCurrency(context.parsed.y);
-            return label;
-          }
-        }
-      }
-    },
-    scales: {
-      y: {
-        beginAtZero: true,
-        ticks: {
-          callback: function(value) {
-             // Simplifica o eixo Y (ex: 1k, 2k) para não poluir
-             if (value >= 1000) return 'R$ ' + value/1000 + 'k';
-             return 'R$ ' + value;
-          }
-        }
-      }
-    }
-  };
-
-  // --- 2. GRÁFICO SECUNDÁRIO (DIREITA): TOP CLIENTES (ROSCA) ---
-  
-  const dadosPorCliente = servicos.reduce((acc, curr) => {
-    const nome = curr.cliente;
-    const valor = parseFloat(curr.valor_total || 0);
-    acc[nome] = (acc[nome] || 0) + valor;
+  // 1. Processar dados para o Top 5 Clientes
+  const clientesMap = servicos.reduce((acc, curr) => {
+    const nome = curr.cliente || 'Sem Cliente';
+    acc[nome] = (acc[nome] || 0) + parseFloat(curr.valor_total || 0);
     return acc;
   }, {});
 
-  // Pega Top 5
-  const topClientes = Object.entries(dadosPorCliente)
-    .sort(([, a], [, b]) => b - a)
-    .slice(0, 5);
+  const dataClientes = Object.entries(clientesMap)
+    .map(([name, value]) => ({ name, value }))
+    .sort((a, b) => b.value - a.value)
+    .slice(0, 5); // Pega só os top 5
 
-  const dataClientes = {
-    labels: topClientes.map(([nome]) => nome),
-    datasets: [
-      {
-        data: topClientes.map(([, valor]) => valor),
-        backgroundColor: [
-          'rgba(79, 70, 229, 0.8)',  // Indigo
-          'rgba(168, 85, 247, 0.8)', // Roxo
-          'rgba(236, 72, 153, 0.8)', // Rosa
-          'rgba(14, 165, 233, 0.8)', // Sky Blue
-          'rgba(20, 184, 166, 0.8)', // Teal
-        ],
-        borderWidth: 1,
-      },
-    ],
+  // 2. Processar dados para Faturamento por Status
+  const statusMap = servicos.reduce((acc, curr) => {
+    const status = curr.status || 'Outros';
+    acc[status] = (acc[status] || 0) + parseFloat(curr.valor_total || 0);
+    return acc;
+  }, {});
+
+  const dataStatus = Object.entries(statusMap).map(([name, value]) => ({ name, value }));
+
+  // Cores personalizadas para o gráfico de Pizza (Status)
+  const COLORS = {
+    'Pendente': '#9CA3AF',      // Gray 400
+    'Em aprovação': '#F97316',  // Orange 500
+    'Aprovado': '#EAB308',      // Yellow 500
+    'NF Emitida': '#3B82F6',    // Blue 500
+    'Pago': '#22C55E',          // Green 500
   };
 
-  const optionsClientes = {
-    responsive: true,
-    maintainAspectRatio: false,
-    plugins: {
-      legend: { position: 'right' },
-      title: { display: true, text: 'Top 5 Clientes' },
-      tooltip: {
-        callbacks: {
-          label: function(context) {
-            let label = context.label || '';
-            if (label) label += ': ';
-            // Pega o valor bruto do array de dados
-            const valor = context.parsed; 
-            if (valor !== null) label += formatCurrency(valor);
-            return label;
-          }
-        }
-      }
-    },
+  // Cores personalizadas para o gráfico de Barras (Top Clientes)
+  const BAR_COLOR = '#6366f1'; 
+
+  // Customização do Tooltip para suportar Dark Mode
+  const CustomTooltip = ({ active, payload, label }) => {
+    if (active && payload && payload.length) {
+      return (
+        <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 p-3 rounded-lg shadow-lg">
+          <p className="font-bold text-gray-800 dark:text-white mb-1">{label}</p>
+          <p className="text-indigo-600 dark:text-indigo-400 font-medium">
+            {formatCurrency(payload[0].value)}
+          </p>
+        </div>
+      );
+    }
+    return null;
   };
+
+  if (servicos.length === 0) {
+    return null; // Não exibe gráficos se não tiver dados
+  }
 
   return (
-    <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-      {/* GRÁFICO ESQUERDA (MAIOR - ocupa 2 colunas no PC) */}
-      <div className="bg-white p-6 rounded-lg shadow h-80 md:col-span-2">
-        <Bar data={dataStatus} options={optionsStatus} />
+    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      
+      {/* GRÁFICO 1: TOP 5 CLIENTES */}
+      <div className="bg-white dark:bg-gray-800 p-6 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700">
+        <h3 className="text-lg font-bold text-gray-800 dark:text-white mb-6">Top 5 Clientes (Faturamento)</h3>
+        <div className="h-[300px] w-full text-xs">
+          <ResponsiveContainer width="100%" height="100%">
+            <BarChart
+              data={dataClientes}
+              layout="vertical"
+              margin={{ top: 5, right: 30, left: 40, bottom: 5 }}
+            >
+              <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#374151" opacity={0.2} />
+              
+              <XAxis type="number" hide />
+              
+              <YAxis 
+                dataKey="name" 
+                type="category" 
+                width={100} 
+                tick={{ fill: '#9CA3AF', fontSize: 11 }}
+                tickLine={false}
+                axisLine={false}
+              />
+              
+              <Tooltip cursor={{fill: 'transparent'}} content={<CustomTooltip />} />
+              
+              <Bar 
+                dataKey="value" 
+                fill={BAR_COLOR} 
+                radius={[0, 4, 4, 0]} 
+                barSize={20}
+                className="fill-indigo-600 dark:fill-indigo-500"
+              />
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
       </div>
 
-      {/* GRÁFICO DIREITA (MENOR - ocupa 1 coluna no PC) */}
-      <div className="bg-white p-6 rounded-lg shadow h-80 flex items-center justify-center">
-        {topClientes.length > 0 ? (
-          <div className="w-full h-full">
-            <Doughnut data={dataClientes} options={optionsClientes} />
-          </div>
-        ) : (
-          <p className="text-gray-400">Sem dados de clientes</p>
-        )}
+      {/* GRÁFICO 2: FATURAMENTO POR STATUS */}
+      <div className="bg-white dark:bg-gray-800 p-6 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700">
+        <h3 className="text-lg font-bold text-gray-800 dark:text-white mb-6">Faturamento por Status</h3>
+        <div className="h-[300px] w-full text-xs">
+          <ResponsiveContainer width="100%" height="100%">
+            <PieChart>
+              <Pie
+                data={dataStatus}
+                cx="50%"
+                cy="50%"
+                innerRadius={60}
+                outerRadius={80}
+                paddingAngle={5}
+                dataKey="value"
+              >
+                {dataStatus.map((entry, index) => (
+                  <Cell key={`cell-${index}`} fill={COLORS[entry.name] || '#CBD5E1'} strokeWidth={0} />
+                ))}
+              </Pie>
+              <Tooltip content={<CustomTooltip />} />
+              <Legend 
+                verticalAlign="bottom" 
+                height={36} 
+                iconType="circle"
+                formatter={(value) => <span className="text-gray-600 dark:text-gray-400 ml-1">{value}</span>}
+              />
+            </PieChart>
+          </ResponsiveContainer>
+        </div>
       </div>
+
     </div>
   );
 };
