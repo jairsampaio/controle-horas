@@ -32,12 +32,12 @@ const App = () => {
   const [servicos, setServicos] = useState([]);
   const [clientes, setClientes] = useState([]);
   const [canais, setCanais] = useState([]); 
-  const [tenants, setTenants] = useState([]); // Nova lista de empresas para o filtro
+  // REMOVIDO: const [tenants, setTenants] ... (Não precisamos mais carregar lista de empresas aqui)
   const [loading, setLoading] = useState(true);
   
   const [activeTab, setActiveTab] = useState('dashboard');
   
-  // Estado para controlar qual Tenant (Consultoria) está sendo visualizado nos detalhes
+  // Estado para controlar qual Tenant (Consultoria) está sendo visualizado nos detalhes (Ainda útil para o Admin)
   const [tenantIdSelecionado, setTenantIdSelecionado] = useState(null);
 
   const [showModal, setShowModal] = useState(false);
@@ -71,7 +71,7 @@ const App = () => {
     canal: [], 
     cliente: [],
     status: [], 
-    tenants: [], // Novo filtro de Empresas
+    // REMOVIDO: tenants: [],
     dataInicio: '',
     dataFim: '',
     solicitantes: []
@@ -171,45 +171,57 @@ const App = () => {
     } catch (error) { console.error('Erro ao salvar config:', error); showToast('Erro ao salvar configuração.', 'erro'); } finally { setLoading(false); }
   };
 
+  // --- NOVA FUNÇÃO DE CARREGAMENTO BLINDADA ---
   const carregarDados = async () => {
     try {
-      // CORREÇÃO: Removemos 'tenants(nome_empresa)' pois a relação mudou/quebrou
+      // 1. Identificar a Consultoria do Usuário Logado
+      const { data: userProfile, error: profileError } = await supabase
+        .from('profiles')
+        .select('consultoria_id')
+        .eq('id', session.user.id)
+        .single();
+
+      if (profileError || !userProfile?.consultoria_id) {
+        console.error("Usuário sem consultoria vinculada.");
+        return;
+      }
+
+      const meuId = userProfile.consultoria_id;
+
+      // 2. Buscar Serviços (FILTRADO POR ID)
       const { data: dataServicos, error: errorServicos } = await supabase
         .from('servicos_prestados')
         .select('*, canais(nome)') 
+        .eq('consultoria_id', meuId) // Segurança Total
         .order('data', { ascending: false });
+      
       if (errorServicos) throw errorServicos;
       setServicos(dataServicos);
 
-      // CORREÇÃO: Removemos 'tenants(nome_empresa)'
+      // 3. Buscar Clientes (FILTRADO POR ID)
       const { data: dataClientes, error: errorClientes } = await supabase
         .from('clientes')
         .select('*') 
+        .eq('consultoria_id', meuId) // Segurança Total
         .order('nome', { ascending: true });
+      
       if (errorClientes) throw errorClientes;
       setClientes(dataClientes);
 
-      const { data: dataCanais, error: errorCanais } = await supabase.from('canais').select('*').eq('ativo', true).order('nome', { ascending: true });
+      // 4. Buscar Canais (FILTRADO POR ID)
+      const { data: dataCanais, error: errorCanais } = await supabase
+        .from('canais')
+        .select('*')
+        .eq('ativo', true)
+        .eq('consultoria_id', meuId)
+        .order('nome', { ascending: true });
+      
       if (!errorCanais) setCanais(dataCanais);
 
-      // CORREÇÃO: Buscamos de 'consultorias' em vez de 'tenants'
-      // Adaptamos o objeto para ter 'nome_empresa' para manter compatibilidade com o resto do código
-      const { data: dataConsultorias, error: errorTenants } = await supabase
-        .from('consultorias')
-        .select('id, nome')
-        .order('nome');
-      
-      if (!errorTenants && dataConsultorias) {
-        const tenantsAdaptados = dataConsultorias.map(c => ({
-          id: c.id,
-          nome_empresa: c.nome
-        }));
-        setTenants(tenantsAdaptados);
-      }
+      // REMOVIDO: Carregamento de lista de Tenants. Não é necessário na view operacional.
 
     } catch (error) { 
       console.error('Erro ao carregar dados:', error); 
-      // Não damos alert para não travar a tela se for um erro silencioso
     }
   };
 
@@ -244,12 +256,24 @@ const App = () => {
 
   const salvarServico = async () => {
     try {
+      // 1. Precisamos garantir o consultoria_id antes de salvar
+      const { data: profile } = await supabase.from('profiles').select('consultoria_id').eq('id', session.user.id).single();
+      const consultoriaId = profile?.consultoria_id;
+
+      if (!consultoriaId) throw new Error("Erro: Consultoria não identificada.");
+
+      const dadosParaSalvar = {
+          ...formData,
+          user_id: session.user.id,
+          consultoria_id: consultoriaId // Garante que o novo serviço já nasça com dono
+      };
+
       let error;
       if (editingService) {
-        const { error: updateError } = await supabase.from('servicos_prestados').update(formData).eq('id', editingService.id);
+        const { error: updateError } = await supabase.from('servicos_prestados').update(dadosParaSalvar).eq('id', editingService.id);
         error = updateError;
       } else {
-        const { error: insertError } = await supabase.from('servicos_prestados').insert([{...formData, user_id: session.user.id }]);
+        const { error: insertError } = await supabase.from('servicos_prestados').insert([dadosParaSalvar]);
         error = insertError;
       }
       if (error) throw error;
@@ -278,13 +302,23 @@ const App = () => {
     if (!clienteFormData.nome.trim()) { showToast('Nome do cliente é obrigatório!', 'erro'); return; }
     try {
       setLoading(true);
+      
+      const { data: profile } = await supabase.from('profiles').select('consultoria_id').eq('id', session.user.id).single();
+      const consultoriaId = profile?.consultoria_id;
+
+      const dadosCliente = {
+          ...clienteFormData,
+          user_id: session.user.id,
+          consultoria_id: consultoriaId
+      };
+
       let clienteSalvo = null; 
       if (editingCliente) {
-        const { error } = await supabase.from('clientes').update(clienteFormData).eq('id', editingCliente.id);
+        const { error } = await supabase.from('clientes').update(dadosCliente).eq('id', editingCliente.id);
         if (error) throw error;
         showToast('Cliente atualizado!', 'sucesso');
       } else {
-        const { data, error } = await supabase.from('clientes').insert([{...clienteFormData, user_id: session.user.id }]).select().single();
+        const { data, error } = await supabase.from('clientes').insert([dadosCliente]).select().single();
         if (error) throw error;
         clienteSalvo = data;
         showToast('Cliente criado! Cadastre a equipe agora.', 'sucesso');
@@ -454,15 +488,10 @@ const App = () => {
     setActiveTab('tenant-details'); // Muda a aba manualmente em vez de usar rota
   };
 
-  // --- FILTRO DE SERVIÇOS ---
+  // --- FILTRO DE SERVIÇOS (LIMPO) ---
   const servicosFiltrados = () => {
     let result = servicos.filter(s => {
-      // Filtro de Tenants (Empresas)
-      if (filtros.tenants.length > 0) { 
-         // SAFE CHECK: Se s.tenants for null, usa 'Sem Empresa' para não quebrar
-         const tenantNome = s.tenants?.nome_empresa || 'Sem Empresa';
-         if (!filtros.tenants.includes(tenantNome)) return false; 
-      }
+      // REMOVIDO: Filtro de Tenants
       if (filtros.canal.length > 0) { const nomeCanalServico = s.canais?.nome || 'Direto'; if (!filtros.canal.includes(nomeCanalServico)) return false; }
       if (filtros.cliente.length > 0) { if (!filtros.cliente.includes(s.cliente)) return false; }
       if (filtros.status.length > 0) { if (!filtros.status.includes(s.status)) return false; }
@@ -484,19 +513,11 @@ const App = () => {
     return result;
   };
 
-  // --- FILTRO DE CLIENTES ---
+  // --- FILTRO DE CLIENTES (LIMPO) ---
   const filtrarClientes = (todosClientes) => {
     // Primeiro filtro: Ativos/Inativos
     let filtrados = mostrarInativos ? todosClientes : todosClientes.filter(c => c.ativo !== false);
-    
-    // Segundo filtro: Tenants (Empresas)
-    if (filtros.tenants.length > 0) {
-        filtrados = filtrados.filter(c => {
-            // SAFE CHECK: Mesmo ajuste aqui
-            const tenantNome = c.tenants?.nome_empresa || 'Sem Empresa';
-            return filtros.tenants.includes(tenantNome);
-        });
-    }
+    // REMOVIDO: Filtro de Tenants
     return filtrados;
   };
 
@@ -516,7 +537,7 @@ const App = () => {
   const opcoesCanais = ['Direto', ...canais.map(c => c.nome)];
   const opcoesClientes = clientes.map(c => c.nome);
   const opcoesStatus = ['Pendente', 'Em aprovação', 'Aprovado', 'NF Emitida', 'Pago'];
-  const opcoesTenants = tenants.map(t => t.nome_empresa);
+  // REMOVIDO: opcoesTenants
   const clientesAtivos = clientes.filter(c => c.ativo !== false);
 
   return (
@@ -564,7 +585,6 @@ const App = () => {
           )}
         </header>
 
-        {/* --- AQUI ESTAVA O ERRO: Substituí max-w-7xl por w-full max-w-full --- */}
         <main className="flex-1 overflow-y-auto bg-gray-50 dark:bg-gray-950">
           <div className="w-full max-w-full px-4 md:px-8 py-6 animate-fade-in-up pb-10">
             {loading ? (
@@ -611,21 +631,18 @@ const App = () => {
                                 <div className="flex items-center gap-2 text-gray-800 dark:text-white font-bold mb-2">
                                 <Filter size={20} className="text-indigo-600 dark:text-indigo-400" /> Filtros Avançados
                                 </div>
-                                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+                                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
                                 
-                                {/* FILTRO DE EMPRESA (NOVO) */}
-                                <div className="col-span-full md:col-span-2 lg:col-span-2">
-                                    <MultiSelect options={opcoesTenants} selected={filtros.tenants} onChange={(novos) => setFiltros({...filtros, tenants: novos})} placeholder="Filtrar por Empresa..." />
-                                </div>
+                                {/* REMOVIDO FILTRO DE EMPRESA DAQUI */}
 
-                                <div className="col-span-full md:col-span-4 lg:col-span-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                                <div className="col-span-full md:col-span-3 lg:col-span-3 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                                     <MultiSelect options={opcoesCanais} selected={filtros.canal} onChange={(novos) => setFiltros({...filtros, canal: novos})} placeholder="Canais..." />
                                     <MultiSelect options={opcoesClientes} selected={filtros.cliente} onChange={(novos) => setFiltros({...filtros, cliente: novos})} placeholder="Clientes..." />
                                     <MultiSelect options={todosSolicitantesDoCliente} selected={filtros.solicitantes} onChange={(novos) => setFiltros({...filtros, solicitantes: novos})} placeholder={filtros.cliente.length === 1 ? "Solicitantes..." : (filtros.cliente.length > 1 ? "Selecione 1 Cliente" : "Selecione Cliente")} />
                                     <MultiSelect options={opcoesStatus} selected={filtros.status} onChange={(novos) => setFiltros({...filtros, status: novos})} placeholder="Status..." />
                                 </div>
 
-                                <div className="col-span-full grid grid-cols-2 gap-4">
+                                <div className="col-span-full md:col-span-2 lg:col-span-2 grid grid-cols-2 gap-4">
                                     <div className="relative">
                                         <label className="text-[10px] uppercase font-bold text-gray-400 dark:text-gray-500 absolute top-1 left-3">Data Inicial</label>
                                         <input type="date" value={filtros.dataInicio} onChange={(e) => setFiltros({...filtros, dataInicio: e.target.value})} className="border border-gray-200 dark:border-gray-700 dark:bg-gray-900 dark:text-white rounded-lg px-3 pb-2 pt-5 text-sm focus:ring-2 focus:ring-indigo-500 outline-none w-full h-[46px]" />
@@ -660,10 +677,7 @@ const App = () => {
                                         </button>
                                     </div>
                                 </div>
-                                {/* FILTRO DE EMPRESA NA TELA DE CLIENTES */}
-                                <div className="border-t border-gray-100 dark:border-gray-700 pt-4">
-                                     <MultiSelect options={opcoesTenants} selected={filtros.tenants} onChange={(novos) => setFiltros({...filtros, tenants: novos})} placeholder="Filtrar clientes por Empresa..." />
-                                </div>
+                                {/* REMOVIDO: Filtro de empresa na tela de clientes */}
                             </div>
                             <ClientsTable clientes={clientesParaTabela} onEdit={editarCliente} onDeleteClick={handleRequestInactivate} onReactivate={reativarCliente} onManageTeam={handleManageTeam} />
                         </div>
