@@ -112,20 +112,18 @@ const AdminTenants = ({ onViewDetails }) => {
         consultoriaId = novaConsultoria.id;
 
         // Tenta convidar Admin
+        // 2. Criar Usuário Admin via Banco de Dados (RPC)
         if (formData.email_admin) {
-           const { error: inviteError } = await supabase.auth.admin.inviteUserByEmail(formData.email_admin, {
-             data: { 
-               consultoria_id: consultoriaId,
-               role: 'admin',
-               nome: 'Admin'
-             }
+           const { error: rpcError } = await supabase.rpc('cadastrar_admin_consultoria', {
+             email_admin: formData.email_admin,
+             id_consultoria: consultoriaId // Atenção: o nome aqui tem que bater com o da função SQL
            });
            
-           if (inviteError) {
-             console.warn("Erro convite:", inviteError);
-             alert(`Aviso: Consultoria criada, mas erro no convite: ${inviteError.message}`);
+           if (rpcError) {
+             console.error("Erro RPC:", rpcError);
+             alert(`Consultoria criada, mas erro ao criar usuário: ${rpcError.message}`);
            } else {
-             alert(`Consultoria criada e convite enviado!`);
+             alert(`Sucesso! Consultoria criada.\n\nUsuário: ${formData.email_admin}\nSenha Provisória: Mudar@123`);
            }
         }
       }
