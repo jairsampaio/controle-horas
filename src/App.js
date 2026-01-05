@@ -4,7 +4,7 @@ import React, { useState, useEffect } from 'react';
 import { 
   Clock, DollarSign, User, FileText, Plus, Filter, Settings, Mail, Users, 
   LayoutDashboard, Briefcase, Hourglass, Timer, CheckCircle, FileCheck, 
-  Building2, Menu, Eye, EyeOff, ShieldCheck, Wallet 
+  Building2, Menu, Eye, EyeOff, ShieldCheck, Wallet, ArrowLeft 
 } from 'lucide-react'; 
 import supabase from './services/supabase'; 
 import StatusCard from './components/StatusCard';
@@ -37,6 +37,9 @@ const App = () => {
   
   const [activeTab, setActiveTab] = useState('dashboard');
   
+  // Estado para controlar qual Tenant (Consultoria) está sendo visualizado nos detalhes
+  const [tenantIdSelecionado, setTenantIdSelecionado] = useState(null);
+
   const [showModal, setShowModal] = useState(false);
   const [emailEnviando, setEmailEnviando] = useState(false);
   const [toast, setToast] = useState({ mensagem: "", tipo: "", visivel: false });
@@ -430,6 +433,12 @@ const App = () => {
   const handleManageTeam = (cliente) => { setClienteParaSolicitantes(cliente); setShowSolicitantesModal(true); };
   const handleSort = (key) => { let direction = 'asc'; if (sortConfig.key === key && sortConfig.direction === 'asc') direction = 'desc'; setSortConfig({ key, direction }); };
 
+  // --- FUNÇÃO PARA NAVEGAR PARA DETALHES DO TENANT ---
+  const handleVerDetalhesTenant = (id) => {
+    setTenantIdSelecionado(id);
+    setActiveTab('tenant-details'); // Muda a aba manualmente em vez de usar rota
+  };
+
   // --- FILTRO DE SERVIÇOS ---
   const servicosFiltrados = () => {
     let result = servicos.filter(s => {
@@ -525,6 +534,9 @@ const App = () => {
               {activeTab === 'admin-finance' && <><Wallet className="text-yellow-600 dark:text-yellow-400" /> Financeiro</>}
               {activeTab === 'team' && <><Users className="text-indigo-600 dark:text-indigo-400" /> Gestão de Equipe</>}
               {activeTab === 'admin-plans' && <><FileText className="text-yellow-600 dark:text-yellow-400" /> Planos & Preços</>}
+
+              {/* TÍTULO DOS DETALHES (NOVO) */}
+              {activeTab === 'tenant-details' && <><Building2 className="text-indigo-600" /> Detalhes da Consultoria</>}
             </h1>
           </div>
           
@@ -641,7 +653,29 @@ const App = () => {
                     )}
 
                     {/* --- NOVAS TELAS DO ERP --- */}
-                    {activeTab === 'admin-tenants' && <AdminTenants />}
+                    {activeTab === 'admin-tenants' && (
+                        /* PASSAMOS A FUNÇÃO DE NAVEGAÇÃO VIA PROPS AGORA */
+                        <AdminTenants onViewDetails={handleVerDetalhesTenant} />
+                    )}
+
+                    {/* --- TELA DE DETALHES DO TENANT (NOVA) --- */}
+                    {activeTab === 'tenant-details' && (
+                        <div className="space-y-6">
+                            <button 
+                                onClick={() => setActiveTab('admin-tenants')}
+                                className="flex items-center gap-2 text-gray-600 hover:text-indigo-600 transition-colors mb-4"
+                            >
+                                <ArrowLeft size={20} /> Voltar para lista
+                            </button>
+                            
+                            <div className="bg-white p-8 rounded-lg shadow text-center">
+                                <h2 className="text-2xl font-bold mb-4">Dashboard da Consultoria</h2>
+                                <p className="text-gray-500">ID Selecionado: {tenantIdSelecionado}</p>
+                                <p className="text-sm mt-4 text-gray-400">Aqui você carregará os dados específicos desta empresa.</p>
+                                {/* AQUI VOCÊ IMPORTARÁ O DASHBOARD ESPECÍFICO DEPOIS */}
+                            </div>
+                        </div>
+                    )}
                     
                     {activeTab === 'admin-finance' && <AdminFinance />}
                     
