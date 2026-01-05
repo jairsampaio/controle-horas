@@ -1,7 +1,11 @@
 /* eslint-disable no-restricted-globals */
 import gerarRelatorioPDF from "./utils/gerarRelatorioPDF";
 import React, { useState, useEffect } from 'react';
-import { Clock, DollarSign, User, FileText, Plus, Filter, Settings, Mail, Users, LayoutDashboard, Briefcase, Hourglass, Timer, CheckCircle, FileCheck, Building2, Menu, Eye, EyeOff } from 'lucide-react'; 
+import { 
+  Clock, DollarSign, User, FileText, Plus, Filter, Settings, Mail, Users, 
+  LayoutDashboard, Briefcase, Hourglass, Timer, CheckCircle, FileCheck, 
+  Building2, Menu, Eye, EyeOff, ShieldCheck, Wallet 
+} from 'lucide-react'; 
 import supabase from './services/supabase'; 
 import StatusCard from './components/StatusCard';
 import ClientModal from './components/ClientModal';
@@ -12,21 +16,27 @@ import Auth from './components/Auth';
 import ConfigModal from './components/ConfigModal';
 import DashboardCharts from './components/DashboardCharts';
 import ConfirmModal from './components/ConfirmModal'; 
-import AdminModal from './components/AdminModal'; 
 import * as XLSX from 'xlsx';
 import SolicitantesModal from './components/SolicitantesModal'; 
 import MultiSelect from './components/MultiSelect'; 
 import ChannelsModal from './components/ChannelsModal'; 
 import Sidebar from './components/Sidebar'; 
-import { formatCurrency, formatHours, formatHoursInt } from './utils/formatters'; 
+import AdminTenants from './components/AdminTenants'; 
+import AdminFinance from './components/AdminFinance';
+import AdminPlans from './components/AdminPlans';
+import TeamManagement from './components/TeamManagement';
+import { formatCurrency, formatHoursInt } from './utils/formatters'; 
 
 const App = () => {
   // --- ESTADOS ---
   const [servicos, setServicos] = useState([]);
   const [clientes, setClientes] = useState([]);
   const [canais, setCanais] = useState([]); 
+  const [tenants, setTenants] = useState([]); // Nova lista de empresas para o filtro
   const [loading, setLoading] = useState(true);
+  
   const [activeTab, setActiveTab] = useState('dashboard');
+  
   const [showModal, setShowModal] = useState(false);
   const [emailEnviando, setEmailEnviando] = useState(false);
   const [toast, setToast] = useState({ mensagem: "", tipo: "", visivel: false });
@@ -41,9 +51,6 @@ const App = () => {
   const [confirmModalOpen, setConfirmModalOpen] = useState(false);
   const [clientToInactivate, setClientToInactivate] = useState(null);
   const [mostrarInativos, setMostrarInativos] = useState(false); 
-
-  // Estado para o Painel Admin (Botão Secreto)
-  const [showAdminModal, setShowAdminModal] = useState(false);
 
   // CONFIGURAÇÕES GERAIS
   const [valorHoraPadrao, setValorHoraPadrao] = useState('150.00'); 
@@ -61,6 +68,7 @@ const App = () => {
     canal: [], 
     cliente: [],
     status: [], 
+    tenants: [], // Novo filtro de Empresas
     dataInicio: '',
     dataFim: '',
     solicitantes: []
@@ -87,7 +95,7 @@ const App = () => {
     ativo: true
   });
 
-  // CORES DO STATUS ADAPTADAS PARA DARK MODE
+  // CORES DO STATUS
   const statusConfig = {
     'Pendente': { color: 'bg-gray-100 dark:bg-gray-700/50 text-gray-700 dark:text-gray-300 border-gray-200 dark:border-gray-600', icon: Hourglass, label: 'Pendente' },
     'Em aprovação': { color: 'bg-orange-100 dark:bg-orange-900/30 text-orange-800 dark:text-orange-300 border-orange-200 dark:border-orange-800', icon: Timer, label: 'Em Aprovação' },
@@ -131,7 +139,8 @@ const App = () => {
       const { data, error } = await supabase
         .from('configuracoes')
         .select('chave, valor')
-        .in('chave', ['valor_hora_padrao', 'nome_consultor']);
+        .in('chave', ['valor_hora_padrao', 'nome_consultor'])
+        .eq('user_id', session.user.id); 
 
       if (error) console.error('Erro config:', error);
 
@@ -161,16 +170,27 @@ const App = () => {
 
   const carregarDados = async () => {
     try {
-      const { data: dataServicos, error: errorServicos } = await supabase.from('servicos_prestados').select('*, canais(nome)').order('data', { ascending: false });
+      // Carregamos TAMBÉM o nome da empresa (tenant) para poder filtrar
+      const { data: dataServicos, error: errorServicos } = await supabase
+        .from('servicos_prestados')
+        .select('*, canais(nome), tenants(nome_empresa)')
+        .order('data', { ascending: false });
       if (errorServicos) throw errorServicos;
       setServicos(dataServicos);
 
-      const { data: dataClientes, error: errorClientes } = await supabase.from('clientes').select('*').order('nome', { ascending: true });
+      const { data: dataClientes, error: errorClientes } = await supabase
+        .from('clientes')
+        .select('*, tenants(nome_empresa)')
+        .order('nome', { ascending: true });
       if (errorClientes) throw errorClientes;
       setClientes(dataClientes);
 
       const { data: dataCanais, error: errorCanais } = await supabase.from('canais').select('*').eq('ativo', true).order('nome', { ascending: true });
       if (!errorCanais) setCanais(dataCanais);
+
+      // Carregar Lista de Empresas para o Filtro
+      const { data: dataTenants, error: errorTenants } = await supabase.from('tenants').select('nome_empresa').order('nome_empresa');
+      if (!errorTenants) setTenants(dataTenants);
 
     } catch (error) { console.error('Erro dados:', error); alert('Erro ao carregar dados.'); }
   };
@@ -187,30 +207,22 @@ const App = () => {
   }, [session]);
 
   useEffect(() => {
-    if (session) {
-      const handleBeforeUnload = (e) => { supabase.auth.signOut(); localStorage.clear(); delete e.returnValue; };
-      window.addEventListener('beforeunload', handleBeforeUnload);
-      return () => { window.removeEventListener('beforeunload', handleBeforeUnload); };
-    }
-  }, [session]);
-
-  useEffect(() => {
-    const algumModalAberto = showModal || showClienteModal || showSolicitantesModal || showConfigModal || showChannelsModal || showAdminModal;
+    const algumModalAberto = showModal || showClienteModal || showSolicitantesModal || showConfigModal || showChannelsModal;
     if (algumModalAberto) {
         if (window.location.hash !== '#modal') window.history.pushState({ type: 'modal' }, '', '#modal');
     } else if (activeTab !== 'dashboard') {
         if (window.location.hash !== `#${activeTab}`) window.history.pushState({ type: 'tab' }, '', `#${activeTab}`);
     }
     const handlePopState = () => {
-      if (showModal || showClienteModal || showSolicitantesModal || showConfigModal || showChannelsModal || showAdminModal) {
-        setShowModal(false); setShowClienteModal(false); setShowSolicitantesModal(false); setShowConfigModal(false); setShowChannelsModal(false); setShowAdminModal(false);
+      if (showModal || showClienteModal || showSolicitantesModal || showConfigModal || showChannelsModal) {
+        setShowModal(false); setShowClienteModal(false); setShowSolicitantesModal(false); setShowConfigModal(false); setShowChannelsModal(false);
         return;
       }
       if (activeTab !== 'dashboard') setActiveTab('dashboard');
     };
     window.addEventListener('popstate', handlePopState);
     return () => window.removeEventListener('popstate', handlePopState);
-  }, [activeTab, showModal, showClienteModal, showSolicitantesModal, showConfigModal, showChannelsModal, showAdminModal]);
+  }, [activeTab, showModal, showClienteModal, showSolicitantesModal, showConfigModal, showChannelsModal]);
 
   const salvarServico = async () => {
     try {
@@ -244,7 +256,6 @@ const App = () => {
     } catch (error) { console.error('Erro status:', error); alert('Erro ao alterar status!'); }
   };
 
-  // --- CLIENTES: SALVAR ---
   const salvarCliente = async () => {
     if (!clienteFormData.nome.trim()) { showToast('Nome do cliente é obrigatório!', 'erro'); return; }
     try {
@@ -265,13 +276,11 @@ const App = () => {
     } catch (error) { console.error('Erro ao salvar cliente:', error); showToast('Erro ao salvar cliente!', 'erro'); } finally { setLoading(false); }
   };
 
-  // --- CLIENTES: INATIVAR (Prepara o modal) ---
   const handleRequestInactivate = (cliente) => {
     setClientToInactivate(cliente);
     setConfirmModalOpen(true);
   };
 
-  // --- CLIENTES: CONFIRMAR INATIVAÇÃO (Ação do Modal) ---
   const confirmInactivation = async () => {
     if (!clientToInactivate) return;
     try {
@@ -282,7 +291,6 @@ const App = () => {
     } catch (error) { console.error('Erro deletar:', error); showToast('Erro ao inativar cliente!', 'erro'); }
   };
 
-  // --- CLIENTES: REATIVAR ---
   const reativarCliente = async (id) => {
     try {
       const { error } = await supabase.from('clientes').update({ ativo: true }).eq('id', id);
@@ -422,8 +430,14 @@ const App = () => {
   const handleManageTeam = (cliente) => { setClienteParaSolicitantes(cliente); setShowSolicitantesModal(true); };
   const handleSort = (key) => { let direction = 'asc'; if (sortConfig.key === key && sortConfig.direction === 'asc') direction = 'desc'; setSortConfig({ key, direction }); };
 
+  // --- FILTRO DE SERVIÇOS ---
   const servicosFiltrados = () => {
     let result = servicos.filter(s => {
+      // Filtro de Tenants (Empresas)
+      if (filtros.tenants.length > 0) { 
+         const tenantNome = s.tenants?.nome_empresa || 'Sem Empresa';
+         if (!filtros.tenants.includes(tenantNome)) return false; 
+      }
       if (filtros.canal.length > 0) { const nomeCanalServico = s.canais?.nome || 'Direto'; if (!filtros.canal.includes(nomeCanalServico)) return false; }
       if (filtros.cliente.length > 0) { if (!filtros.cliente.includes(s.cliente)) return false; }
       if (filtros.status.length > 0) { if (!filtros.status.includes(s.status)) return false; }
@@ -445,7 +459,24 @@ const App = () => {
     return result;
   };
 
+  // --- FILTRO DE CLIENTES ---
+  const filtrarClientes = (todosClientes) => {
+    // Primeiro filtro: Ativos/Inativos
+    let filtrados = mostrarInativos ? todosClientes : todosClientes.filter(c => c.ativo !== false);
+    
+    // Segundo filtro: Tenants (Empresas)
+    if (filtros.tenants.length > 0) {
+        filtrados = filtrados.filter(c => {
+            const tenantNome = c.tenants?.nome_empresa || 'Sem Empresa';
+            return filtros.tenants.includes(tenantNome);
+        });
+    }
+    return filtrados;
+  };
+
   const servicosFiltradosData = servicosFiltrados(); 
+  const clientesParaTabela = filtrarClientes(clientes);
+
   const stats = {
     totalHoras: servicosFiltradosData.reduce((sum, s) => sum + parseFloat(s.qtd_horas || 0), 0),
     totalValor: servicosFiltradosData.reduce((sum, s) => sum + parseFloat(s.valor_total || 0), 0),
@@ -459,9 +490,8 @@ const App = () => {
   const opcoesCanais = ['Direto', ...canais.map(c => c.nome)];
   const opcoesClientes = clientes.map(c => c.nome);
   const opcoesStatus = ['Pendente', 'Em aprovação', 'Aprovado', 'NF Emitida', 'Pago'];
-
-  const clientesAtivos = clientes.filter(c => c.ativo !== false); 
-  const clientesParaTabela = mostrarInativos ? clientes : clientesAtivos;
+  const opcoesTenants = tenants.map(t => t.nome_empresa);
+  const clientesAtivos = clientes.filter(c => c.ativo !== false);
 
   return (
     <div className="flex h-screen bg-gray-50 dark:bg-gray-950 overflow-hidden">
@@ -475,11 +505,11 @@ const App = () => {
         onOpenConfig={() => setShowConfigModal(true)}
         onOpenChannels={() => setShowChannelsModal(true)}
         userEmail={session?.user?.email}
-        onOpenAdmin={() => setShowAdminModal(true)}
       />
 
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden relative">
         
+        {/* HEADER PRINCIPAL */}
         <header className="bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-800 h-16 flex items-center justify-between px-6 shadow-sm z-10">
           <div className="flex items-center gap-4">
             <button onClick={() => setIsMobileMenuOpen(true)} className="md:hidden p-2 -ml-2 text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800">
@@ -489,131 +519,142 @@ const App = () => {
               {activeTab === 'dashboard' && <><LayoutDashboard className="text-indigo-600 dark:text-indigo-400" /> Dashboard</>}
               {activeTab === 'servicos' && <><Briefcase className="text-indigo-600 dark:text-indigo-400" /> Meus Serviços</>}
               {activeTab === 'clientes' && <><Users className="text-indigo-600 dark:text-indigo-400" /> Clientes</>}
+              
+              {/* TÍTULOS DO ERP */}
+              {activeTab === 'admin-tenants' && <><ShieldCheck className="text-yellow-600 dark:text-yellow-400" /> Gestão de Assinantes</>}
+              {activeTab === 'admin-finance' && <><Wallet className="text-yellow-600 dark:text-yellow-400" /> Financeiro</>}
+              {activeTab === 'team' && <><Users className="text-indigo-600 dark:text-indigo-400" /> Gestão de Equipe</>}
+              {activeTab === 'admin-plans' && <><FileText className="text-yellow-600 dark:text-yellow-400" /> Planos & Preços</>}
             </h1>
           </div>
-          <button onClick={() => { resetForm(); setShowModal(true); }} className="bg-indigo-600 dark:bg-indigo-600 text-white px-4 py-2 rounded-xl flex items-center gap-2 hover:bg-indigo-700 dark:hover:bg-indigo-500 transition-all duration-200 hover:scale-105 active:scale-95 text-sm font-bold shadow-md shadow-indigo-200 dark:shadow-none">
-            <Plus size={18} /><span className="hidden sm:inline">Novo Serviço</span>
-          </button>
+          
+          {['dashboard', 'servicos', 'clientes'].includes(activeTab) && (
+            <button onClick={() => { resetForm(); setShowModal(true); }} className="bg-indigo-600 dark:bg-indigo-600 text-white px-4 py-2 rounded-xl flex items-center gap-2 hover:bg-indigo-700 dark:hover:bg-indigo-500 transition-all duration-200 hover:scale-105 active:scale-95 text-sm font-bold shadow-md shadow-indigo-200 dark:shadow-none">
+                <Plus size={18} /><span className="hidden sm:inline">Novo Serviço</span>
+            </button>
+          )}
         </header>
 
-        <main className="flex-1 overflow-y-auto p-4 md:p-8 scroll-smooth">
-          <div className="max-w-7xl mx-auto animate-fade-in-up pb-10">
+        {/* --- AQUI ESTAVA O ERRO: Substituí max-w-7xl por w-full max-w-full --- */}
+        <main className="flex-1 overflow-y-auto bg-gray-50 dark:bg-gray-950">
+          <div className="w-full max-w-full px-4 md:px-8 py-6 animate-fade-in-up pb-10">
             {loading ? (
               <div className="text-center py-12"><div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600 mx-auto"></div><p className="mt-4 text-gray-600 dark:text-gray-400">Carregando Dados...</p></div>
-            ) : activeTab === 'dashboard' ? (
-              <div className="space-y-6">
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-6">
-                  <div className="bg-white dark:bg-gray-800 p-4 md:p-6 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 hover:shadow-md transition-shadow">
-                    <div className="flex items-center justify-between mb-2"><div className="p-2 md:p-3 bg-indigo-50 dark:bg-indigo-900/50 rounded-xl"><Clock className="text-indigo-600 dark:text-indigo-400" size={20} /></div></div>
-                    <div><p className="text-sm md:text-xs font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wider mb-1">Horas</p><p className="text-xl md:text-2xl font-black text-gray-900 dark:text-white">{formatHoursInt(stats.totalHoras)}</p></div>
-                  </div>
-                  <div className="bg-white dark:bg-gray-800 p-4 md:p-6 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 hover:shadow-md transition-shadow">
-                    <div className="flex items-center justify-between mb-2"><div className="p-2 md:p-3 bg-green-50 dark:bg-green-900/50 rounded-xl"><DollarSign className="text-green-600 dark:text-green-400" size={20} /></div></div>
-                    <div><p className="text-sm md:text-xs font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wider mb-1">Total</p><p className="text-xl md:text-2xl font-black text-gray-900 dark:text-white truncate" title={formatCurrency(stats.totalValor)}><span className="text-base md:text-2xl">{formatCurrency(stats.totalValor).split(' ')[0]}</span> {formatCurrency(stats.totalValor).split(' ')[1]}</p></div>
-                  </div>
-                  <div className="bg-white dark:bg-gray-800 p-4 md:p-6 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 hover:shadow-md transition-shadow">
-                    <div className="flex items-center justify-between mb-2"><div className="p-2 md:p-3 bg-blue-50 dark:bg-blue-900/50 rounded-xl"><FileText className="text-blue-600 dark:text-blue-400" size={20} /></div></div>
-                    <div><p className="text-sm md:text-xs font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wider mb-1">Serviços</p><p className="text-xl md:text-2xl font-black text-gray-900 dark:text-white">{stats.totalServicos}</p></div>
-                  </div>
-                  <div className="bg-white dark:bg-gray-800 p-4 md:p-6 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 hover:shadow-md transition-shadow">
-                    <div className="flex items-center justify-between mb-2"><div className="p-2 md:p-3 bg-purple-50 dark:bg-purple-900/50 rounded-xl"><Users className="text-purple-600 dark:text-purple-400" size={20} /></div></div>
-                    <div><p className="text-sm md:text-xs font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wider mb-1">Clientes</p><p className="text-xl md:text-2xl font-black text-gray-900 dark:text-white">{clientesAtivos.length}</p></div>
-                  </div>
-                </div>
-                <DashboardCharts servicos={servicosFiltradosData} />
-                <div className="bg-white dark:bg-gray-800 p-4 md:p-6 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700">
-                  <h3 className="text-lg font-bold text-gray-800 dark:text-white mb-6">Status dos Serviços</h3>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4">
-                    {Object.entries(stats.porStatus || {}).map(([status, dados]) => {
-                      const config = statusConfig[status] || statusConfig['Pendente'];
-                      return <StatusCard key={status} status={status} count={dados.count} valor={dados.valor} color={config.color} icon={config.icon} />;
-                    })}
-                  </div>
-                </div>
-              </div>
-            ) : activeTab === 'servicos' ? (
-              <div className="space-y-6">
-                
-                <div className="bg-white dark:bg-gray-800 p-6 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 space-y-4">
-                  <div className="flex items-center gap-2 text-gray-800 dark:text-white font-bold mb-2">
-                    <Filter size={20} className="text-indigo-600 dark:text-indigo-400" /> Filtros Avançados
-                  </div>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
-                    
-                    <MultiSelect options={opcoesCanais} selected={filtros.canal} onChange={(novos) => setFiltros({...filtros, canal: novos})} placeholder="Canais..." />
-                    
-                    <MultiSelect options={opcoesClientes} selected={filtros.cliente} onChange={(novos) => setFiltros({...filtros, cliente: novos})} placeholder="Clientes..." />
-                    
-                    <MultiSelect options={todosSolicitantesDoCliente} selected={filtros.solicitantes} onChange={(novos) => setFiltros({...filtros, solicitantes: novos})} placeholder={filtros.cliente.length === 1 ? "Solicitantes..." : (filtros.cliente.length > 1 ? "Selecione 1 Cliente" : "Selecione Cliente")} />
-                    
-                    <MultiSelect options={opcoesStatus} selected={filtros.status} onChange={(novos) => setFiltros({...filtros, status: novos})} placeholder="Status..." />
-                    
-                    <div className="relative">
-                        <label className="text-[10px] uppercase font-bold text-gray-400 dark:text-gray-500 absolute top-1 left-3">Data Inicial</label>
-                        <input type="date" value={filtros.dataInicio} onChange={(e) => setFiltros({...filtros, dataInicio: e.target.value})} className="border border-gray-200 dark:border-gray-700 dark:bg-gray-900 dark:text-white rounded-lg px-3 pb-2 pt-5 text-sm focus:ring-2 focus:ring-indigo-500 outline-none w-full h-[46px]" />
-                    </div>
-                    
-                    <div className="relative">
-                        <label className="text-[10px] uppercase font-bold text-gray-400 dark:text-gray-500 absolute top-1 left-3">Data Final</label>
-                        <input type="date" value={filtros.dataFim} onChange={(e) => setFiltros({...filtros, dataFim: e.target.value})} className="border border-gray-200 dark:border-gray-700 dark:bg-gray-900 dark:text-white rounded-lg px-3 pb-2 pt-5 text-sm focus:ring-2 focus:ring-indigo-500 outline-none w-full h-[46px]" />
-                    </div>
-
-                  </div>
-                </div>
-
-                <div className="flex flex-wrap justify-end gap-3">
-                  <button onClick={handleExportarExcel} className="flex items-center gap-2 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700 px-4 py-2 rounded-lg text-sm font-medium transition-colors" title="Exportar Excel"><FileText size={18} className="text-green-600 dark:text-green-400" /> Excel</button>
-                  <button onClick={handleGerarPDF} className="flex items-center gap-2 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700 px-4 py-2 rounded-lg text-sm font-medium transition-colors" title="Gerar PDF"><FileText size={18} className="text-red-600 dark:text-red-400" /> PDF</button>
-                  
-                  {/* 🔴 BOTÃO DE EMAIL DESATIVADO TEMPORARIAMENTE (false &&) */}
-                  {false && (
-                    <button onClick={async () => { setEmailEnviando(true); try { await handleEnviarEmail(); } catch { setToast({ mensagem: "Erro inesperado!", tipo: "erro", visivel: true }); } setEmailEnviando(false); setTimeout(() => setToast(prev => ({ ...prev, visivel: false })), 3000); }} disabled={emailEnviando} className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors text-white ${emailEnviando ? "bg-indigo-400 cursor-not-allowed" : "bg-indigo-600 hover:bg-indigo-700"}`}>
-                      {emailEnviando ? <Clock size={18} className="animate-spin" /> : <Mail size={18} />} 
-                      {emailEnviando ? "Enviando..." : "Enviar p/ Cliente"}
-                    </button>
-                  )}
-                </div>
-
-                <ServicesTable servicos={servicosFiltradosData} onStatusChange={alterarStatusRapido} onEdit={editarServico} onDelete={deletarServico} onSort={handleSort} sortConfig={sortConfig} /> 
-              </div>
             ) : (
-              <div className="space-y-6">
-                <div className="flex justify-between items-center bg-white dark:bg-gray-800 p-6 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700">
-                  <h2 className="text-lg font-bold text-gray-800 dark:text-white">Base de Clientes</h2>
-                  <div className="flex gap-2 md:gap-3">
-                    <button 
-                      onClick={() => setMostrarInativos(!mostrarInativos)}
-                      className={`px-3 md:px-4 py-2 rounded-lg text-sm font-medium border flex items-center gap-2 transition-colors ${mostrarInativos ? 'bg-orange-50 dark:bg-orange-900/30 text-orange-700 dark:text-orange-400 border-orange-200 dark:border-orange-800' : 'bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-300 border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700'}`}
-                      title={mostrarInativos ? "Ocultar Inativos" : "Ver Inativos"}
-                    >
-                      {mostrarInativos ? <EyeOff size={18} /> : <Eye size={18} />}
-                      <span className="hidden md:inline">{mostrarInativos ? 'Ocultar Inativos' : 'Exibir Inativos'}</span>
-                    </button>
+                <>
+                    {/* --- TELAS OPERACIONAIS --- */}
+                    {activeTab === 'dashboard' && (
+                        <div className="space-y-6">
+                            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-6">
+                                <div className="bg-white dark:bg-gray-800 p-4 md:p-6 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 hover:shadow-md transition-shadow">
+                                <div className="flex items-center justify-between mb-2"><div className="p-2 md:p-3 bg-indigo-50 dark:bg-indigo-900/50 rounded-xl"><Clock className="text-indigo-600 dark:text-indigo-400" size={20} /></div></div>
+                                <div><p className="text-sm md:text-xs font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wider mb-1">Horas</p><p className="text-xl md:text-2xl font-black text-gray-900 dark:text-white">{formatHoursInt(stats.totalHoras)}</p></div>
+                                </div>
+                                <div className="bg-white dark:bg-gray-800 p-4 md:p-6 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 hover:shadow-md transition-shadow">
+                                <div className="flex items-center justify-between mb-2"><div className="p-2 md:p-3 bg-green-50 dark:bg-green-900/50 rounded-xl"><DollarSign className="text-green-600 dark:text-green-400" size={20} /></div></div>
+                                <div><p className="text-sm md:text-xs font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wider mb-1">Total</p><p className="text-xl md:text-2xl font-black text-gray-900 dark:text-white truncate" title={formatCurrency(stats.totalValor)}><span className="text-base md:text-2xl">{formatCurrency(stats.totalValor).split(' ')[0]}</span> {formatCurrency(stats.totalValor).split(' ')[1]}</p></div>
+                                </div>
+                                <div className="bg-white dark:bg-gray-800 p-4 md:p-6 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 hover:shadow-md transition-shadow">
+                                <div className="flex items-center justify-between mb-2"><div className="p-2 md:p-3 bg-blue-50 dark:bg-blue-900/50 rounded-xl"><FileText className="text-blue-600 dark:text-blue-400" size={20} /></div></div>
+                                <div><p className="text-sm md:text-xs font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wider mb-1">Serviços</p><p className="text-xl md:text-2xl font-black text-gray-900 dark:text-white">{stats.totalServicos}</p></div>
+                                </div>
+                                <div className="bg-white dark:bg-gray-800 p-4 md:p-6 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 hover:shadow-md transition-shadow">
+                                <div className="flex items-center justify-between mb-2"><div className="p-2 md:p-3 bg-purple-50 dark:bg-purple-900/50 rounded-xl"><Users className="text-purple-600 dark:text-purple-400" size={20} /></div></div>
+                                <div><p className="text-sm md:text-xs font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wider mb-1">Clientes</p><p className="text-xl md:text-2xl font-black text-gray-900 dark:text-white">{clientesParaTabela.length}</p></div>
+                                </div>
+                            </div>
+                            <DashboardCharts servicos={servicosFiltradosData} />
+                            <div className="bg-white dark:bg-gray-800 p-4 md:p-6 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700">
+                                <h3 className="text-lg font-bold text-gray-800 dark:text-white mb-6">Status dos Serviços</h3>
+                                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4">
+                                {Object.entries(stats.porStatus || {}).map(([status, dados]) => {
+                                    const config = statusConfig[status] || statusConfig['Pendente'];
+                                    return <StatusCard key={status} status={status} count={dados.count} valor={dados.valor} color={config.color} icon={config.icon} />;
+                                })}
+                                </div>
+                            </div>
+                        </div>
+                    )}
 
-                    <button 
-                        onClick={() => { resetClienteForm(); setShowClienteModal(true); }} 
-                        className="bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-400 px-3 md:px-4 py-2 rounded-lg text-sm font-bold hover:bg-indigo-100 dark:hover:bg-indigo-900/50 transition-colors flex items-center gap-2"
-                        title="Cadastrar Novo"
-                    >
-                        <Plus size={18} /> 
-                        <span className="hidden md:inline">Cadastrar</span>
-                    </button>
-                  </div>
-                </div>
-                
-                <ClientsTable 
-                    clientes={clientesParaTabela} 
-                    onEdit={editarCliente} 
-                    onDeleteClick={handleRequestInactivate} 
-                    onReactivate={reativarCliente} 
-                    onManageTeam={handleManageTeam} 
-                />
-              </div>
+                    {activeTab === 'servicos' && (
+                        <div className="space-y-6">
+                            <div className="bg-white dark:bg-gray-800 p-6 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 space-y-4">
+                                <div className="flex items-center gap-2 text-gray-800 dark:text-white font-bold mb-2">
+                                <Filter size={20} className="text-indigo-600 dark:text-indigo-400" /> Filtros Avançados
+                                </div>
+                                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+                                
+                                {/* FILTRO DE EMPRESA (NOVO) */}
+                                <div className="col-span-full md:col-span-2 lg:col-span-2">
+                                    <MultiSelect options={opcoesTenants} selected={filtros.tenants} onChange={(novos) => setFiltros({...filtros, tenants: novos})} placeholder="Filtrar por Empresa..." />
+                                </div>
+
+                                <div className="col-span-full md:col-span-4 lg:col-span-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                                    <MultiSelect options={opcoesCanais} selected={filtros.canal} onChange={(novos) => setFiltros({...filtros, canal: novos})} placeholder="Canais..." />
+                                    <MultiSelect options={opcoesClientes} selected={filtros.cliente} onChange={(novos) => setFiltros({...filtros, cliente: novos})} placeholder="Clientes..." />
+                                    <MultiSelect options={todosSolicitantesDoCliente} selected={filtros.solicitantes} onChange={(novos) => setFiltros({...filtros, solicitantes: novos})} placeholder={filtros.cliente.length === 1 ? "Solicitantes..." : (filtros.cliente.length > 1 ? "Selecione 1 Cliente" : "Selecione Cliente")} />
+                                    <MultiSelect options={opcoesStatus} selected={filtros.status} onChange={(novos) => setFiltros({...filtros, status: novos})} placeholder="Status..." />
+                                </div>
+
+                                <div className="col-span-full grid grid-cols-2 gap-4">
+                                    <div className="relative">
+                                        <label className="text-[10px] uppercase font-bold text-gray-400 dark:text-gray-500 absolute top-1 left-3">Data Inicial</label>
+                                        <input type="date" value={filtros.dataInicio} onChange={(e) => setFiltros({...filtros, dataInicio: e.target.value})} className="border border-gray-200 dark:border-gray-700 dark:bg-gray-900 dark:text-white rounded-lg px-3 pb-2 pt-5 text-sm focus:ring-2 focus:ring-indigo-500 outline-none w-full h-[46px]" />
+                                    </div>
+                                    <div className="relative">
+                                        <label className="text-[10px] uppercase font-bold text-gray-400 dark:text-gray-500 absolute top-1 left-3">Data Final</label>
+                                        <input type="date" value={filtros.dataFim} onChange={(e) => setFiltros({...filtros, dataFim: e.target.value})} className="border border-gray-200 dark:border-gray-700 dark:bg-gray-900 dark:text-white rounded-lg px-3 pb-2 pt-5 text-sm focus:ring-2 focus:ring-indigo-500 outline-none w-full h-[46px]" />
+                                    </div>
+                                </div>
+                                </div>
+                            </div>
+                            <div className="flex flex-wrap justify-end gap-3">
+                                <button onClick={handleExportarExcel} className="flex items-center gap-2 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700 px-4 py-2 rounded-lg text-sm font-medium transition-colors" title="Exportar Excel"><FileText size={18} className="text-green-600 dark:text-green-400" /> Excel</button>
+                                <button onClick={handleGerarPDF} className="flex items-center gap-2 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700 px-4 py-2 rounded-lg text-sm font-medium transition-colors" title="Gerar PDF"><FileText size={18} className="text-red-600 dark:text-red-400" /> PDF</button>
+                            </div>
+                            <ServicesTable servicos={servicosFiltradosData} onStatusChange={alterarStatusRapido} onEdit={editarServico} onDelete={deletarServico} onSort={handleSort} sortConfig={sortConfig} /> 
+                        </div>
+                    )}
+
+                    {activeTab === 'clientes' && (
+                        <div className="space-y-6">
+                            <div className="flex flex-col gap-4 bg-white dark:bg-gray-800 p-6 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700">
+                                <div className="flex justify-between items-center">
+                                    <h2 className="text-lg font-bold text-gray-800 dark:text-white">Base de Clientes</h2>
+                                    <div className="flex gap-2 md:gap-3">
+                                        <button onClick={() => setMostrarInativos(!mostrarInativos)} className={`px-3 md:px-4 py-2 rounded-lg text-sm font-medium border flex items-center gap-2 transition-colors ${mostrarInativos ? 'bg-orange-50 dark:bg-orange-900/30 text-orange-700 dark:text-orange-400 border-orange-200 dark:border-orange-800' : 'bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-300 border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700'}`} title={mostrarInativos ? "Ocultar Inativos" : "Ver Inativos"}>
+                                            {mostrarInativos ? <EyeOff size={18} /> : <Eye size={18} />}
+                                            <span className="hidden md:inline">{mostrarInativos ? 'Ocultar Inativos' : 'Exibir Inativos'}</span>
+                                        </button>
+                                        <button onClick={() => { resetClienteForm(); setShowClienteModal(true); }} className="bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-400 px-3 md:px-4 py-2 rounded-lg text-sm font-bold hover:bg-indigo-100 dark:hover:bg-indigo-900/50 transition-colors flex items-center gap-2" title="Cadastrar Novo">
+                                            <Plus size={18} /> <span className="hidden md:inline">Cadastrar</span>
+                                        </button>
+                                    </div>
+                                </div>
+                                {/* FILTRO DE EMPRESA NA TELA DE CLIENTES */}
+                                <div className="border-t border-gray-100 dark:border-gray-700 pt-4">
+                                     <MultiSelect options={opcoesTenants} selected={filtros.tenants} onChange={(novos) => setFiltros({...filtros, tenants: novos})} placeholder="Filtrar clientes por Empresa..." />
+                                </div>
+                            </div>
+                            <ClientsTable clientes={clientesParaTabela} onEdit={editarCliente} onDeleteClick={handleRequestInactivate} onReactivate={reativarCliente} onManageTeam={handleManageTeam} />
+                        </div>
+                    )}
+
+                    {/* --- NOVAS TELAS DO ERP --- */}
+                    {activeTab === 'admin-tenants' && <AdminTenants />}
+                    
+                    {activeTab === 'admin-finance' && <AdminFinance />}
+                    
+                    {activeTab === 'team' && <TeamManagement showToast={showToast} />}
+                    
+                    {activeTab === 'admin-plans' && <AdminPlans />}
+                </>
             )}
           </div>
         </main>
       </div>
 
+      {/* MODALS */}
       <ServiceModal 
         isOpen={showModal} 
         onClose={() => { setShowModal(false); setEditingService(null); resetForm(); }} 
@@ -637,12 +678,6 @@ const App = () => {
       <ConfigModal isOpen={showConfigModal} onClose={() => setShowConfigModal(false)} onSave={salvarConfiguracao} valorAtual={valorHoraPadrao} nomeAtual={nomeConsultor} />
       <ChannelsModal isOpen={showChannelsModal} onClose={() => setShowChannelsModal(false)} userId={session?.user?.id} />
       
-      <AdminModal 
-        isOpen={showAdminModal} 
-        onClose={() => setShowAdminModal(false)} 
-        userEmail={session?.user?.email} 
-      />
-
       <ConfirmModal
         isOpen={confirmModalOpen}
         onClose={() => setConfirmModalOpen(false)}

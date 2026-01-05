@@ -1,172 +1,138 @@
-import React, { useState } from 'react';
-import ThemeToggle from './ThemeToggle';
-import { LayoutDashboard, Briefcase, Users, Settings, LogOut, Building2, X, Shield, Moon, Sun } from 'lucide-react'; 
+import React from 'react';
+import { 
+  LayoutDashboard, 
+  Briefcase, 
+  Users, 
+  Settings, 
+  LogOut, 
+  X, 
+  ShieldCheck, 
+  Wallet, 
+  FileText,
+  Building2, // Ícone de Prédio para Canais
+  Lightbulb  // Ícone de Lâmpada para o Tema
+} from 'lucide-react';
 
-const Sidebar = ({ activeTab, setActiveTab, isOpen, onClose, onLogout, onOpenConfig, onOpenChannels, userEmail, onOpenAdmin }) => { 
+const Sidebar = ({ activeTab, setActiveTab, isOpen, onClose, onLogout, onOpenConfig, onOpenChannels, userEmail }) => {
   
-  // --- LÓGICA DE SWIPE (ARRASTAR) ---
-  const [touchStart, setTouchStart] = useState(null);
-  const [touchEnd, setTouchEnd] = useState(null);
-
-  const minSwipeDistance = 50;
-
-  const onTouchStart = (e) => {
-    setTouchEnd(null);
-    setTouchStart(e.targetTouches[0].clientX);
+  // Função para alternar o tema (Dark/Light)
+  const toggleTheme = () => {
+    document.documentElement.classList.toggle('dark');
   };
 
-  const onTouchMove = (e) => {
-    setTouchEnd(e.targetTouches[0].clientX);
-  };
-
-  const onTouchEnd = () => {
-    if (!touchStart || !touchEnd) return;
-    const distance = touchStart - touchEnd;
-    const isLeftSwipe = distance > minSwipeDistance;
-    if (isLeftSwipe) {
-      onClose();
-    }
-  };
-  
-  const swipeHandlers = { onTouchStart, onTouchMove, onTouchEnd };
-  // ----------------------------------
-
-  const menuItems = [
-    { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
-    { id: 'servicos', label: 'Serviços', icon: Briefcase },
-    { id: 'clientes', label: 'Clientes', icon: Users },
-  ];
-
-  const handleNavigation = (id) => {
-    setActiveTab(id);
-    if (window.innerWidth < 768) { 
-      onClose();
-    }
-  };
-
-  // ⚠️ IMPORTANTE: Coloque aqui o e-mail que terá acesso mestre
-  const ADMIN_EMAIL = 'contatosampaiojair@gmail.com'; 
+  // Função auxiliar para renderizar botões do menu com estilo consistente
+  const MenuButton = ({ id, icon: Icon, label, isAdmin = false }) => (
+    <button
+      onClick={() => {
+        setActiveTab(id);
+        if (window.innerWidth < 768) onClose();
+      }}
+      className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 font-medium text-sm
+        ${activeTab === id 
+          ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-200 dark:shadow-none' 
+          : 'text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 hover:text-indigo-600 dark:hover:text-indigo-400'
+        }
+        ${isAdmin ? 'mt-1' : ''}
+      `}
+    >
+      <Icon size={20} className={activeTab === id ? 'text-white' : (isAdmin ? 'text-yellow-600 dark:text-yellow-500' : '')} />
+      <span>{label}</span>
+    </button>
+  );
 
   return (
     <>
-      {/* OVERLAY ESCURO (Swipeable) */}
-      <div 
-        className={`
-          fixed inset-0 z-40 md:hidden bg-black/50 backdrop-blur-sm transition-opacity duration-300
-          ${isOpen ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'}
-        `}
-        onClick={onClose}
-        {...swipeHandlers}
-      />
+      {/* Overlay para Mobile */}
+      {isOpen && (
+        <div 
+          className="fixed inset-0 bg-black/50 z-40 md:hidden backdrop-blur-sm"
+          onClick={onClose}
+        />
+      )}
 
-      {/* SIDEBAR (Swipeable + Cubic Bezier) */}
+      {/* Sidebar Container */}
       <aside 
-        {...swipeHandlers}
-        className={`
-          fixed top-0 left-0 z-50 h-screen w-72 
-          bg-white dark:bg-gray-900 
-          border-r border-gray-200 dark:border-gray-800 
-          shadow-2xl md:shadow-none 
-          transform transition-transform duration-500 ease-[cubic-bezier(0.32,0.72,0,1)]
-          ${isOpen ? 'translate-x-0' : '-translate-x-full'}
-          md:translate-x-0 md:static md:w-64 md:transform-none
+        className={`fixed md:static inset-y-0 left-0 z-50 w-72 bg-white dark:bg-gray-900 border-r border-gray-200 dark:border-gray-800 transform transition-transform duration-300 ease-in-out flex flex-col
+          ${isOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}
         `}
       >
-        {/* Header */}
-        <div className="flex items-center justify-between h-20 px-6 border-b border-gray-100 dark:border-gray-800">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-indigo-600 rounded-xl flex items-center justify-center text-white font-bold text-lg shadow-indigo-200 shadow-lg">
-              CH
-            </div>
-            <div>
-              <span className="text-xl font-bold text-gray-800 dark:text-gray-100 block leading-tight">Controle</span>
-              <span className="text-xs font-semibold text-indigo-500 dark:text-indigo-400 uppercase tracking-widest">Horas</span>
-            </div>
+        {/* Logo / Header */}
+        <div className="h-16 flex items-center justify-between px-6 border-b border-gray-100 dark:border-gray-800">
+          <div className="flex items-center gap-2 font-black text-xl text-indigo-600 tracking-tight">
+            <Briefcase className="fill-indigo-600 text-white" size={24} />
+            <span>Consult<span className="text-gray-800 dark:text-white">Master</span></span>
           </div>
-
-          {/* LÂMPADA - VISÍVEL APENAS NO DESKTOP AQUI */}
-          <div className="hidden md:block">
-             <ThemeToggle />
-          </div>       
-
-          <button onClick={onClose} className="md:hidden p-2 text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-colors">
+          <button onClick={onClose} className="md:hidden text-gray-400 hover:text-gray-600">
             <X size={24} />
           </button>
         </div>
 
-        {/* Navegação - Ajustada altura para remover o footer fixo */}
-        <nav className="p-4 space-y-2 overflow-y-auto h-[calc(100vh-80px)] scrollbar-hide">
+        {/* Menu Items */}
+        <nav className="flex-1 overflow-y-auto p-4 space-y-1 custom-scrollbar">
           
-          {/* LÂMPADA - VISÍVEL APENAS NO MOBILE AQUI (NO TOPO DA LISTA) */}
-          <div className="md:hidden flex items-center justify-between px-4 py-3 mb-4 bg-gray-50 dark:bg-gray-800 rounded-xl border border-gray-100 dark:border-gray-700">
-             <span className="text-sm font-medium text-gray-600 dark:text-gray-300">Modo Escuro</span>
-             <ThemeToggle />
-          </div>
-
-          <p className="px-4 py-2 text-xs font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wider">Principal</p>
-          
-          {menuItems.map((item) => (
-            <button
-              key={item.id}
-              onClick={() => handleNavigation(item.id)}
-              className={`w-full flex items-center gap-4 px-4 py-3.5 text-sm font-medium rounded-xl transition-all duration-300 group
-                ${activeTab === item.id 
-                  ? 'bg-indigo-50 dark:bg-indigo-900/20 text-indigo-700 dark:text-indigo-400 shadow-sm' 
-                  : 'text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800 hover:text-gray-900 dark:hover:text-gray-100'}
-              `}
-            >
-              <item.icon 
-                size={22} 
-                className={`transition-transform duration-300 ${activeTab === item.id ? 'scale-110' : 'group-hover:scale-110'}`}
-                strokeWidth={activeTab === item.id ? 2.5 : 2} 
-              />
-              {item.label}
-            </button>
-          ))}
-
-          <div className="pt-4 mt-4 border-t border-gray-100 dark:border-gray-800">
-            <p className="px-4 py-2 text-xs font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wider">Gestão</p>
+          <div className="pb-2 mb-2 border-b border-gray-100 dark:border-gray-800">
+            <p className="px-4 text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-2">Operacional</p>
             
+            <MenuButton id="dashboard" icon={LayoutDashboard} label="Dashboard" />
+            <MenuButton id="servicos" icon={Briefcase} label="Meus Serviços" />
+            
+            {/* BOTÃO CANAIS / PARCEIROS (MOVIDO PARA CÁ) */}
             <button
-              onClick={() => { onOpenChannels(); onClose(); }}
-              className="w-full flex items-center gap-4 px-4 py-3.5 text-sm font-medium text-gray-500 dark:text-gray-400 rounded-xl hover:bg-gray-50 dark:hover:bg-gray-800 hover:text-gray-900 dark:hover:text-gray-100 transition-all group"
+              onClick={() => {
+                onOpenChannels();
+                if (window.innerWidth < 768) onClose();
+              }}
+              className="w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 font-medium text-sm text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 hover:text-indigo-600 dark:hover:text-indigo-400"
             >
-              <Building2 size={22} className="group-hover:text-indigo-500 dark:group-hover:text-indigo-400 transition-colors" />
-              Canais / Parceiros
+              <Building2 size={20} />
+              <span>Canais / Parceiros</span>
             </button>
 
-            <button
-              onClick={() => { onOpenConfig(); onClose(); }}
-              className="w-full flex items-center gap-4 px-4 py-3.5 text-sm font-medium text-gray-500 dark:text-gray-400 rounded-xl hover:bg-gray-50 dark:hover:bg-gray-800 hover:text-gray-900 dark:hover:text-gray-100 transition-all group"
-            >
-              <Settings size={22} className="group-hover:text-indigo-500 dark:group-hover:text-indigo-400 transition-colors" />
-              Configurações
-            </button>
-
-            {/* 🔴 BOTÃO SECRETO DE ADMIN */}
-            {userEmail === ADMIN_EMAIL && (
-              <button
-                onClick={() => { onOpenAdmin(); onClose(); }}
-                className="w-full flex items-center gap-4 px-4 py-3.5 text-sm font-bold text-gray-900 bg-yellow-400 hover:bg-yellow-500 rounded-xl transition-all shadow-md mt-6"
-              >
-                <Shield size={22} className="text-black" />
-                CENTRAL ADMIN
-              </button>
-            )}
+            <MenuButton id="clientes" icon={Users} label="Clientes" />
+            <MenuButton id="team" icon={Users} label="Minha Equipe" />
           </div>
 
-          {/* Botão Sair - Agora integrado na lista */}
-          <div className="pt-4 mt-4 border-t border-gray-100 dark:border-gray-800">
-            <button
-                onClick={onLogout}
-                className="w-full flex items-center gap-4 px-4 py-3.5 text-sm font-bold text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-xl transition-colors group"
-            >
-                <LogOut size={22} className="group-hover:scale-110 transition-transform" />
-                Sair do Sistema
-            </button>
+          {/* Área Administrativa do SaaS (Só para você, Super Admin) */}
+          <div className="pt-2 pb-2 mb-2 border-b border-gray-100 dark:border-gray-800">
+            <p className="px-4 text-[10px] font-bold text-yellow-600 dark:text-yellow-500 uppercase tracking-wider mb-2">Administração SaaS</p>
+            <MenuButton id="admin-tenants" icon={ShieldCheck} label="Gestão de Assinantes" isAdmin />
+            <MenuButton id="admin-finance" icon={Wallet} label="Financeiro SaaS" isAdmin />
+            <MenuButton id="admin-plans" icon={FileText} label="Planos & Preços" isAdmin />
           </div>
 
         </nav>
+
+        {/* Footer / Configurações */}
+        <div className="p-4 border-t border-gray-100 dark:border-gray-800 bg-gray-50 dark:bg-gray-900/50">
+          
+          <button 
+            onClick={() => { onOpenConfig(); if(window.innerWidth < 768) onClose(); }}
+            className="w-full flex items-center gap-3 px-4 py-2 text-sm text-gray-600 dark:text-gray-400 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors rounded-lg hover:bg-white dark:hover:bg-gray-800 mb-1"
+          >
+            <Settings size={18} /> Configurações
+          </button>
+
+          {/* BOTÃO TEMA DARK/LIGHT (RESTAURADO) */}
+          <button 
+            onClick={toggleTheme}
+            className="w-full flex items-center gap-3 px-4 py-2 text-sm text-gray-600 dark:text-gray-400 hover:text-yellow-600 dark:hover:text-yellow-400 transition-colors rounded-lg hover:bg-white dark:hover:bg-gray-800 mb-1"
+          >
+            <Lightbulb size={18} /> Alterar Tema
+          </button>
+
+          <div className="mt-3 pt-3 border-t border-gray-200 dark:border-gray-700">
+            <div className="px-4 mb-2">
+              <p className="text-xs font-medium text-gray-900 dark:text-white truncate">{userEmail}</p>
+              <p className="text-[10px] text-gray-500 dark:text-gray-500">Logado</p>
+            </div>
+            <button 
+              onClick={onLogout}
+              className="w-full flex items-center gap-3 px-4 py-2 text-sm text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors font-medium"
+            >
+              <LogOut size={18} /> Sair do Sistema
+            </button>
+          </div>
+        </div>
       </aside>
     </>
   );
