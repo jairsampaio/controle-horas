@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { createPortal } from 'react-dom'; // <--- 1. IMPORTAÇÃO DO PORTAL
+import { createPortal } from 'react-dom';
 import { 
   Users, UserPlus, Mail, Trash2, Shield, CheckCircle, Clock, X 
 } from 'lucide-react';
@@ -11,6 +11,9 @@ const TeamManagement = ({ showToast }) => {
   const [invites, setInvites] = useState([]);
   const [loading, setLoading] = useState(true);
   
+  // Estado para a Role do usuário logado
+  const [currentUserRole, setCurrentUserRole] = useState(null);
+
   // Estados dos Modais
   const [modalOpen, setModalOpen] = useState(false);
   const [confirmModalOpen, setConfirmModalOpen] = useState(false);
@@ -22,28 +25,31 @@ const TeamManagement = ({ showToast }) => {
   const [email, setEmail] = useState('');
   const [role, setRole] = useState('consultor');
 
-  // Pega o ID do Tenant do usuário logado
-  const getMyTenantId = async () => {
+  // Pega o ID do Tenant e a Role do usuário logado
+  const getUserProfile = async () => {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return null;
     
     const { data } = await supabase
       .from('profiles')
-      .select('tenant_id')
+      .select('tenant_id, role')
       .eq('id', user.id)
       .single();
       
-    return data?.tenant_id;
+    return data;
   };
 
   const loadData = async () => {
     setLoading(true);
     try {
-      const tenantId = await getMyTenantId();
-      if (!tenantId) return;
+      const userProfile = await getUserProfile();
+      if (!userProfile?.tenant_id) return;
 
-      const { data: membersData } = await supabase.from('profiles').select('*').eq('tenant_id', tenantId);
-      const { data: invitesData } = await supabase.from('saas_convites').select('*').eq('tenant_id', tenantId).eq('status', 'pendente');
+      // Seta a role no estado para controlarmos a visualização
+      setCurrentUserRole(userProfile.role);
+
+      const { data: membersData } = await supabase.from('profiles').select('*').eq('tenant_id', userProfile.tenant_id);
+      const { data: invitesData } = await supabase.from('saas_convites').select('*').eq('tenant_id', userProfile.tenant_id).eq('status', 'pendente');
 
       setMembers(membersData || []);
       setInvites(invitesData || []);
@@ -62,11 +68,11 @@ const TeamManagement = ({ showToast }) => {
     e.preventDefault();
     setInviteLoading(true);
     try {
-      const tenantId = await getMyTenantId();
-      if (!tenantId) throw new Error("Empresa não identificada.");
+      const userProfile = await getUserProfile();
+      if (!userProfile?.tenant_id) throw new Error("Empresa não identificada.");
 
       const { error } = await supabase.from('saas_convites').insert([{
-        tenant_id: tenantId,
+        tenant_id: userProfile.tenant_id,
         email: email.trim().toLowerCase(),
         role: role,
         status: 'pendente'
@@ -74,13 +80,13 @@ const TeamManagement = ({ showToast }) => {
 
       if (error) throw error;
 
-      if (showToast) showToast(`Convite enviado para ${email}!`, 'sucesso');
+      if (showToast) showToast(`Convite salvo para ${email}!`, 'sucesso');
       
       setModalOpen(false);
       setEmail('');
       loadData();
     } catch (error) {
-      if (showToast) showToast(error.message || "Erro ao enviar convite.", 'erro');
+      if (showToast) showToast(error.message || "Erro ao criar convite.", 'erro');
     } finally {
       setInviteLoading(false);
     }
@@ -97,7 +103,7 @@ const TeamManagement = ({ showToast }) => {
     const { error } = await supabase.from('saas_convites').delete().eq('id', inviteToCancel);
     
     if (!error) {
-        if (showToast) showToast('Convite cancelado com sucesso.', 'sucesso');
+        if (showToast) showToast('Convite cancelado.', 'sucesso');
         loadData();
     } else {
         if (showToast) showToast('Erro ao cancelar convite.', 'erro');
@@ -108,7 +114,6 @@ const TeamManagement = ({ showToast }) => {
 
   return (
     <>
-      {/* CONTEÚDO DA PÁGINA (Fica dentro do fluxo normal) */}
       <div className="space-y-6 animate-fade-in relative z-0">
         
         {/* Header da Seção */}
@@ -119,12 +124,16 @@ const TeamManagement = ({ showToast }) => {
             </h1>
             <p className="text-gray-500 dark:text-gray-400 text-sm">Gerencie acessos e convites.</p>
           </div>
-          <button 
-            onClick={() => setModalOpen(true)}
-            className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg font-medium flex items-center gap-2 shadow-md transition-all text-sm"
-          >
-            <UserPlus size={18} /> Convidar
-          </button>
+          
+          {/* SÓ MOSTRA O BOTÃO SE FOR ADMIN OU SUPER_ADMIN */}
+          {(currentUserRole === 'admin' || currentUserRole === 'super_admin') && (
+            <button 
+              onClick={() => setModalOpen(true)}
+              className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg font-medium flex items-center gap-2 shadow-md transition-all text-sm"
+            >
+              <UserPlus size={18} /> Convidar
+            </button>
+          )}
         </div>
 
         {/* LISTA DE MEMBROS ATIVOS */}
@@ -200,13 +209,16 @@ const TeamManagement = ({ showToast }) => {
                         {new Date(invite.created_at).toLocaleDateString()}
                       </td>
                       <td className="px-6 py-4 text-center">
-                        <button 
-                          onClick={() => handleRequestCancel(invite.id)}
-                          className="text-red-400 hover:text-red-600 p-2 rounded hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
-                          title="Cancelar Convite"
-                        >
-                          <Trash2 size={16} />
-                        </button>
+                        {/* BOTÃO DE CANCELAR SÓ PARA ADMINS */}
+                        {(currentUserRole === 'admin' || currentUserRole === 'super_admin') && (
+                          <button 
+                            onClick={() => handleRequestCancel(invite.id)}
+                            className="text-red-400 hover:text-red-600 p-2 rounded hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
+                            title="Cancelar Convite"
+                          >
+                            <Trash2 size={16} />
+                          </button>
+                        )}
                       </td>
                     </tr>
                   ))}
@@ -215,30 +227,26 @@ const TeamManagement = ({ showToast }) => {
             </div>
           </div>
         )}
+
       </div>
 
-      {/* --- MODAIS COM A SOLUÇÃO "BALA DE PRATA" (PORTAL + BODY) --- */}
+      {/* --- MODAIS COM PORTAL (FORA DO FLUXO) --- */}
 
-      {/* 1. Modal de Confirmação */}
-      {confirmModalOpen && createPortal(
-        <ConfirmModal
-          isOpen={confirmModalOpen}
-          onClose={() => setConfirmModalOpen(false)}
-          onConfirm={confirmCancellation}
-          title="Cancelar Convite?"
-          message="Tem certeza que deseja revogar este convite? O usuário não poderá mais usar este e-mail para ingressar na equipe."
-          confirmText="Sim, revogar"
-          cancelText="Voltar"
-          type="danger"
-        />,
-        document.body
-      )}
+      <ConfirmModal
+        isOpen={confirmModalOpen}
+        onClose={() => setConfirmModalOpen(false)}
+        onConfirm={confirmCancellation}
+        title="Cancelar Convite?"
+        message="Tem certeza que deseja revogar este convite?"
+        confirmText="Sim, revogar"
+        cancelText="Voltar"
+        type="danger"
+      />
 
-      {/* 2. Modal de Novo Convite */}
       {modalOpen && createPortal(
         <div 
           className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in"
-          style={{ backdropFilter: 'blur(5px)' }} // Força o blur caso o Tailwind falhe
+          style={{ backdropFilter: 'blur(5px)' }}
         >
           <div 
             className="bg-white dark:bg-gray-900 w-full max-w-md rounded-2xl shadow-2xl p-6 border border-gray-200 dark:border-gray-800 animate-scale-in"
@@ -293,14 +301,14 @@ const TeamManagement = ({ showToast }) => {
                   disabled={inviteLoading}
                   className="flex-1 py-2.5 bg-indigo-600 text-white rounded-lg font-bold hover:bg-indigo-700 shadow-lg shadow-indigo-200 dark:shadow-none transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed flex justify-center items-center gap-2"
                 >
-                  {inviteLoading ? 'Enviando...' : 'Enviar Convite'}
+                  {inviteLoading ? 'Salvando...' : 'Salvar Convite'}
                 </button>
               </div>
             </form>
 
           </div>
         </div>,
-        document.body // <--- AQUI É O PULO DO GATO: Renderiza no body
+        document.body
       )}
     </>
   );
