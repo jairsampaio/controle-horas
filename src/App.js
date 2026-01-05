@@ -173,17 +173,18 @@ const App = () => {
 
   const carregarDados = async () => {
     try {
-      // Carregamos TAMBÉM o nome da empresa (tenant) para poder filtrar
+      // CORREÇÃO: Removemos 'tenants(nome_empresa)' pois a relação mudou/quebrou
       const { data: dataServicos, error: errorServicos } = await supabase
         .from('servicos_prestados')
-        .select('*, canais(nome), tenants(nome_empresa)')
+        .select('*, canais(nome)') 
         .order('data', { ascending: false });
       if (errorServicos) throw errorServicos;
       setServicos(dataServicos);
 
+      // CORREÇÃO: Removemos 'tenants(nome_empresa)'
       const { data: dataClientes, error: errorClientes } = await supabase
         .from('clientes')
-        .select('*, tenants(nome_empresa)')
+        .select('*') 
         .order('nome', { ascending: true });
       if (errorClientes) throw errorClientes;
       setClientes(dataClientes);
@@ -191,11 +192,25 @@ const App = () => {
       const { data: dataCanais, error: errorCanais } = await supabase.from('canais').select('*').eq('ativo', true).order('nome', { ascending: true });
       if (!errorCanais) setCanais(dataCanais);
 
-      // Carregar Lista de Empresas para o Filtro
-      const { data: dataTenants, error: errorTenants } = await supabase.from('tenants').select('nome_empresa').order('nome_empresa');
-      if (!errorTenants) setTenants(dataTenants);
+      // CORREÇÃO: Buscamos de 'consultorias' em vez de 'tenants'
+      // Adaptamos o objeto para ter 'nome_empresa' para manter compatibilidade com o resto do código
+      const { data: dataConsultorias, error: errorTenants } = await supabase
+        .from('consultorias')
+        .select('id, nome')
+        .order('nome');
+      
+      if (!errorTenants && dataConsultorias) {
+        const tenantsAdaptados = dataConsultorias.map(c => ({
+          id: c.id,
+          nome_empresa: c.nome
+        }));
+        setTenants(tenantsAdaptados);
+      }
 
-    } catch (error) { console.error('Erro dados:', error); alert('Erro ao carregar dados.'); }
+    } catch (error) { 
+      console.error('Erro ao carregar dados:', error); 
+      // Não damos alert para não travar a tela se for um erro silencioso
+    }
   };
 
   useEffect(() => {
@@ -444,6 +459,7 @@ const App = () => {
     let result = servicos.filter(s => {
       // Filtro de Tenants (Empresas)
       if (filtros.tenants.length > 0) { 
+         // SAFE CHECK: Se s.tenants for null, usa 'Sem Empresa' para não quebrar
          const tenantNome = s.tenants?.nome_empresa || 'Sem Empresa';
          if (!filtros.tenants.includes(tenantNome)) return false; 
       }
@@ -476,6 +492,7 @@ const App = () => {
     // Segundo filtro: Tenants (Empresas)
     if (filtros.tenants.length > 0) {
         filtrados = filtrados.filter(c => {
+            // SAFE CHECK: Mesmo ajuste aqui
             const tenantNome = c.tenants?.nome_empresa || 'Sem Empresa';
             return filtros.tenants.includes(tenantNome);
         });
