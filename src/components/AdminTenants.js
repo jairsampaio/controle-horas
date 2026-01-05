@@ -1,10 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
-import { useNavigate } from 'react-router-dom'; // IMPORTANTE: Navegação
-import { Search, Plus, Filter, Building2, Calendar, MoreHorizontal, Edit, X, Save, Eye, Trash } from 'lucide-react';
-import supabase from '../services/supabase'; // Certifique-se que o caminho está certo
+import { Search, Plus, Building2, Calendar, Edit, X, Save, Eye } from 'lucide-react';
+import supabase from '../services/supabase';
 
-// Componente de Badge (Mantido)
+// Componente de Badge (Visual do status)
 const StatusBadge = ({ status }) => {
   const styles = {
     ativo: 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400',
@@ -18,8 +17,8 @@ const StatusBadge = ({ status }) => {
   );
 };
 
-const AdminTenants = () => {
-  const navigate = useNavigate(); // Hook para navegar para os detalhes
+// RECEBENDO A PROPS "onViewDetails" DO APP.JS
+const AdminTenants = ({ onViewDetails }) => {
   const [tenants, setTenants] = useState([]);
   const [loading, setLoading] = useState(true);
   const [busca, setBusca] = useState('');
@@ -35,7 +34,7 @@ const AdminTenants = () => {
   const [formData, setFormData] = useState({
     nome: '',
     cnpj: '',
-    email_admin: '', // Novo campo para o admin
+    email_admin: '', 
     plano: 'basic'
   });
 
@@ -45,7 +44,7 @@ const AdminTenants = () => {
 
   const fetchTenants = async () => {
     setLoading(true);
-    // Mudado para 'consultorias' conforme o SQL que criamos
+    // Busca na tabela 'consultorias'
     const { data, error } = await supabase
       .from('consultorias') 
       .select('*')
@@ -56,28 +55,21 @@ const AdminTenants = () => {
     setLoading(false);
   };
 
-  // Prepara o modal para criar NOVA
   const handleOpenCreate = () => {
     setEditingId(null);
     setFormData({ nome: '', cnpj: '', email_admin: '', plano: 'basic' });
     setShowModal(true);
   };
 
-  // Prepara o modal para EDITAR
   const handleOpenEdit = (tenant) => {
     setEditingId(tenant.id);
     setFormData({
       nome: tenant.nome,
       cnpj: tenant.cnpj || '',
-      email_admin: '', // Não editamos o email do admin aqui, só na criação
+      email_admin: '', 
       plano: tenant.plano || 'basic'
     });
     setShowModal(true);
-  };
-
-  // Ação do botão "Ver Detalhes"
-  const handleVerDetalhes = (id) => {
-    navigate(`/consultoria/${id}`);
   };
 
   const handleSalvar = async (e) => {
@@ -100,7 +92,6 @@ const AdminTenants = () => {
           .update({ 
             nome: formData.nome, 
             cnpj: formData.cnpj,
-            // plano: formData.plano (Adicione a coluna 'plano' no banco se quiser salvar isso)
           })
           .eq('id', editingId);
 
@@ -108,7 +99,6 @@ const AdminTenants = () => {
 
       } else {
         // --- MODO CRIAÇÃO ---
-        // 1. Criar a Consultoria
         const { data: novaConsultoria, error: erroCreate } = await supabase
           .from('consultorias')
           .insert([{ 
@@ -121,11 +111,8 @@ const AdminTenants = () => {
         if (erroCreate) throw erroCreate;
         consultoriaId = novaConsultoria.id;
 
-        // 2. Convidar Admin (se email foi preenchido)
+        // Tenta convidar Admin
         if (formData.email_admin) {
-           // Tenta convidar usando a API de Admin do Supabase
-           // Nota: Isso geralmente requer permissões de service_role. 
-           // Se der erro de permissão, o usuário terá que ser criado manualmente ou via backend.
            const { error: inviteError } = await supabase.auth.admin.inviteUserByEmail(formData.email_admin, {
              data: { 
                consultoria_id: consultoriaId,
@@ -135,16 +122,16 @@ const AdminTenants = () => {
            });
            
            if (inviteError) {
-             console.warn("Aviso: Convite de admin falhou (provavelmente permissão). Crie o usuário manualmente.", inviteError);
-             alert(`Consultoria criada, mas erro ao convidar admin: ${inviteError.message}. Verifique suas permissões.`);
+             console.warn("Erro convite:", inviteError);
+             alert(`Aviso: Consultoria criada, mas erro no convite: ${inviteError.message}`);
            } else {
-             alert(`Consultoria criada e convite enviado para ${formData.email_admin}!`);
+             alert(`Consultoria criada e convite enviado!`);
            }
         }
       }
 
       setShowModal(false);
-      fetchTenants(); // Recarrega a lista
+      fetchTenants(); 
     } catch (error) {
       console.error(error);
       setErrorMsg("Erro: " + (error.message || "Erro desconhecido"));
@@ -160,13 +147,12 @@ const AdminTenants = () => {
 
   return (
     <>
-      <div className="p-6 max-w-full mx-auto space-y-6 animate-fade-in relative z-0">
+      <div className="space-y-6 animate-fade-in relative z-0">
         
         {/* Cabeçalho */}
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div>
-            <h1 className="text-2xl font-bold text-gray-800 dark:text-white">Gestão de Assinantes</h1>
-            <p className="text-gray-500 dark:text-gray-400">Gerencie as consultorias que utilizam seu SaaS.</p>
+            <h2 className="text-lg font-bold text-gray-800 dark:text-white">Empresas Cadastradas</h2>
           </div>
           <button 
             onClick={handleOpenCreate}
@@ -205,32 +191,37 @@ const AdminTenants = () => {
                     </div>
                     <div>
                       <h3 className="font-bold text-gray-800 dark:text-white text-lg leading-tight">{tenant.nome}</h3>
-                      <span className="text-xs text-gray-400 font-mono">CNPJ: {tenant.cnpj || 'N/A'}</span>
+                      <span className="text-xs text-gray-400 font-mono">ID: {tenant.id.slice(0,8)}...</span>
                     </div>
                   </div>
                 </div>
 
                 <div className="p-5 space-y-4">
                   <div className="flex justify-between items-center text-sm">
-                    <span className="text-gray-500 dark:text-gray-400">Status</span>
-                    {/* Se não tiver coluna status, usa 'ativo' como placeholder */}
+                    <span className="text-gray-500 dark:text-gray-400">Status Financeiro</span>
                     <StatusBadge status={tenant.status || 'ativo'} />
                   </div>
                   
                   <div className="flex justify-between items-center text-sm">
-                    <span className="text-gray-500 dark:text-gray-400">Criado em</span>
+                    <span className="text-gray-500 dark:text-gray-400">Plano Atual</span>
+                    <span className="font-medium text-gray-800 dark:text-white px-2 py-0.5 bg-gray-100 dark:bg-gray-700 rounded capitalize">Basic</span>
+                  </div>
+
+                   <div className="flex justify-between items-center text-sm">
+                    <span className="text-gray-500 dark:text-gray-400">Vencimento</span>
                     <div className="flex items-center gap-1 text-gray-700 dark:text-gray-200 font-medium">
                       <Calendar size={14} className="text-gray-400" />
-                      {tenant.created_at ? new Date(tenant.created_at).toLocaleDateString() : 'N/A'}
+                      N/A
                     </div>
                   </div>
                 </div>
               </div>
 
-              {/* BOTÕES DE AÇÃO */}
+              {/* BOTÕES DE AÇÃO - CORRIGIDOS */}
               <div className="p-3 bg-gray-50 dark:bg-gray-900/50 border-t border-gray-100 dark:border-gray-700 flex gap-2">
+                {/* AQUI ESTAVA O ERRO: Agora usamos a prop onViewDetails */}
                 <button 
-                  onClick={() => handleVerDetalhes(tenant.id)}
+                  onClick={() => onViewDetails && onViewDetails(tenant.id)}
                   className="flex-1 py-1.5 text-xs font-bold text-blue-600 bg-blue-50 hover:bg-blue-100 rounded transition-all flex items-center justify-center gap-2"
                 >
                   <Eye size={16} /> Ver Detalhes
@@ -315,19 +306,6 @@ const AdminTenants = () => {
                   <p className="text-xs text-gray-500 mt-1">Envia um e-mail de convite vinculando a esta empresa.</p>
                 </div>
               )}
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Plano Inicial</label>
-                <select 
-                  value={formData.plano}
-                  onChange={e => setFormData({...formData, plano: e.target.value})}
-                  className="w-full rounded-lg border border-gray-300 dark:border-gray-700 p-2.5 bg-white dark:bg-gray-800 text-gray-900 dark:text-white outline-none focus:ring-2 focus:ring-indigo-500"
-                >
-                  <option value="basic">Basic</option>
-                  <option value="pro">Pro</option>
-                  <option value="enterprise">Enterprise</option>
-                </select>
-              </div>
 
               <div className="pt-4 flex gap-3">
                 <button type="button" onClick={() => setShowModal(false)} className="flex-1 py-2.5 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-lg font-bold hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors">
