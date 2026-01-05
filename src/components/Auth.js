@@ -17,24 +17,42 @@ const Auth = () => {
   const traduzirErro = (erro) => {
     if (!erro) return '';
     const msg = erro.message.toLowerCase();
+
+    // --- ERROS ESPECÍFICOS ---
     if (msg.includes('invalid login credentials')) return 'E-mail ou senha incorretos.';
     if (msg.includes('user not found')) return 'Usuário não encontrado.';
     if (msg.includes('password should be at least')) return 'A senha deve ter no mínimo 6 caracteres.';
     if (msg.includes('email not confirmed')) return 'Verifique seu e-mail para confirmar o cadastro.';
     if (msg.includes('already registered')) return 'Este e-mail já está cadastrado.';
-    return 'Ocorreu um erro. Tente novamente.';
+    
+    // --- ERRO DO TRIGGER (SEM CONVITE) ---
+    // O banco retorna "Acesso Negado: Este e-mail não possui um convite..."
+    if (msg.includes('acesso negado') || msg.includes('convite')) {
+        return 'Cadastro bloqueado: Este e-mail não possui um convite ativo para entrar no sistema.';
+    }
+
+    // Erro Genérico
+    return erro.message || 'Ocorreu um erro desconhecido. Tente novamente.';
   };
 
   const handleAuth = async (e) => {
     e.preventDefault();
     setLoading(true);
     setErrorMsg('');
-    setSuccessMsg(''); // Limpa sucesso anterior
+    setSuccessMsg('');
 
     let result;
     
     if (isRegistering) {
-      result = await supabase.auth.signUp({ email, password });
+      result = await supabase.auth.signUp({ 
+        email, 
+        password,
+        options: {
+            data: {
+                full_name: email.split('@')[0] // Salva um nome provisório
+            }
+        }
+      });
     } else {
       result = await supabase.auth.signInWithPassword({ email, password });
     }
@@ -45,17 +63,18 @@ const Auth = () => {
       setErrorMsg(traduzirErro(error));
     } else {
       if (isRegistering) {
-        // Sucesso no Cadastro: Mostra mensagem bonita e muda para tela de login
-        setSuccessMsg(`Cadastro realizado com sucesso! Enviamos um link de confirmação para ${email}.`);
-        setIsRegistering(false); // Muda visualmente para Login
-        setPassword(''); // Limpa a senha por segurança
+        setSuccessMsg(`Cadastro realizado! Se o login não for automático, verifique seu e-mail.`);
+        // Em muitos casos o Supabase faz login automático se não precisar confirmar email
+        // Se precisar confirmar, a mensagem acima orienta.
+        if (!result.data.session) {
+             setIsRegistering(false);
+             setPassword('');
+        }
       }
-      // Se for Login, o App.js redireciona automaticamente via session
     }
     setLoading(false);
   };
 
-  // Função para alternar modos e limpar mensagens
   const toggleMode = () => {
     setIsRegistering(!isRegistering);
     setErrorMsg('');
@@ -79,7 +98,6 @@ const Auth = () => {
 
         <div className="p-8">
           
-          {/* MENSAGEM DE SUCESSO GOURMET 🟢 */}
           {successMsg && (
             <div className="mb-6 p-4 rounded-xl bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 text-green-800 dark:text-green-300 text-sm flex items-start gap-3 animate-scale-in">
               <CheckCircle size={20} className="flex-shrink-0 mt-0.5 text-green-600 dark:text-green-400" />
@@ -90,7 +108,6 @@ const Auth = () => {
             </div>
           )}
 
-          {/* MENSAGEM DE ERRO GOURMET 🔴 */}
           {errorMsg && (
             <div className="mb-6 p-4 rounded-xl bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-300 text-sm flex items-start gap-3 animate-pulse">
               <AlertCircle size={20} className="flex-shrink-0 mt-0.5 text-red-600 dark:text-red-400" />
@@ -100,7 +117,6 @@ const Auth = () => {
 
           <form onSubmit={handleAuth} className="space-y-5">
             
-            {/* Input Email */}
             <div className="space-y-1">
               <label className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider ml-1">Email</label>
               <div className="relative">
@@ -118,7 +134,6 @@ const Auth = () => {
               </div>
             </div>
 
-            {/* Input Senha */}
             <div className="space-y-1">
               <label className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider ml-1">Senha</label>
               <div className="relative">
@@ -159,7 +174,6 @@ const Auth = () => {
             </button>
           </form>
 
-          {/* Toggle Login/Cadastro */}
           <div className="mt-6 text-center">
             <p className="text-sm text-gray-500 dark:text-gray-400">
               {isRegistering ? 'Já tem uma conta?' : 'Ainda não tem conta?'}
