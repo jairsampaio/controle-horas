@@ -8,17 +8,20 @@ import supabase from '../services/supabase';
 const Sidebar = ({ activeTab, setActiveTab, isOpen, onClose, onLogout, onOpenConfig, onOpenChannels, userEmail }) => {
   const [userRole, setUserRole] = useState(null);
 
-  // Busca a role (cargo) do usuário ao carregar o Sidebar
+  // Busca o cargo do usuário ao carregar o Sidebar
   useEffect(() => {
     const fetchRole = async () => {
       const { data: { user } } = await supabase.auth.getUser();
       if (user) {
+        // --- CORREÇÃO AQUI: Mudamos de 'role' para 'cargo' ---
         const { data } = await supabase
           .from('profiles')
-          .select('role')
+          .select('cargo') 
           .eq('id', user.id)
           .single();
-        setUserRole(data?.role);
+        
+        // Agora o userRole vai receber 'admin' corretamente
+        setUserRole(data?.cargo);
       }
     };
     fetchRole();
@@ -30,6 +33,7 @@ const Sidebar = ({ activeTab, setActiveTab, isOpen, onClose, onLogout, onOpenCon
 
   const MenuButton = ({ id, icon: Icon, label, requiredRole }) => {
     // Se o botão requer role e o usuário não tem a role certa, não renderiza nada
+    // Nota: Adicionei userRole !== 'super_admin' para garantir que o Super Admin veja tudo
     if (requiredRole && requiredRole !== userRole && userRole !== 'super_admin') return null;
     
     // Proteção extra para os menus do Super Admin (Jair)
