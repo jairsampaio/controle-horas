@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { createPortal } from 'react-dom'; // <--- IMPORTANTE: Importar o Portal
+import { createPortal } from 'react-dom'; // Importando Portal
 import { Search, Plus, Filter, Building2, Calendar, Ban, CheckCircle, MoreHorizontal, Edit, X, Save } from 'lucide-react';
 import supabase from '../services/supabase';
 
@@ -22,9 +22,11 @@ const AdminTenants = () => {
   const [loading, setLoading] = useState(true);
   const [busca, setBusca] = useState('');
   
-  // Estados para o Modal de Nova Consultoria
+  // Estados para o Modal
   const [showModal, setShowModal] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [errorMsg, setErrorMsg] = useState(''); // Mensagem de erro no modal
+  
   const [formData, setFormData] = useState({
     nome_empresa: '',
     plano: 'basic'
@@ -36,7 +38,10 @@ const AdminTenants = () => {
 
   const fetchTenants = async () => {
     setLoading(true);
-    const { data, error } = await supabase.rpc('get_erp_metrics');
+    // Tenta buscar via RPC (se existir) ou direto da tabela
+    const { data, error } = await supabase.from('tenants').select('*');
+    // Nota: Se você tiver a função get_erp_metrics, use: supabase.rpc('get_erp_metrics')
+    
     if (error) console.error(error);
     else setTenants(data || []);
     setLoading(false);
@@ -44,29 +49,31 @@ const AdminTenants = () => {
 
   const handleSalvar = async (e) => {
     e.preventDefault();
-    if (!formData.nome_empresa.trim()) return alert("Digite o nome da empresa.");
+    setErrorMsg('');
+    
+    if (!formData.nome_empresa.trim()) {
+        setErrorMsg("O nome da empresa é obrigatório.");
+        return;
+    }
 
     setSaving(true);
     try {
-      // Cria a nova consultoria na tabela tenants
       const { error } = await supabase.from('tenants').insert([
         {
           nome_empresa: formData.nome_empresa,
           plano: formData.plano,
           status_financeiro: 'ativo',
-          // O trigger do banco vai preencher created_at e id automaticamente
         }
       ]);
 
       if (error) throw error;
 
-      alert("Consultoria cadastrada com sucesso!");
       setShowModal(false);
-      setFormData({ nome_empresa: '', plano: 'basic' }); // Limpa o form
+      setFormData({ nome_empresa: '', plano: 'basic' });
       fetchTenants(); // Recarrega a lista
     } catch (error) {
       console.error(error);
-      alert("Erro ao criar consultoria: " + error.message);
+      setErrorMsg("Erro ao criar: " + (error.message || "Erro desconhecido"));
     } finally {
       setSaving(false);
     }
@@ -78,7 +85,7 @@ const AdminTenants = () => {
 
   return (
     <>
-      <div className="p-6 max-w-7xl mx-auto space-y-6 animate-fade-in relative z-0">
+      <div className="p-6 max-w-full mx-auto space-y-6 animate-fade-in relative z-0">
         
         {/* Cabeçalho da Página */}
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
@@ -111,14 +118,13 @@ const AdminTenants = () => {
           </button>
         </div>
 
-        {/* Grid de Cards (Estilo ERP Moderno) */}
+        {/* Grid de Cards */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {loading ? (
              <div className="col-span-full text-center py-20 text-gray-500">Carregando carteira de clientes...</div>
           ) : filteredTenants.map(tenant => (
             <div key={tenant.id} className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm hover:shadow-md transition-all duration-300 group">
               
-              {/* Header do Card */}
               <div className="p-5 border-b border-gray-100 dark:border-gray-700 flex justify-between items-start">
                 <div className="flex gap-3">
                   <div className="w-10 h-10 bg-indigo-50 dark:bg-indigo-900/20 rounded-lg flex items-center justify-center text-indigo-600 dark:text-indigo-400">
@@ -134,7 +140,6 @@ const AdminTenants = () => {
                 </div>
               </div>
 
-              {/* Corpo do Card */}
               <div className="p-5 space-y-4">
                 <div className="flex justify-between items-center text-sm">
                   <span className="text-gray-500 dark:text-gray-400">Status Financeiro</span>
@@ -153,21 +158,8 @@ const AdminTenants = () => {
                     {tenant.data_vencimento ? new Date(tenant.data_vencimento).toLocaleDateString() : 'N/A'}
                   </div>
                 </div>
-
-                {/* Estatísticas Rápidas */}
-                <div className="grid grid-cols-2 gap-2 mt-2">
-                  <div className="bg-gray-50 dark:bg-gray-900 p-2 rounded-lg text-center">
-                     <span className="block text-xl font-bold text-gray-800 dark:text-white">{tenant.total_usuarios}</span>
-                     <span className="text-[10px] uppercase text-gray-500 tracking-wider">Usuários</span>
-                  </div>
-                  <div className="bg-gray-50 dark:bg-gray-900 p-2 rounded-lg text-center">
-                     <span className="block text-xl font-bold text-gray-800 dark:text-white">{tenant.total_clientes_cadastrados}</span>
-                     <span className="text-[10px] uppercase text-gray-500 tracking-wider">Clientes</span>
-                  </div>
-                </div>
               </div>
 
-              {/* Footer / Ações Rápidas */}
               <div className="p-3 bg-gray-50 dark:bg-gray-900/50 border-t border-gray-100 dark:border-gray-700 flex gap-2">
                 <button className="flex-1 py-1.5 text-xs font-bold text-gray-600 dark:text-gray-300 hover:bg-white dark:hover:bg-gray-800 rounded shadow-sm border border-transparent hover:border-gray-200 dark:hover:border-gray-600 transition-all">
                   Ver Detalhes
@@ -182,10 +174,11 @@ const AdminTenants = () => {
         </div>
       </div>
 
-      {/* --- MODAL DE NOVA CONSULTORIA COM PORTAL --- */}
+      {/* --- MODAL DE NOVA CONSULTORIA (COM PORTAL E BLUR) --- */}
       {showModal && createPortal(
         <div 
           className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in"
+          style={{ backdropFilter: 'blur(5px)' }}
         >
           <div 
             className="bg-white dark:bg-gray-900 w-full max-w-md rounded-2xl shadow-2xl p-6 border border-gray-200 dark:border-gray-800 animate-scale-in"
@@ -200,6 +193,12 @@ const AdminTenants = () => {
                 <X size={24} />
               </button>
             </div>
+
+            {errorMsg && (
+              <div className="mb-4 p-3 bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-300 text-sm rounded-lg border border-red-200 dark:border-red-800">
+                {errorMsg}
+              </div>
+            )}
 
             <form onSubmit={handleSalvar} className="space-y-4">
               <div>
@@ -228,7 +227,7 @@ const AdminTenants = () => {
               </div>
 
               <div className="bg-yellow-50 dark:bg-yellow-900/20 p-3 rounded-lg border border-yellow-100 dark:border-yellow-900/30 text-xs text-yellow-800 dark:text-yellow-200">
-                <strong>Nota:</strong> Após criar a empresa, você precisará criar um usuário administrador e vinculá-lo a este ID de Tenant manualmente ou via convite (Funcionalidade futura).
+                <strong>Nota:</strong> Você poderá convidar o administrador desta empresa no menu "Equipe".
               </div>
 
               <div className="pt-4 flex gap-3">
