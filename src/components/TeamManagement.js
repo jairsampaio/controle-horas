@@ -1,38 +1,37 @@
 import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { 
-  Users, UserPlus, Mail, Trash2, Shield, CheckCircle, Clock, X 
+  Users, UserPlus, Mail, Trash2, Shield, CheckCircle, Clock, X, Lock, User
 } from 'lucide-react';
 import supabase from '../services/supabase';
 import ConfirmModal from './ConfirmModal';
 
 const TeamManagement = ({ showToast }) => {
   const [members, setMembers] = useState([]);
-  const [invites, setInvites] = useState([]);
   const [loading, setLoading] = useState(true);
   
-  // Estado para a Role do usuário logado
+  // Estado para o Cargo do usuário logado (Admin/Super Admin)
   const [currentUserRole, setCurrentUserRole] = useState(null);
 
   // Estados dos Modais
   const [modalOpen, setModalOpen] = useState(false);
-  const [confirmModalOpen, setConfirmModalOpen] = useState(false);
-  const [inviteToCancel, setInviteToCancel] = useState(null);
   
   const [inviteLoading, setInviteLoading] = useState(false);
 
-  // Form do Convite
+  // --- NOVO FORMULÁRIO (Para criação direta) ---
+  const [nome, setNome] = useState('');
   const [email, setEmail] = useState('');
-  const [role, setRole] = useState('consultor');
+  const [senha, setSenha] = useState(''); // Senha provisória
 
-  // Pega o ID do Tenant e a Role do usuário logado
+  // Pega o ID da Consultoria e o Cargo do usuário logado
   const getUserProfile = async () => {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return null;
     
+    // --- ATUALIZADO PARA LER 'consultoria_id' e 'cargo' ---
     const { data } = await supabase
       .from('profiles')
-      .select('tenant_id, role')
+      .select('consultoria_id, cargo') 
       .eq('id', user.id)
       .single();
       
@@ -43,16 +42,20 @@ const TeamManagement = ({ showToast }) => {
     setLoading(true);
     try {
       const userProfile = await getUserProfile();
-      if (!userProfile?.tenant_id) return;
+      // Se não tiver consultoria, não carrega nada
+      if (!userProfile?.consultoria_id) return;
 
-      // Seta a role no estado para controlarmos a visualização
-      setCurrentUserRole(userProfile.role);
+      // Seta o cargo no estado para controlar o botão de adicionar
+      setCurrentUserRole(userProfile.cargo);
 
-      const { data: membersData } = await supabase.from('profiles').select('*').eq('tenant_id', userProfile.tenant_id);
-      const { data: invitesData } = await supabase.from('saas_convites').select('*').eq('tenant_id', userProfile.tenant_id).eq('status', 'pendente');
+      // --- BUSCA MEMBROS DA MESMA CONSULTORIA ---
+      const { data: membersData } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('consultoria_id', userProfile.consultoria_id);
 
       setMembers(membersData || []);
-      setInvites(invitesData || []);
+      
     } catch (error) {
       console.error('Erro ao carregar equipe:', error);
     } finally {
@@ -64,52 +67,50 @@ const TeamManagement = ({ showToast }) => {
     loadData();
   }, []);
 
-  const handleInvite = async (e) => {
+  // --- NOVA FUNÇÃO DE CRIAR FUNCIONÁRIO (Usa o RPC do Banco) ---
+  const handleCreateMember = async (e) => {
     e.preventDefault();
     setInviteLoading(true);
-    try {
-      const userProfile = await getUserProfile();
-      if (!userProfile?.tenant_id) throw new Error("Empresa não identificada.");
 
-      const { error } = await supabase.from('saas_convites').insert([{
-        tenant_id: userProfile.tenant_id,
-        email: email.trim().toLowerCase(),
-        role: role,
-        status: 'pendente'
-      }]);
+    try {
+      if (senha.length < 6) {
+        throw new Error("A senha provisória deve ter no mínimo 6 caracteres.");
+      }
+
+      // Chama a função SQL que criamos (Segurança Total)
+      const { data, error } = await supabase.rpc('criar_funcionario', {
+        email_func: email.trim().toLowerCase(),
+        senha_func: senha,
+        nome_func: nome
+      });
 
       if (error) throw error;
 
-      if (showToast) showToast(`Convite salvo para ${email}!`, 'sucesso');
+      // O RPC retorna um JSON. Verificamos o status dele.
+      if (data && data.status === 'erro') {
+        throw new Error(data.mensagem);
+      }
+
+      if (showToast) showToast(`Funcionário ${nome} criado com sucesso!`, 'sucesso');
       
+      // Limpa e fecha
       setModalOpen(false);
+      setNome('');
       setEmail('');
+      setSenha('');
+      
+      // Recarrega a lista para mostrar o novo membro
       loadData();
+
     } catch (error) {
-      if (showToast) showToast(error.message || "Erro ao criar convite.", 'erro');
+      let msg = error.message;
+      if (msg.includes('already registered') || msg.includes('violates unique constraint')) {
+        msg = "Este e-mail já está cadastrado no sistema.";
+      }
+      if (showToast) showToast(msg, 'erro');
     } finally {
       setInviteLoading(false);
     }
-  };
-
-  const handleRequestCancel = (id) => {
-    setInviteToCancel(id);
-    setConfirmModalOpen(true);
-  };
-
-  const confirmCancellation = async () => {
-    if (!inviteToCancel) return;
-    
-    const { error } = await supabase.from('saas_convites').delete().eq('id', inviteToCancel);
-    
-    if (!error) {
-        if (showToast) showToast('Convite cancelado.', 'sucesso');
-        loadData();
-    } else {
-        if (showToast) showToast('Erro ao cancelar convite.', 'erro');
-    }
-    setConfirmModalOpen(false);
-    setInviteToCancel(null);
   };
 
   return (
@@ -122,7 +123,7 @@ const TeamManagement = ({ showToast }) => {
             <h1 className="text-xl font-bold text-gray-800 dark:text-white flex items-center gap-2">
               <Users className="text-indigo-600" /> Minha Equipe
             </h1>
-            <p className="text-gray-500 dark:text-gray-400 text-sm">Gerencie acessos e convites.</p>
+            <p className="text-gray-500 dark:text-gray-400 text-sm">Gerencie os consultores da sua empresa.</p>
           </div>
           
           {/* SÓ MOSTRA O BOTÃO SE FOR ADMIN OU SUPER_ADMIN */}
@@ -131,7 +132,7 @@ const TeamManagement = ({ showToast }) => {
               onClick={() => setModalOpen(true)}
               className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg font-medium flex items-center gap-2 shadow-md transition-all text-sm"
             >
-              <UserPlus size={18} /> Convidar
+              <UserPlus size={18} /> Novo Membro
             </button>
           )}
         </div>
@@ -140,7 +141,7 @@ const TeamManagement = ({ showToast }) => {
         <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden">
           <div className="p-4 border-b border-gray-100 dark:border-gray-700 bg-gray-50 dark:bg-gray-900/50">
             <h3 className="font-bold text-gray-700 dark:text-gray-200 flex items-center gap-2 text-sm">
-              <CheckCircle size={16} className="text-green-500" /> Membros Ativos ({members.length})
+              <CheckCircle size={16} className="text-green-500" /> Membros da Empresa ({members.length})
             </h3>
           </div>
           
@@ -150,24 +151,34 @@ const TeamManagement = ({ showToast }) => {
                 <tr>
                   <th className="px-6 py-3">Nome</th>
                   <th className="px-6 py-3">Email</th>
-                  <th className="px-6 py-3">Função</th>
-                  <th className="px-6 py-3 text-center">Ações</th>
+                  <th className="px-6 py-3">Cargo</th>
+                  <th className="px-6 py-3 text-center">Status</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
                 {loading ? (
-                   <tr><td colSpan="4" className="p-6 text-center text-gray-500">Carregando...</td></tr>
+                   <tr><td colSpan="4" className="p-6 text-center text-gray-500">Carregando equipe...</td></tr>
+                ) : members.length === 0 ? (
+                    <tr><td colSpan="4" className="p-6 text-center text-gray-500">Nenhum membro encontrado.</td></tr>
                 ) : members.map(member => (
                   <tr key={member.id} className="hover:bg-gray-50 dark:hover:bg-gray-800/50">
-                    <td className="px-6 py-4 font-medium text-gray-900 dark:text-white">{member.nome_completo || '-'}</td>
+                    <td className="px-6 py-4 font-medium text-gray-900 dark:text-white flex items-center gap-2">
+                         <div className="w-8 h-8 rounded-full bg-indigo-100 dark:bg-indigo-900 text-indigo-600 dark:text-indigo-300 flex items-center justify-center font-bold text-xs">
+                            {member.nome ? member.nome.charAt(0).toUpperCase() : '?'}
+                         </div>
+                         {member.nome || 'Sem Nome'}
+                    </td>
                     <td className="px-6 py-4 text-gray-600 dark:text-gray-300">{member.email}</td>
                     <td className="px-6 py-4">
-                      <span className={`px-2 py-1 rounded text-xs font-bold uppercase ${member.role === 'super_admin' || member.role === 'admin' ? 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400' : 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400'}`}>
-                        {member.role}
+                      <span className={`px-2 py-1 rounded text-xs font-bold uppercase 
+                        ${member.cargo === 'super_admin' ? 'bg-yellow-100 text-yellow-700' : 
+                          member.cargo === 'admin' ? 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400' : 
+                          'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400'}`}>
+                        {member.cargo || 'Colaborador'}
                       </span>
                     </td>
                     <td className="px-6 py-4 text-center">
-                      <button title="Remover (Em breve)" className="text-gray-300 cursor-not-allowed"><Trash2 size={16} /></button>
+                       <span className="text-green-600 text-xs font-bold bg-green-50 px-2 py-1 rounded-full">ATIVO</span>
                     </td>
                   </tr>
                 ))}
@@ -176,73 +187,9 @@ const TeamManagement = ({ showToast }) => {
           </div>
         </div>
 
-        {/* LISTA DE CONVITES PENDENTES */}
-        {invites.length > 0 && (
-          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden">
-            <div className="p-4 border-b border-gray-100 dark:border-gray-700 bg-orange-50 dark:bg-orange-900/20">
-              <h3 className="font-bold text-orange-700 dark:text-orange-200 flex items-center gap-2 text-sm">
-                <Clock size={16} /> Convites Pendentes ({invites.length})
-              </h3>
-            </div>
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm text-left">
-                <thead className="text-gray-500 dark:text-gray-400 font-medium border-b border-gray-200 dark:border-gray-800">
-                  <tr>
-                    <th className="px-6 py-3">Email Convidado</th>
-                    <th className="px-6 py-3">Função</th>
-                    <th className="px-6 py-3">Data Convite</th>
-                    <th className="px-6 py-3 text-center">Ações</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
-                  {invites.map(invite => (
-                    <tr key={invite.id} className="hover:bg-gray-50 dark:hover:bg-gray-800/50">
-                      <td className="px-6 py-4 text-gray-700 dark:text-gray-300 flex items-center gap-2">
-                        <Mail size={14} className="text-gray-400" /> {invite.email}
-                      </td>
-                      <td className="px-6 py-4">
-                        <span className="px-2 py-1 rounded text-xs font-bold uppercase bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-300">
-                          {invite.role}
-                        </span>
-                      </td>
-                      <td className="px-6 py-4 text-gray-500 text-xs">
-                        {new Date(invite.created_at).toLocaleDateString()}
-                      </td>
-                      <td className="px-6 py-4 text-center">
-                        {/* BOTÃO DE CANCELAR SÓ PARA ADMINS */}
-                        {(currentUserRole === 'admin' || currentUserRole === 'super_admin') && (
-                          <button 
-                            onClick={() => handleRequestCancel(invite.id)}
-                            className="text-red-400 hover:text-red-600 p-2 rounded hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
-                            title="Cancelar Convite"
-                          >
-                            <Trash2 size={16} />
-                          </button>
-                        )}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        )}
-
       </div>
 
-      {/* --- MODAIS COM PORTAL (FORA DO FLUXO) --- */}
-
-      <ConfirmModal
-        isOpen={confirmModalOpen}
-        onClose={() => setConfirmModalOpen(false)}
-        onConfirm={confirmCancellation}
-        title="Cancelar Convite?"
-        message="Tem certeza que deseja revogar este convite?"
-        confirmText="Sim, revogar"
-        cancelText="Voltar"
-        type="danger"
-      />
-
+      {/* --- MODAL DE CRIAÇÃO DIRETA --- */}
       {modalOpen && createPortal(
         <div 
           className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in"
@@ -255,41 +202,63 @@ const TeamManagement = ({ showToast }) => {
             
             <div className="flex justify-between items-center mb-6">
               <h3 className="text-lg font-bold text-gray-800 dark:text-white flex items-center gap-2">
-                <Mail className="text-indigo-600" /> Convidar Membro
+                <UserPlus className="text-indigo-600" /> Cadastrar Funcionário
               </h3>
               <button onClick={() => setModalOpen(false)} className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200">
                 <X size={24} />
               </button>
             </div>
 
-            <form onSubmit={handleInvite} className="space-y-4">
+            <form onSubmit={handleCreateMember} className="space-y-4">
               <div className="bg-blue-50 dark:bg-blue-900/20 p-3 rounded-lg border border-blue-100 dark:border-blue-800 text-xs text-blue-800 dark:text-blue-200 flex gap-2">
                 <Shield size={16} className="shrink-0" />
-                <p>O usuário receberá acesso aos dados desta consultoria ao criar conta com este e-mail.</p>
+                <p>O usuário será criado imediatamente e vinculado à sua consultoria. Entregue a senha provisória para ele.</p>
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">E-mail</label>
-                <input 
-                  type="email" 
-                  value={email} 
-                  onChange={e => setEmail(e.target.value)}
-                  className="w-full rounded-lg border border-gray-300 dark:border-gray-700 p-2.5 bg-white dark:bg-gray-800 text-gray-900 dark:text-white outline-none focus:ring-2 focus:ring-indigo-500"
-                  placeholder="nome@empresa.com"
-                  required
-                />
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Nome Completo</label>
+                <div className="relative">
+                    <User size={18} className="absolute left-3 top-2.5 text-gray-400" />
+                    <input 
+                    type="text" 
+                    value={nome} 
+                    onChange={e => setNome(e.target.value)}
+                    className="w-full pl-10 rounded-lg border border-gray-300 dark:border-gray-700 p-2.5 bg-white dark:bg-gray-800 text-gray-900 dark:text-white outline-none focus:ring-2 focus:ring-indigo-500"
+                    placeholder="Ex: Ana Silva"
+                    required
+                    />
+                </div>
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Nível de Acesso</label>
-                <select 
-                  value={role}
-                  onChange={e => setRole(e.target.value)}
-                  className="w-full rounded-lg border border-gray-300 dark:border-gray-700 p-2.5 bg-white dark:bg-gray-800 text-gray-900 dark:text-white outline-none focus:ring-2 focus:ring-indigo-500"
-                >
-                  <option value="consultor">Consultor (Operacional)</option>
-                  <option value="admin">Administrador (Gestão)</option>
-                </select>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">E-mail de Acesso</label>
+                <div className="relative">
+                    <Mail size={18} className="absolute left-3 top-2.5 text-gray-400" />
+                    <input 
+                    type="email" 
+                    value={email} 
+                    onChange={e => setEmail(e.target.value)}
+                    className="w-full pl-10 rounded-lg border border-gray-300 dark:border-gray-700 p-2.5 bg-white dark:bg-gray-800 text-gray-900 dark:text-white outline-none focus:ring-2 focus:ring-indigo-500"
+                    placeholder="ana@empresa.com"
+                    required
+                    />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Senha Provisória</label>
+                <div className="relative">
+                    <Lock size={18} className="absolute left-3 top-2.5 text-gray-400" />
+                    <input 
+                    type="text" 
+                    value={senha} 
+                    onChange={e => setSenha(e.target.value)}
+                    className="w-full pl-10 rounded-lg border border-gray-300 dark:border-gray-700 p-2.5 bg-white dark:bg-gray-800 text-gray-900 dark:text-white outline-none focus:ring-2 focus:ring-indigo-500 font-mono"
+                    placeholder="Mínimo 6 caracteres"
+                    required
+                    minLength={6}
+                    />
+                </div>
               </div>
 
               <div className="pt-4 flex gap-3">
@@ -301,7 +270,7 @@ const TeamManagement = ({ showToast }) => {
                   disabled={inviteLoading}
                   className="flex-1 py-2.5 bg-indigo-600 text-white rounded-lg font-bold hover:bg-indigo-700 shadow-lg shadow-indigo-200 dark:shadow-none transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed flex justify-center items-center gap-2"
                 >
-                  {inviteLoading ? 'Salvando...' : 'Salvar Convite'}
+                  {inviteLoading ? 'Criando...' : 'Criar Membro'}
                 </button>
               </div>
             </form>
