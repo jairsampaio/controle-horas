@@ -32,12 +32,9 @@ const App = () => {
   const [servicos, setServicos] = useState([]);
   const [clientes, setClientes] = useState([]);
   const [canais, setCanais] = useState([]); 
-  // REMOVIDO: const [tenants, setTenants] ... (Não precisamos mais carregar lista de empresas aqui)
   const [loading, setLoading] = useState(true);
   
   const [activeTab, setActiveTab] = useState('dashboard');
-  
-  // Estado para controlar qual Tenant (Consultoria) está sendo visualizado nos detalhes (Ainda útil para o Admin)
   const [tenantIdSelecionado, setTenantIdSelecionado] = useState(null);
 
   const [showModal, setShowModal] = useState(false);
@@ -50,12 +47,10 @@ const App = () => {
   const [session, setSession] = useState(null);
   const [showConfigModal, setShowConfigModal] = useState(false);
   
-  // Estados para Inativação de Cliente
   const [confirmModalOpen, setConfirmModalOpen] = useState(false);
   const [clientToInactivate, setClientToInactivate] = useState(null);
   const [mostrarInativos, setMostrarInativos] = useState(false); 
 
-  // CONFIGURAÇÕES GERAIS
   const [valorHoraPadrao, setValorHoraPadrao] = useState('150.00'); 
   const [nomeConsultor, setNomeConsultor] = useState(''); 
 
@@ -71,7 +66,6 @@ const App = () => {
     canal: [], 
     cliente: [],
     status: [], 
-    // REMOVIDO: tenants: [],
     dataInicio: '',
     dataFim: '',
     solicitantes: []
@@ -98,7 +92,6 @@ const App = () => {
     ativo: true
   });
 
-  // CORES DO STATUS
   const statusConfig = {
     'Pendente': { color: 'bg-gray-100 dark:bg-gray-700/50 text-gray-700 dark:text-gray-300 border-gray-200 dark:border-gray-600', icon: Hourglass, label: 'Pendente' },
     'Em aprovação': { color: 'bg-orange-100 dark:bg-orange-900/30 text-orange-800 dark:text-orange-300 border-orange-200 dark:border-orange-800', icon: Timer, label: 'Em Aprovação' },
@@ -171,10 +164,8 @@ const App = () => {
     } catch (error) { console.error('Erro ao salvar config:', error); showToast('Erro ao salvar configuração.', 'erro'); } finally { setLoading(false); }
   };
 
-  // --- NOVA FUNÇÃO DE CARREGAMENTO BLINDADA ---
   const carregarDados = async () => {
     try {
-      // 1. Identificar a Consultoria do Usuário Logado
       const { data: userProfile, error: profileError } = await supabase
         .from('profiles')
         .select('consultoria_id')
@@ -188,27 +179,24 @@ const App = () => {
 
       const meuId = userProfile.consultoria_id;
 
-      // 2. Buscar Serviços (FILTRADO POR ID)
       const { data: dataServicos, error: errorServicos } = await supabase
         .from('servicos_prestados')
         .select('*, canais(nome)') 
-        .eq('consultoria_id', meuId) // Segurança Total
+        .eq('consultoria_id', meuId) 
         .order('data', { ascending: false });
       
       if (errorServicos) throw errorServicos;
       setServicos(dataServicos);
 
-      // 3. Buscar Clientes (FILTRADO POR ID)
       const { data: dataClientes, error: errorClientes } = await supabase
         .from('clientes')
         .select('*') 
-        .eq('consultoria_id', meuId) // Segurança Total
+        .eq('consultoria_id', meuId) 
         .order('nome', { ascending: true });
       
       if (errorClientes) throw errorClientes;
       setClientes(dataClientes);
 
-      // 4. Buscar Canais (FILTRADO POR ID)
       const { data: dataCanais, error: errorCanais } = await supabase
         .from('canais')
         .select('*')
@@ -217,8 +205,6 @@ const App = () => {
         .order('nome', { ascending: true });
       
       if (!errorCanais) setCanais(dataCanais);
-
-      // REMOVIDO: Carregamento de lista de Tenants. Não é necessário na view operacional.
 
     } catch (error) { 
       console.error('Erro ao carregar dados:', error); 
@@ -256,7 +242,6 @@ const App = () => {
 
   const salvarServico = async () => {
     try {
-      // 1. Precisamos garantir o consultoria_id antes de salvar
       const { data: profile } = await supabase.from('profiles').select('consultoria_id').eq('id', session.user.id).single();
       const consultoriaId = profile?.consultoria_id;
 
@@ -265,7 +250,7 @@ const App = () => {
       const dadosParaSalvar = {
           ...formData,
           user_id: session.user.id,
-          consultoria_id: consultoriaId // Garante que o novo serviço já nasça com dono
+          consultoria_id: consultoriaId 
       };
 
       let error;
@@ -482,16 +467,13 @@ const App = () => {
   const handleManageTeam = (cliente) => { setClienteParaSolicitantes(cliente); setShowSolicitantesModal(true); };
   const handleSort = (key) => { let direction = 'asc'; if (sortConfig.key === key && sortConfig.direction === 'asc') direction = 'desc'; setSortConfig({ key, direction }); };
 
-  // --- FUNÇÃO PARA NAVEGAR PARA DETALHES DO TENANT ---
   const handleVerDetalhesTenant = (id) => {
     setTenantIdSelecionado(id);
-    setActiveTab('tenant-details'); // Muda a aba manualmente em vez de usar rota
+    setActiveTab('tenant-details'); 
   };
 
-  // --- FILTRO DE SERVIÇOS (LIMPO) ---
   const servicosFiltrados = () => {
     let result = servicos.filter(s => {
-      // REMOVIDO: Filtro de Tenants
       if (filtros.canal.length > 0) { const nomeCanalServico = s.canais?.nome || 'Direto'; if (!filtros.canal.includes(nomeCanalServico)) return false; }
       if (filtros.cliente.length > 0) { if (!filtros.cliente.includes(s.cliente)) return false; }
       if (filtros.status.length > 0) { if (!filtros.status.includes(s.status)) return false; }
@@ -513,11 +495,8 @@ const App = () => {
     return result;
   };
 
-  // --- FILTRO DE CLIENTES (LIMPO) ---
   const filtrarClientes = (todosClientes) => {
-    // Primeiro filtro: Ativos/Inativos
     let filtrados = mostrarInativos ? todosClientes : todosClientes.filter(c => c.ativo !== false);
-    // REMOVIDO: Filtro de Tenants
     return filtrados;
   };
 
@@ -537,7 +516,6 @@ const App = () => {
   const opcoesCanais = ['Direto', ...canais.map(c => c.nome)];
   const opcoesClientes = clientes.map(c => c.nome);
   const opcoesStatus = ['Pendente', 'Em aprovação', 'Aprovado', 'NF Emitida', 'Pago'];
-  // REMOVIDO: opcoesTenants
   const clientesAtivos = clientes.filter(c => c.ativo !== false);
 
   return (
@@ -556,7 +534,6 @@ const App = () => {
 
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden relative">
         
-        {/* HEADER PRINCIPAL */}
         <header className="bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-800 h-16 flex items-center justify-between px-6 shadow-sm z-10">
           <div className="flex items-center gap-4">
             <button onClick={() => setIsMobileMenuOpen(true)} className="md:hidden p-2 -ml-2 text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800">
@@ -567,13 +544,11 @@ const App = () => {
               {activeTab === 'servicos' && <><Briefcase className="text-indigo-600 dark:text-indigo-400" /> Meus Serviços</>}
               {activeTab === 'clientes' && <><Users className="text-indigo-600 dark:text-indigo-400" /> Clientes</>}
               
-              {/* TÍTULOS DO ERP */}
               {activeTab === 'admin-tenants' && <><ShieldCheck className="text-yellow-600 dark:text-yellow-400" /> Gestão de Assinantes</>}
               {activeTab === 'admin-finance' && <><Wallet className="text-yellow-600 dark:text-yellow-400" /> Financeiro</>}
               {activeTab === 'team' && <><Users className="text-indigo-600 dark:text-indigo-400" /> Gestão de Equipe</>}
               {activeTab === 'admin-plans' && <><FileText className="text-yellow-600 dark:text-yellow-400" /> Planos & Preços</>}
 
-              {/* TÍTULO DOS DETALHES (NOVO) */}
               {activeTab === 'tenant-details' && <><Building2 className="text-indigo-600" /> Detalhes da Consultoria</>}
             </h1>
           </div>
@@ -591,7 +566,6 @@ const App = () => {
               <div className="text-center py-12"><div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600 mx-auto"></div><p className="mt-4 text-gray-600 dark:text-gray-400">Carregando Dados...</p></div>
             ) : (
                 <>
-                    {/* --- TELAS OPERACIONAIS --- */}
                     {activeTab === 'dashboard' && (
                         <div className="space-y-6">
                             <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-6">
@@ -633,8 +607,6 @@ const App = () => {
                                 </div>
                                 <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
                                 
-                                {/* REMOVIDO FILTRO DE EMPRESA DAQUI */}
-
                                 <div className="col-span-full md:col-span-3 lg:col-span-3 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                                     <MultiSelect options={opcoesCanais} selected={filtros.canal} onChange={(novos) => setFiltros({...filtros, canal: novos})} placeholder="Canais..." />
                                     <MultiSelect options={opcoesClientes} selected={filtros.cliente} onChange={(novos) => setFiltros({...filtros, cliente: novos})} placeholder="Clientes..." />
@@ -677,19 +649,15 @@ const App = () => {
                                         </button>
                                     </div>
                                 </div>
-                                {/* REMOVIDO: Filtro de empresa na tela de clientes */}
                             </div>
                             <ClientsTable clientes={clientesParaTabela} onEdit={editarCliente} onDeleteClick={handleRequestInactivate} onReactivate={reativarCliente} onManageTeam={handleManageTeam} />
                         </div>
                     )}
 
-                    {/* --- NOVAS TELAS DO ERP --- */}
                     {activeTab === 'admin-tenants' && (
-                        /* PASSAMOS A FUNÇÃO DE NAVEGAÇÃO VIA PROPS AGORA */
                         <AdminTenants onViewDetails={handleVerDetalhesTenant} />
                     )}
 
-                    {/* --- TELA DE DETALHES DO TENANT (NOVA) --- */}
                     {activeTab === 'tenant-details' && (
                         <div className="space-y-6">
                             <button 
@@ -703,7 +671,6 @@ const App = () => {
                                 <h2 className="text-2xl font-bold mb-4">Dashboard da Consultoria</h2>
                                 <p className="text-gray-500">ID Selecionado: {tenantIdSelecionado}</p>
                                 <p className="text-sm mt-4 text-gray-400">Aqui você carregará os dados específicos desta empresa.</p>
-                                {/* AQUI VOCÊ IMPORTARÁ O DASHBOARD ESPECÍFICO DEPOIS */}
                             </div>
                         </div>
                     )}
@@ -719,7 +686,6 @@ const App = () => {
         </main>
       </div>
 
-      {/* MODALS */}
       <ServiceModal 
         isOpen={showModal} 
         onClose={() => { setShowModal(false); setEditingService(null); resetForm(); }} 

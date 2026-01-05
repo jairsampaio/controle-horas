@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Mail, Lock, Eye, EyeOff, Loader2, AlertCircle, LogIn, ShieldCheck, ArrowLeft, KeyRound } from 'lucide-react';
+import { Mail, Lock, Eye, EyeOff, Loader2, AlertCircle, LogIn, ShieldCheck, ArrowLeft, Key } from 'lucide-react'; // Trocado para Key
 import supabase from '../services/supabase';
 
 const Auth = () => {
@@ -10,7 +10,6 @@ const Auth = () => {
   const [errorMsg, setErrorMsg] = useState('');
   const [successMsg, setSuccessMsg] = useState('');
   
-  // Controle de tela: 'login' ou 'recovery'
   const [view, setView] = useState('login'); 
 
   const handleLogin = async (e) => {
@@ -36,9 +35,8 @@ const Auth = () => {
     setErrorMsg('');
     setSuccessMsg('');
 
-    // O Supabase envia um email com link para o usuário redefinir a senha
     const { error } = await supabase.auth.resetPasswordForEmail(email, {
-      redirectTo: window.location.origin, // Redireciona de volta para o seu site
+      redirectTo: window.location.origin, 
     });
 
     if (error) {
@@ -53,7 +51,6 @@ const Auth = () => {
     <div className="min-h-screen bg-gray-50 dark:bg-gray-950 flex items-center justify-center p-4 transition-colors duration-500">
       <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl w-full max-w-sm overflow-hidden border border-gray-100 dark:border-gray-700 animate-fade-in-up">
         
-        {/* Cabeçalho */}
         <div className="bg-indigo-900 dark:bg-indigo-950 p-8 text-center relative overflow-hidden group">
           <div className="absolute top-0 left-0 w-full h-full bg-white opacity-5 transform -skew-x-12 translate-x-full group-hover:translate-x-0 transition-transform duration-700"></div>
           
@@ -66,7 +63,7 @@ const Auth = () => {
                 </>
             ) : (
                 <>
-                    <KeyRound className="text-white mb-2 opacity-90" size={32} />
+                    <Key className="text-white mb-2 opacity-90" size={32} />
                     <h1 className="text-2xl font-bold text-white mb-1">Recuperar Senha</h1>
                     <p className="text-indigo-200 text-xs uppercase tracking-wider">Vamos te ajudar a entrar</p>
                 </>
@@ -77,21 +74,18 @@ const Auth = () => {
         <div className="p-8">
           
           {errorMsg && (
-            <div className="mb-6 p-4 rounded-xl bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-300 text-sm flex items-start gap-3 animate-pulse">
-              <AlertCircle size={20} className="flex-shrink-0 mt-0.5 text-red-600 dark:text-red-400" />
-              <span>{errorMsg}</span>
+            <div className="mb-6 p-3 rounded-lg bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-600 dark:text-red-300 text-sm flex items-center gap-2">
+              <AlertCircle size={16} /> {errorMsg}
             </div>
           )}
 
           {successMsg && (
-            <div className="mb-6 p-4 rounded-xl bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 text-green-800 dark:text-green-300 text-sm flex items-start gap-3">
-              <CheckCircle size={20} className="flex-shrink-0 mt-0.5 text-green-600 dark:text-green-400" />
-              <span>{successMsg}</span>
+            <div className="mb-6 p-3 rounded-lg bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 text-green-700 dark:text-green-300 text-sm flex items-center gap-2">
+              <ShieldCheck size={16} /> {successMsg}
             </div>
           )}
 
           {view === 'login' ? (
-              // --- FORMULÁRIO DE LOGIN ---
               <form onSubmit={handleLogin} className="space-y-5">
                 <div className="space-y-1">
                   <label className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider ml-1">Email Corporativo</label>
@@ -148,7 +142,6 @@ const Auth = () => {
                 </button>
               </form>
           ) : (
-              // --- FORMULÁRIO DE RECUPERAÇÃO ---
               <form onSubmit={handleRecovery} className="space-y-5">
                 <p className="text-sm text-gray-600 dark:text-gray-400 text-center mb-4">
                     Digite seu e-mail para receber um link de redefinição de senha.
