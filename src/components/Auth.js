@@ -1,9 +1,14 @@
 import React, { useState } from 'react';
-import { Mail, Lock, Eye, EyeOff, Loader2, AlertCircle, LogIn, UserPlus, CheckCircle } from 'lucide-react';
+import { Mail, Lock, Eye, EyeOff, Loader2, AlertCircle, LogIn, UserPlus, CheckCircle, Building2, User } from 'lucide-react';
 import supabase from '../services/supabase';
 
 const Auth = () => {
   const [loading, setLoading] = useState(false);
+  
+  // --- NOVOS CAMPOS PARA O CADASTRO COMPLETO ---
+  const [nomeUsuario, setNomeUsuario] = useState('');
+  const [nomeEmpresa, setNomeEmpresa] = useState('');
+  
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [isRegistering, setIsRegistering] = useState(false);
@@ -26,7 +31,6 @@ const Auth = () => {
     if (msg.includes('already registered')) return 'Este e-mail já está cadastrado.';
     
     // --- ERRO DO TRIGGER (SEM CONVITE) ---
-    // O banco retorna "Acesso Negado: Este e-mail não possui um convite..."
     if (msg.includes('acesso negado') || msg.includes('convite')) {
         return 'Cadastro bloqueado: Este e-mail não possui um convite ativo para entrar no sistema.';
     }
@@ -41,15 +45,32 @@ const Auth = () => {
     setErrorMsg('');
     setSuccessMsg('');
 
+    // Validação básica para cadastro
+    if (isRegistering) {
+        if (!nomeUsuario.trim()) {
+            setErrorMsg('Por favor, informe seu nome completo.');
+            setLoading(false);
+            return;
+        }
+        if (!nomeEmpresa.trim()) {
+            setErrorMsg('Por favor, informe o nome da sua empresa/consultoria.');
+            setLoading(false);
+            return;
+        }
+    }
+
     let result;
     
     if (isRegistering) {
+      // --- AQUI ESTÁ A MUDANÇA PRINCIPAL ---
+      // Enviamos os dados extras (metadata) para o Gatilho do Banco ler
       result = await supabase.auth.signUp({ 
         email, 
         password,
         options: {
             data: {
-                full_name: email.split('@')[0] // Salva um nome provisório
+                nome_completo: nomeUsuario, // Vai para raw_user_meta_data
+                nome_empresa: nomeEmpresa   // O Gatilho vai usar isso para criar a Consultoria
             }
         }
       });
@@ -63,9 +84,8 @@ const Auth = () => {
       setErrorMsg(traduzirErro(error));
     } else {
       if (isRegistering) {
-        setSuccessMsg(`Cadastro realizado! Se o login não for automático, verifique seu e-mail.`);
-        // Em muitos casos o Supabase faz login automático se não precisar confirmar email
-        // Se precisar confirmar, a mensagem acima orienta.
+        setSuccessMsg(`Cadastro realizado! A consultoria "${nomeEmpresa}" foi criada. Verifique seu e-mail se necessário.`);
+        
         if (!result.data.session) {
              setIsRegistering(false);
              setPassword('');
@@ -79,6 +99,11 @@ const Auth = () => {
     setIsRegistering(!isRegistering);
     setErrorMsg('');
     setSuccessMsg('');
+    // Limpa campos extras ao trocar de aba
+    if (!isRegistering) {
+        setNomeUsuario('');
+        setNomeEmpresa('');
+    }
   };
 
   return (
@@ -89,10 +114,10 @@ const Auth = () => {
         <div className="bg-indigo-600 dark:bg-indigo-700 p-8 text-center relative overflow-hidden group">
           <div className="absolute top-0 left-0 w-full h-full bg-white opacity-5 transform -skew-x-12 translate-x-full group-hover:translate-x-0 transition-transform duration-700"></div>
           <h1 className="text-3xl font-bold text-white mb-2 relative z-10">
-            {isRegistering ? 'Criar Conta' : 'Bem-vindo'}
+            {isRegistering ? 'Nova Consultoria' : 'Bem-vindo'}
           </h1>
           <p className="text-indigo-100 text-sm relative z-10">
-            {isRegistering ? 'Junte-se ao controle de horas' : 'Faça login para continuar'}
+            {isRegistering ? 'Cadastre sua empresa e comece' : 'Faça login para continuar'}
           </p>
         </div>
 
@@ -115,8 +140,45 @@ const Auth = () => {
             </div>
           )}
 
-          <form onSubmit={handleAuth} className="space-y-5">
+          <form onSubmit={handleAuth} className="space-y-4">
             
+            {/* CAMPOS EXTRAS QUE SÓ APARECEM NO CADASTRO */}
+            {isRegistering && (
+                <>
+                    <div className="space-y-1 animate-fade-in-up" style={{ animationDelay: '0.1s' }}>
+                        <label className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider ml-1">Seu Nome</label>
+                        <div className="relative">
+                            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-gray-400">
+                                <User size={18} />
+                            </div>
+                            <input
+                                type="text"
+                                placeholder="Ex: João Silva"
+                                value={nomeUsuario}
+                                onChange={(e) => setNomeUsuario(e.target.value)}
+                                className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700/50 text-gray-900 dark:text-white outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all"
+                            />
+                        </div>
+                    </div>
+
+                    <div className="space-y-1 animate-fade-in-up" style={{ animationDelay: '0.2s' }}>
+                        <label className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider ml-1">Nome da Consultoria</label>
+                        <div className="relative">
+                            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-gray-400">
+                                <Building2 size={18} />
+                            </div>
+                            <input
+                                type="text"
+                                placeholder="Ex: JS Consultoria"
+                                value={nomeEmpresa}
+                                onChange={(e) => setNomeEmpresa(e.target.value)}
+                                className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700/50 text-gray-900 dark:text-white outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all"
+                            />
+                        </div>
+                    </div>
+                </>
+            )}
+
             <div className="space-y-1">
               <label className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider ml-1">Email</label>
               <div className="relative">
@@ -176,7 +238,7 @@ const Auth = () => {
 
           <div className="mt-6 text-center">
             <p className="text-sm text-gray-500 dark:text-gray-400">
-              {isRegistering ? 'Já tem uma conta?' : 'Ainda não tem conta?'}
+              {isRegistering ? 'Já tem uma conta?' : 'Quer cadastrar sua empresa?'}
             </p>
             <button
               onClick={toggleMode}
