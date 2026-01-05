@@ -4,7 +4,8 @@ import {
   Users, UserPlus, Mail, Trash2, Shield, CheckCircle, Clock, X, Lock, User
 } from 'lucide-react';
 import supabase from '../services/supabase';
-import ConfirmModal from './ConfirmModal';
+// Certifique-se de que o ConfirmModal existe na mesma pasta, ou ajuste o import
+import ConfirmModal from './ConfirmModal'; 
 
 const TeamManagement = ({ showToast }) => {
   const [members, setMembers] = useState([]);
@@ -15,7 +16,6 @@ const TeamManagement = ({ showToast }) => {
 
   // Estados dos Modais
   const [modalOpen, setModalOpen] = useState(false);
-  
   const [inviteLoading, setInviteLoading] = useState(false);
 
   // --- NOVO FORMULÁRIO (Para criação direta) ---
@@ -23,41 +23,43 @@ const TeamManagement = ({ showToast }) => {
   const [email, setEmail] = useState('');
   const [senha, setSenha] = useState(''); // Senha provisória
 
-  // Pega o ID da Consultoria e o Cargo do usuário logado
-  const getUserProfile = async () => {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return null;
-    
-    // --- ATUALIZADO PARA LER 'consultoria_id' e 'cargo' ---
-    const { data } = await supabase
-      .from('profiles')
-      .select('consultoria_id, cargo') 
-      .eq('id', user.id)
-      .single();
-      
-    return data;
-  };
-
+  // Função Principal de Carregamento
   const loadData = async () => {
     setLoading(true);
     try {
-      const userProfile = await getUserProfile();
-      // Se não tiver consultoria, não carrega nada
-      if (!userProfile?.consultoria_id) return;
+      // 1. Identificar quem está logado
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+      
+      // 2. Buscar o perfil do usuário logado (Consultoria e Cargo)
+      const { data: userProfile, error: profileError } = await supabase
+        .from('profiles')
+        .select('consultoria_id, cargo') 
+        .eq('id', user.id)
+        .single();
 
-      // Seta o cargo no estado para controlar o botão de adicionar
+      if (profileError || !userProfile?.consultoria_id) {
+        console.error("Erro ao buscar perfil:", profileError);
+        return;
+      }
+
+      // IMPORTANTE: Define o cargo para mostrar/esconder o botão
       setCurrentUserRole(userProfile.cargo);
 
-      // --- BUSCA MEMBROS DA MESMA CONSULTORIA ---
-      const { data: membersData } = await supabase
+      // 3. Buscar membros da mesma consultoria
+      const { data: membersData, error: membersError } = await supabase
         .from('profiles')
         .select('*')
-        .eq('consultoria_id', userProfile.consultoria_id);
+        .eq('consultoria_id', userProfile.consultoria_id)
+        .order('nome', { ascending: true });
+
+      if (membersError) throw membersError;
 
       setMembers(membersData || []);
       
     } catch (error) {
       console.error('Erro ao carregar equipe:', error);
+      if (showToast) showToast("Erro ao carregar dados da equipe.", 'erro');
     } finally {
       setLoading(false);
     }
@@ -67,7 +69,7 @@ const TeamManagement = ({ showToast }) => {
     loadData();
   }, []);
 
-  // --- NOVA FUNÇÃO DE CRIAR FUNCIONÁRIO (Usa o RPC do Banco) ---
+  // --- FUNÇÃO DE CRIAR FUNCIONÁRIO (Usa o RPC do Banco) ---
   const handleCreateMember = async (e) => {
     e.preventDefault();
     setInviteLoading(true);
@@ -77,7 +79,7 @@ const TeamManagement = ({ showToast }) => {
         throw new Error("A senha provisória deve ter no mínimo 6 caracteres.");
       }
 
-      // Chama a função SQL que criamos (Segurança Total)
+      // Chama a função SQL segura
       const { data, error } = await supabase.rpc('criar_funcionario', {
         email_func: email.trim().toLowerCase(),
         senha_func: senha,
@@ -86,7 +88,7 @@ const TeamManagement = ({ showToast }) => {
 
       if (error) throw error;
 
-      // O RPC retorna um JSON. Verificamos o status dele.
+      // Verifica retorno do RPC
       if (data && data.status === 'erro') {
         throw new Error(data.mensagem);
       }
@@ -99,7 +101,7 @@ const TeamManagement = ({ showToast }) => {
       setEmail('');
       setSenha('');
       
-      // Recarrega a lista para mostrar o novo membro
+      // Recarrega a lista
       loadData();
 
     } catch (error) {
@@ -126,7 +128,7 @@ const TeamManagement = ({ showToast }) => {
             <p className="text-gray-500 dark:text-gray-400 text-sm">Gerencie os consultores da sua empresa.</p>
           </div>
           
-          {/* SÓ MOSTRA O BOTÃO SE FOR ADMIN OU SUPER_ADMIN */}
+          {/* BOTÃO DE NOVO MEMBRO - Só aparece para Admin ou Super Admin */}
           {(currentUserRole === 'admin' || currentUserRole === 'super_admin') && (
             <button 
               onClick={() => setModalOpen(true)}
