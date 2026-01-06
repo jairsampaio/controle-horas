@@ -83,7 +83,7 @@ const TeamManagement = ({ showToast }) => {
       // (Isso é necessário porque criar uma nova instância exige esses dados explícitos)
       // ==============================================================================
       const SUPABASE_URL = 'https://ubwutmslwlefviiabysc.supabase.co'; // <--- COLE SUA URL AQUI
-      const SUPABASE_ANON_KEY = 'yJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVid3V0bXNsd2xlZnZpaWFieXNjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjUyMjQ4MTgsImV4cCI6MjA4MDgwMDgxOH0.lTlvqtu0hKtYDQXJB55BG9ueZ-MdtbCtBvSNQMII2b8';     // <--- COLE SUA ANON KEY AQUI
+      const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVid3V0bXNsd2xlZnZpaWFieXNjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjUyMjQ4MTgsImV4cCI6MjA4MDgwMDgxOH0.lTlvqtu0hKtYDQXJB55BG9ueZ-MdtbCtBvSNQMII2b8';     // <--- COLE SUA ANON KEY AQUI
       // ==============================================================================
 
       // Validação simples pra você não esquecer
