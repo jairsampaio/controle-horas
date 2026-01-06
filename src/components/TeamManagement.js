@@ -1,11 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { 
-  Users, UserPlus, Mail, Trash2, Shield, CheckCircle, Clock, X, Lock, User
+  Users, UserPlus, Mail, Shield, CheckCircle, X, Lock, User
 } from 'lucide-react';
 import supabase from '../services/supabase';
-// Certifique-se de que o ConfirmModal existe na mesma pasta, ou ajuste o import
-import ConfirmModal from './ConfirmModal'; 
 
 const TeamManagement = ({ showToast }) => {
   const [members, setMembers] = useState([]);
@@ -79,18 +77,19 @@ const TeamManagement = ({ showToast }) => {
         throw new Error("A senha provisória deve ter no mínimo 6 caracteres.");
       }
 
-      // Chama a função SQL segura
+      // Chama a função SQL segura (Adicionei o cargo_func)
       const { data, error } = await supabase.rpc('criar_funcionario', {
         email_func: email.trim().toLowerCase(),
         senha_func: senha,
-        nome_func: nome
+        nome_func: nome,
+        cargo_func: 'colaborador' // <--- ADICIONADO: Define o cargo padrão
       });
 
       if (error) throw error;
 
       // Verifica retorno do RPC
       if (data && data.status === 'erro') {
-        throw new Error(data.mensagem);
+        throw new Error(data.msg || "Erro desconhecido ao criar usuário.");
       }
 
       if (showToast) showToast(`Funcionário ${nome} criado com sucesso!`, 'sucesso');
@@ -105,6 +104,7 @@ const TeamManagement = ({ showToast }) => {
       loadData();
 
     } catch (error) {
+      console.error(error);
       let msg = error.message;
       if (msg.includes('already registered') || msg.includes('violates unique constraint')) {
         msg = "Este e-mail já está cadastrado no sistema.";
@@ -161,12 +161,12 @@ const TeamManagement = ({ showToast }) => {
                 {loading ? (
                    <tr><td colSpan="4" className="p-6 text-center text-gray-500">Carregando equipe...</td></tr>
                 ) : members.length === 0 ? (
-                    <tr><td colSpan="4" className="p-6 text-center text-gray-500">Nenhum membro encontrado.</td></tr>
+                   <tr><td colSpan="4" className="p-6 text-center text-gray-500">Nenhum membro encontrado.</td></tr>
                 ) : members.map(member => (
                   <tr key={member.id} className="hover:bg-gray-50 dark:hover:bg-gray-800/50">
                     <td className="px-6 py-4 font-medium text-gray-900 dark:text-white flex items-center gap-2">
                          <div className="w-8 h-8 rounded-full bg-indigo-100 dark:bg-indigo-900 text-indigo-600 dark:text-indigo-300 flex items-center justify-center font-bold text-xs">
-                            {member.nome ? member.nome.charAt(0).toUpperCase() : '?'}
+                           {member.nome ? member.nome.charAt(0).toUpperCase() : '?'}
                          </div>
                          {member.nome || 'Sem Nome'}
                     </td>
