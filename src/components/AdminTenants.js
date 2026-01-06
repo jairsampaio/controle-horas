@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
-import { Search, Plus, Building2, Calendar, Edit, X, Save, Eye, User, Lock, Mail } from 'lucide-react';
+import { createClient } from '@supabase/supabase-js'; // <--- IMPORTANTE
+import { Search, Plus, Building2, Edit, X, Save, Eye, User, Lock, Mail } from 'lucide-react';
 import supabase from '../services/supabase';
 
 // Componente de Badge (Visual do status)
@@ -85,7 +86,7 @@ const AdminTenants = ({ onViewDetails }) => {
     setSaving(true);
     try {
       if (editingId) {
-        // --- MODO EDIÇÃO (Apenas dados da empresa) ---
+        // --- MODO EDIÇÃO (Simples Update) ---
         const { error } = await supabase
           .from('consultorias')
           .update({ 
@@ -97,47 +98,86 @@ const AdminTenants = ({ onViewDetails }) => {
         if (error) throw error;
 
       } else {
-        // --- MODO CRIAÇÃO (Fluxo Super Admin) ---
-        // Validações extras
+        // --- MODO CRIAÇÃO (Fluxo Corrigido via React) ---
+        
+        // 1. Validações
         if (!formData.email_admin || !formData.senha_admin || !formData.nome_dono) {
-            throw new Error("Para criar uma nova consultoria, você deve definir o Dono (Nome, Email e Senha).");
+            throw new Error("Preencha todos os dados do Dono da consultoria.");
         }
 
-        // Chama a função Mágica SQL (Empresa + Dono + Senha)
-        const { data, error } = await supabase.rpc('criar_nova_assinatura', {
-            nome_empresa: formData.nome,
-            email_dono: formData.email_admin,
-            senha_dono: formData.senha_admin,
-            nome_dono: formData.nome_dono
+        // ==============================================================================
+        // ⚠️ ATENÇÃO: SUBSTITUA ABAIXO PELA SUA URL E KEY (Igual fez no TeamManagement)
+        // ==============================================================================
+        const SUPABASE_URL = 'https://ubwutmslwlefviiabysc.supabase.co'; 
+        const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVid3V0bXNsd2xlZnZpaWFieXNjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjUyMjQ4MTgsImV4cCI6MjA4MDgwMDgxOH0.lTlvqtu0hKtYDQXJB55BG9ueZ-MdtbCtBvSNQMII2b8';
+        // ==============================================================================
+
+        // Cliente Temporário para criar o usuário sem deslogar o Admin
+        const tempClient = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+            auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false }
         });
 
-        if (error) throw error;
-        
-        // Verifica se a função SQL retornou erro tratado
-        if (data && data.status === 'erro') {
-            throw new Error(data.msg);
-        }
+        // 2. Cria o Usuário DONO (Agora a senha vai ser gerada corretamente!)
+        const { data: authData, error: authError } = await tempClient.auth.signUp({
+            email: formData.email_admin.trim(),
+            password: formData.senha_admin,
+            options: {
+                data: { nome_completo: formData.nome_dono }
+            }
+        });
 
-        // Se o usuário preencheu CNPJ, atualizamos agora (pois a função cria zerado por padrão)
-        if (formData.cnpj) {
-             // Precisamos descobrir o ID da empresa recém criada. 
-             // Como a função RPC simplificada não retornou o ID direto no JSON simples, 
-             // buscamos pelo nome ou assumimos sucesso. 
-             // *Melhoria futura: fazer o RPC retornar o ID.*
-             // Por enquanto, deixamos o CNPJ ser atualizado via "Editar" se necessário, 
-             // ou você pode ajustar o SQL para aceitar CNPJ.
-             // Mas para não quebrar seu fluxo agora: Sucesso!
+        if (authError) throw authError;
+        if (!authData.user) throw new Error("Erro ao criar usuário dono.");
+
+        const novoUserId = authData.user.id;
+
+        // 3. Cria a Consultoria na tabela
+        const { data: consData, error: consError } = await supabase
+            .from('consultorias')
+            .insert([{ 
+                nome: formData.nome, 
+                cnpj: formData.cnpj,
+                status: 'ativa',
+                plano: 'pro'
+            }])
+            .select()
+            .single();
+
+        if (consError) throw consError;
+        const novaConsultoriaId = consData.id;
+
+        // 4. Vincula o Usuário criado à Consultoria e define como ADMIN
+        // O trigger de criação de usuário já criou o perfil, agora só atualizamos
+        const { error: profileError } = await supabase
+            .from('profiles')
+            .update({ 
+                consultoria_id: novaConsultoriaId,
+                cargo: 'admin' // Define como Dono/Admin
+            })
+            .eq('id', novoUserId);
+
+        if (profileError) {
+             // Tenta update manual caso o trigger tenha falhado ou demorado
+             console.error("Erro ao vincular perfil, tentando insert manual de segurança...", profileError);
+             await supabase.from('profiles').upsert({
+                 id: novoUserId,
+                 email: formData.email_admin,
+                 nome: formData.nome_dono,
+                 consultoria_id: novaConsultoriaId,
+                 cargo: 'admin'
+             });
         }
       }
 
       setShowModal(false);
       fetchTenants(); 
-      // Feedback Visual
       alert(editingId ? "Consultoria atualizada!" : "Consultoria e Usuário Admin criados com sucesso!");
 
     } catch (error) {
       console.error(error);
-      setErrorMsg(error.message || "Erro desconhecido");
+      let msg = error.message;
+      if (msg.includes('already registered')) msg = "Este e-mail já possui cadastro.";
+      setErrorMsg(msg);
     } finally {
       setSaving(false);
     }
