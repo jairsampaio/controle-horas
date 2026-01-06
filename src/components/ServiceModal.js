@@ -88,8 +88,17 @@ const ServiceModal = ({ isOpen, onClose, onSave, formData, setFormData, clientes
     setLoading(false);
   };
 
+  // --- CORREÇÃO AQUI ---
+  // Transforma string vazia em NULL para campos UUID (como canal_id)
   const handleChange = (field, value) => {
-    setFormData(prev => ({ ...prev, [field]: value }));
+    let valorTratado = value;
+
+    // Se o campo for canal_id e o valor for vazio, enviamos null para o banco não dar erro de UUID
+    if (field === 'canal_id' && value === '') {
+        valorTratado = null;
+    }
+
+    setFormData(prev => ({ ...prev, [field]: valorTratado }));
     if (field === 'solicitante') setErroValidacao(''); 
   };
 
