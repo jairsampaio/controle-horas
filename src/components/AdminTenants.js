@@ -1,18 +1,22 @@
 import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
-import { createClient } from '@supabase/supabase-js'; // <--- IMPORTANTE
-import { Search, Plus, Building2, Edit, X, Save, Eye, User, Lock, Mail } from 'lucide-react';
+import { createClient } from '@supabase/supabase-js'; 
+import { Search, Plus, Building2, Edit, X, Save, Eye, User, Lock, Mail, Users, Ban, CheckCircle } from 'lucide-react';
 import supabase from '../services/supabase';
 
 // Componente de Badge (Visual do status)
 const StatusBadge = ({ status }) => {
   const styles = {
     ativa: 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400',
-    inadimplente: 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400',
+    bloqueada: 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400',
     cancelada: 'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-400'
   };
+  
+  // Tratamento para status desconhecidos
+  const statusKey = styles[status] ? status : 'cancelada';
+  
   return (
-    <span className={`px-2.5 py-0.5 rounded-full text-xs font-bold uppercase ${styles[status] || styles.cancelada}`}>
+    <span className={`px-2.5 py-0.5 rounded-full text-xs font-bold uppercase ${styles[statusKey]}`}>
       {status || 'indefinido'}
     </span>
   );
@@ -34,7 +38,7 @@ const AdminTenants = ({ onViewDetails }) => {
   const [formData, setFormData] = useState({
     nome: '',
     cnpj: '',
-    // Campos exclusivos para criação (Dono)
+    // Campos do Dono (Criação ou Edição)
     nome_dono: '',
     email_admin: '', 
     senha_admin: '' 
@@ -46,14 +50,44 @@ const AdminTenants = ({ onViewDetails }) => {
 
   const fetchTenants = async () => {
     setLoading(true);
-    const { data, error } = await supabase
-      .from('consultorias') 
-      .select('*')
-      .order('created_at', { ascending: false });
-    
-    if (error) console.error("Erro ao buscar:", error);
-    else setTenants(data || []);
-    setLoading(false);
+    try {
+        // 1. Busca as consultorias
+        const { data: consultorias, error } = await supabase
+            .from('consultorias') 
+            .select('*')
+            .order('created_at', { ascending: false });
+        
+        if (error) throw error;
+
+        // 2. Busca a contagem de usuários para cada consultoria
+        // (Fazemos uma query separada para evitar complexidade de joins se as FKs não estiverem perfeitas)
+        const { data: profiles } = await supabase
+            .from('profiles')
+            .select('consultoria_id');
+
+        // Calcula contagem
+        const counts = {};
+        if (profiles) {
+            profiles.forEach(p => {
+                if (p.consultoria_id) {
+                    counts[p.consultoria_id] = (counts[p.consultoria_id] || 0) + 1;
+                }
+            });
+        }
+
+        // Mescla a contagem nos dados das consultorias
+        const tenantsWithCounts = (consultorias || []).map(t => ({
+            ...t,
+            userCount: counts[t.id] || 0
+        }));
+
+        setTenants(tenantsWithCounts);
+
+    } catch (error) {
+        console.error("Erro ao buscar:", error);
+    } finally {
+        setLoading(false);
+    }
   };
 
   const handleOpenCreate = () => {
@@ -62,16 +96,65 @@ const AdminTenants = ({ onViewDetails }) => {
     setShowModal(true);
   };
 
-  const handleOpenEdit = (tenant) => {
+  const handleOpenEdit = async (tenant) => {
     setEditingId(tenant.id);
-    setFormData({
+    
+    // Preenche dados básicos
+    const newData = {
       nome: tenant.nome,
       cnpj: tenant.cnpj || '',
-      nome_dono: '', // Não edita dono aqui
-      email_admin: '', 
-      senha_admin: ''
-    });
+      nome_dono: 'Carregando...', 
+      email_admin: 'Carregando...', 
+      senha_admin: '' // Senha não editamos na visualização
+    };
+    
+    setFormData(newData);
     setShowModal(true);
+
+    // Busca o Dono (Admin) dessa consultoria para exibir
+    const { data: adminProfile } = await supabase
+        .from('profiles')
+        .select('nome, email')
+        .eq('consultoria_id', tenant.id)
+        .eq('cargo', 'admin') // Assume que o dono tem cargo admin
+        .limit(1)
+        .single();
+
+    if (adminProfile) {
+        setFormData(prev => ({
+            ...prev,
+            nome_dono: adminProfile.nome,
+            email_admin: adminProfile.email
+        }));
+    } else {
+        setFormData(prev => ({
+            ...prev,
+            nome_dono: 'Não encontrado',
+            email_admin: '-'
+        }));
+    }
+  };
+
+  // Função para Bloquear/Ativar Consultoria
+  const toggleStatus = async (tenant) => {
+      const novoStatus = tenant.status === 'ativa' ? 'bloqueada' : 'ativa';
+      const actionText = novoStatus === 'ativa' ? 'ATIVAR' : 'BLOQUEAR';
+
+      if (!window.confirm(`Tem certeza que deseja ${actionText} a empresa ${tenant.nome}?`)) return;
+
+      try {
+          const { error } = await supabase
+              .from('consultorias')
+              .update({ status: novoStatus })
+              .eq('id', tenant.id);
+
+          if (error) throw error;
+          
+          fetchTenants(); // Recarrega a lista
+      } catch (error) {
+          console.error(error);
+          alert("Erro ao alterar status.");
+      }
   };
 
   const handleSalvar = async (e) => {
@@ -86,7 +169,8 @@ const AdminTenants = ({ onViewDetails }) => {
     setSaving(true);
     try {
       if (editingId) {
-        // --- MODO EDIÇÃO (Simples Update) ---
+        // --- MODO EDIÇÃO ---
+        // 1. Atualiza Empresa
         const { error } = await supabase
           .from('consultorias')
           .update({ 
@@ -97,6 +181,15 @@ const AdminTenants = ({ onViewDetails }) => {
 
         if (error) throw error;
 
+        // 2. Atualiza Nome do Dono (se encontrado)
+        // (Opcional: se quiser permitir editar o nome do dono aqui)
+        if (formData.email_admin && formData.email_admin !== '-' && formData.email_admin !== 'Carregando...') {
+            await supabase
+                .from('profiles')
+                .update({ nome: formData.nome_dono })
+                .eq('email', formData.email_admin);
+        }
+
       } else {
         // --- MODO CRIAÇÃO (Fluxo Corrigido via React) ---
         
@@ -106,7 +199,7 @@ const AdminTenants = ({ onViewDetails }) => {
         }
 
         // ==============================================================================
-        // ⚠️ ATENÇÃO: SUBSTITUA ABAIXO PELA SUA URL E KEY (Igual fez no TeamManagement)
+        // ⚠️ ATENÇÃO: SUBSTITUA ABAIXO PELA SUA URL E KEY
         // ==============================================================================
         const SUPABASE_URL = 'https://ubwutmslwlefviiabysc.supabase.co'; 
         const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVid3V0bXNsd2xlZnZpaWFieXNjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjUyMjQ4MTgsImV4cCI6MjA4MDgwMDgxOH0.lTlvqtu0hKtYDQXJB55BG9ueZ-MdtbCtBvSNQMII2b8';
@@ -117,7 +210,7 @@ const AdminTenants = ({ onViewDetails }) => {
             auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false }
         });
 
-        // 2. Cria o Usuário DONO (Agora a senha vai ser gerada corretamente!)
+        // 2. Cria o Usuário DONO
         const { data: authData, error: authError } = await tempClient.auth.signUp({
             email: formData.email_admin.trim(),
             password: formData.senha_admin,
@@ -147,18 +240,16 @@ const AdminTenants = ({ onViewDetails }) => {
         const novaConsultoriaId = consData.id;
 
         // 4. Vincula o Usuário criado à Consultoria e define como ADMIN
-        // O trigger de criação de usuário já criou o perfil, agora só atualizamos
         const { error: profileError } = await supabase
             .from('profiles')
             .update({ 
                 consultoria_id: novaConsultoriaId,
-                cargo: 'admin' // Define como Dono/Admin
+                cargo: 'admin' 
             })
             .eq('id', novoUserId);
 
         if (profileError) {
-             // Tenta update manual caso o trigger tenha falhado ou demorado
-             console.error("Erro ao vincular perfil, tentando insert manual de segurança...", profileError);
+             console.error("Erro ao vincular perfil, tentando insert manual...", profileError);
              await supabase.from('profiles').upsert({
                  id: novoUserId,
                  email: formData.email_admin,
@@ -196,7 +287,7 @@ const AdminTenants = ({ onViewDetails }) => {
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div>
             <h2 className="text-lg font-bold text-gray-800 dark:text-white">Gestão de Assinantes</h2>
-            <p className="text-sm text-gray-500">Crie consultorias e defina seus administradores.</p>
+            <p className="text-sm text-gray-500">Gerencie as empresas e seus acessos.</p>
           </div>
           <button 
             onClick={handleOpenCreate}
@@ -247,6 +338,13 @@ const AdminTenants = ({ onViewDetails }) => {
                   </div>
                   
                   <div className="flex justify-between items-center text-sm">
+                    <span className="text-gray-500 dark:text-gray-400 flex items-center gap-1"><Users size={14}/> Usuários</span>
+                    <span className="font-bold text-gray-800 dark:text-white px-2 py-0.5 bg-gray-100 dark:bg-gray-700 rounded">
+                        {tenant.userCount || 0}
+                    </span>
+                  </div>
+
+                  <div className="flex justify-between items-center text-sm">
                     <span className="text-gray-500 dark:text-gray-400">Plano</span>
                     <span className="font-medium text-gray-800 dark:text-white px-2 py-0.5 bg-gray-100 dark:bg-gray-700 rounded capitalize">{tenant.plano || 'Pro'}</span>
                   </div>
@@ -255,6 +353,8 @@ const AdminTenants = ({ onViewDetails }) => {
 
               {/* BOTÕES DE AÇÃO */}
               <div className="p-3 bg-gray-50 dark:bg-gray-900/50 border-t border-gray-100 dark:border-gray-700 flex gap-2">
+                
+                {/* Visualizar */}
                 <button 
                   onClick={() => onViewDetails && onViewDetails(tenant.id)}
                   className="flex-1 py-1.5 text-xs font-bold text-blue-600 bg-blue-50 hover:bg-blue-100 rounded transition-all flex items-center justify-center gap-2"
@@ -262,13 +362,28 @@ const AdminTenants = ({ onViewDetails }) => {
                   <Eye size={16} /> Ver Detalhes
                 </button>
                 
+                {/* Editar */}
                 <button 
                   onClick={() => handleOpenEdit(tenant)}
                   className="px-3 py-1.5 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 rounded transition-colors"
-                  title="Editar"
+                  title="Editar Dados"
                 >
                   <Edit size={16} />
                 </button>
+
+                {/* Bloquear / Ativar */}
+                <button 
+                  onClick={() => toggleStatus(tenant)}
+                  className={`px-3 py-1.5 rounded transition-colors ${
+                      tenant.status === 'ativa' 
+                      ? 'text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20' 
+                      : 'text-green-500 hover:bg-green-50 dark:hover:bg-green-900/20'
+                  }`}
+                  title={tenant.status === 'ativa' ? 'Bloquear Acesso' : 'Liberar Acesso'}
+                >
+                  {tenant.status === 'ativa' ? <Ban size={16} /> : <CheckCircle size={16} />}
+                </button>
+
               </div>
 
             </div>
@@ -331,10 +446,11 @@ const AdminTenants = ({ onViewDetails }) => {
                   </div>
               </div>
 
-              {/* DADOS DO DONO (SÓ APARECE NO MODO CRIAÇÃO) */}
-              {!editingId && (
-                <div className="space-y-4 pt-2">
-                  <h4 className="text-xs font-bold text-gray-500 uppercase tracking-wider border-b border-gray-100 dark:border-gray-700 pb-1">Dados do Dono (Admin)</h4>
+              {/* DADOS DO DONO (VISÍVEL NA CRIAÇÃO E NA EDIÇÃO) */}
+              <div className="space-y-4 pt-2">
+                  <h4 className="text-xs font-bold text-gray-500 uppercase tracking-wider border-b border-gray-100 dark:border-gray-700 pb-1">
+                      {editingId ? 'Responsável Principal (Dono)' : 'Dados do Dono (Admin)'}
+                  </h4>
                   
                   <div>
                     <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Nome do Responsável</label>
@@ -344,7 +460,7 @@ const AdminTenants = ({ onViewDetails }) => {
                         type="text" 
                         value={formData.nome_dono} 
                         onChange={e => setFormData({...formData, nome_dono: e.target.value})}
-                        className="w-full pl-10 rounded-lg border border-gray-300 dark:border-gray-700 p-2.5 bg-white dark:bg-gray-800 text-gray-900 dark:text-white outline-none focus:ring-2 focus:ring-indigo-500"
+                        className="w-full pl-10 rounded-lg border border-gray-300 dark:border-gray-700 p-2.5 bg-white dark:bg-gray-800 text-gray-900 dark:text-white outline-none focus:ring-2 focus:ring-indigo-500 disabled:bg-gray-100 disabled:text-gray-500"
                         placeholder="Ex: Carlos Silva"
                         required
                         />
@@ -359,29 +475,32 @@ const AdminTenants = ({ onViewDetails }) => {
                         type="email" 
                         value={formData.email_admin} 
                         onChange={e => setFormData({...formData, email_admin: e.target.value})}
-                        className="w-full pl-10 rounded-lg border border-gray-300 dark:border-gray-700 p-2.5 bg-white dark:bg-gray-800 text-gray-900 dark:text-white outline-none focus:ring-2 focus:ring-indigo-500"
+                        className={`w-full pl-10 rounded-lg border border-gray-300 dark:border-gray-700 p-2.5 bg-white dark:bg-gray-800 text-gray-900 dark:text-white outline-none focus:ring-2 focus:ring-indigo-500 ${editingId ? 'opacity-60 cursor-not-allowed' : ''}`}
                         placeholder="admin@empresa.com"
                         required
+                        disabled={!!editingId} // Email não edita na tela de tenants (segurança)
                         />
                     </div>
+                    {editingId && <p className="text-[10px] text-gray-400 mt-1">O e-mail do dono não pode ser alterado por aqui.</p>}
                   </div>
 
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Senha Inicial</label>
-                    <div className="relative">
-                        <Lock size={18} className="absolute left-3 top-2.5 text-gray-400" />
-                        <input 
-                        type="text" 
-                        value={formData.senha_admin} 
-                        onChange={e => setFormData({...formData, senha_admin: e.target.value})}
-                        className="w-full pl-10 rounded-lg border border-gray-300 dark:border-gray-700 p-2.5 bg-white dark:bg-gray-800 text-gray-900 dark:text-white outline-none focus:ring-2 focus:ring-indigo-500"
-                        placeholder="Ex: Mudar@123"
-                        required
-                        />
-                    </div>
-                  </div>
-                </div>
-              )}
+                  {!editingId && (
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Senha Inicial</label>
+                        <div className="relative">
+                            <Lock size={18} className="absolute left-3 top-2.5 text-gray-400" />
+                            <input 
+                            type="text" 
+                            value={formData.senha_admin} 
+                            onChange={e => setFormData({...formData, senha_admin: e.target.value})}
+                            className="w-full pl-10 rounded-lg border border-gray-300 dark:border-gray-700 p-2.5 bg-white dark:bg-gray-800 text-gray-900 dark:text-white outline-none focus:ring-2 focus:ring-indigo-500"
+                            placeholder="Ex: Mudar@123"
+                            required
+                            />
+                        </div>
+                      </div>
+                  )}
+              </div>
 
               <div className="pt-4 flex gap-3">
                 <button type="button" onClick={() => setShowModal(false)} className="flex-1 py-2.5 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-lg font-bold hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors">

@@ -1,42 +1,87 @@
 import React, { useEffect, useState } from 'react';
+import { createPortal } from 'react-dom'; 
 import { 
   LayoutDashboard, Briefcase, Users, Settings, LogOut, X, 
-  ShieldCheck, Wallet, FileText, Building2, Lightbulb
+  ShieldCheck, Wallet, FileText, Building2, Lightbulb, User, Lock, Save
 } from 'lucide-react';
 import supabase from '../services/supabase';
 
-const Sidebar = ({ activeTab, setActiveTab, isOpen, onClose, onLogout, onOpenConfig, onOpenChannels, userEmail }) => {
+const Sidebar = ({ activeTab, setActiveTab, isOpen, onClose, onLogout, onOpenConfig, userEmail }) => {
   const [userRole, setUserRole] = useState(null);
+  const [userName, setUserName] = useState(''); 
+  
+  // Estados do Modal de Perfil
+  const [showProfileModal, setShowProfileModal] = useState(false);
+  const [editName, setEditName] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [loadingProfile, setLoadingProfile] = useState(false);
 
-  // Busca o cargo do usuário ao carregar o Sidebar
   useEffect(() => {
-    const fetchRole = async () => {
+    const fetchRoleAndName = async () => {
       const { data: { user } } = await supabase.auth.getUser();
       if (user) {
-        // --- CORREÇÃO AQUI: Mudamos de 'role' para 'cargo' ---
         const { data } = await supabase
           .from('profiles')
-          .select('cargo') 
+          .select('cargo, nome') 
           .eq('id', user.id)
           .single();
         
-        // Agora o userRole vai receber 'admin' corretamente
         setUserRole(data?.cargo);
+        setUserName(data?.nome || '');
+        setEditName(data?.nome || ''); 
       }
     };
-    fetchRole();
+    fetchRoleAndName();
   }, []);
 
   const toggleTheme = () => {
     document.documentElement.classList.toggle('dark');
   };
 
+  const handleUpdateProfile = async (e) => {
+    e.preventDefault();
+    setLoadingProfile(true);
+
+    try {
+      const updates = {};
+      
+      if (newPassword) {
+        if (newPassword.length < 6) throw new Error("A nova senha deve ter no mínimo 6 caracteres.");
+        const { error } = await supabase.auth.updateUser({ password: newPassword });
+        if (error) throw error;
+        updates.passwordUpdated = true;
+      }
+
+      if (editName !== userName) {
+        const { data: { user } } = await supabase.auth.getUser();
+        const { error: dbError } = await supabase
+            .from('profiles')
+            .update({ nome: editName })
+            .eq('id', user.id);
+        if (dbError) throw dbError;
+
+        await supabase.auth.updateUser({ data: { nome_completo: editName } });
+        
+        setUserName(editName);
+        updates.nameUpdated = true;
+      }
+
+      let msg = "Perfil atualizado com sucesso!";
+      if (updates.passwordUpdated) msg += " Use a nova senha no próximo login.";
+      
+      alert(msg);
+      setNewPassword(''); 
+      setShowProfileModal(false);
+
+    } catch (error) {
+      alert("Erro ao atualizar: " + error.message);
+    } finally {
+      setLoadingProfile(false);
+    }
+  };
+
   const MenuButton = ({ id, icon: Icon, label, requiredRole }) => {
-    // Se o botão requer role e o usuário não tem a role certa, não renderiza nada
-    // Nota: Adicionei userRole !== 'super_admin' para garantir que o Super Admin veja tudo
     if (requiredRole && requiredRole !== userRole && userRole !== 'super_admin') return null;
-    
-    // Proteção extra para os menus do Super Admin (Jair)
     if (requiredRole === 'super_admin' && userRole !== 'super_admin') return null;
 
     return (
@@ -82,18 +127,14 @@ const Sidebar = ({ activeTab, setActiveTab, isOpen, onClose, onLogout, onOpenCon
             <MenuButton id="dashboard" icon={LayoutDashboard} label="Dashboard" />
             <MenuButton id="servicos" icon={Briefcase} label="Meus Serviços" />
             
-            <button onClick={() => { onOpenChannels(); if (window.innerWidth < 768) onClose(); }} className="w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 font-medium text-sm text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 hover:text-indigo-600 dark:hover:text-indigo-400">
-              <Building2 size={20} />
-              <span>Canais / Parceiros</span>
-            </button>
+            {/* CORRIGIDO: Agora usa MenuButton e aponta para a aba 'channels' */}
+            <MenuButton id="channels" icon={Building2} label="Canais / Parceiros" />
 
             <MenuButton id="clientes" icon={Users} label="Clientes" />
             
-            {/* Somente Admin e Super Admin veem o menu de Equipe */}
             <MenuButton id="team" icon={Users} label="Minha Equipe" requiredRole="admin" />
           </div>
 
-          {/* Área Administrativa do SaaS (Só para VOCÊ, Super Admin) */}
           {userRole === 'super_admin' && (
             <div className="pt-2 pb-2 mb-2 border-b border-gray-100 dark:border-gray-800">
               <p className="px-4 text-[10px] font-bold text-yellow-600 dark:text-yellow-500 uppercase tracking-wider mb-2">Administração SaaS</p>
@@ -115,19 +156,90 @@ const Sidebar = ({ activeTab, setActiveTab, isOpen, onClose, onLogout, onOpenCon
           </button>
 
           <div className="mt-3 pt-3 border-t border-gray-200 dark:border-gray-700">
-            <div className="px-4 mb-2">
-              <p className="text-xs font-medium text-gray-900 dark:text-white truncate">{userEmail}</p>
+            <div 
+              className="px-4 mb-2 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg py-2 transition-colors group"
+              onClick={() => setShowProfileModal(true)}
+              title="Clique para editar seu perfil"
+            >
+              <p className="text-xs font-bold text-gray-900 dark:text-white truncate group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors">
+                {userName || 'Usuário'}
+              </p>
               <div className="flex justify-between items-center">
-                <p className="text-[10px] text-gray-500 dark:text-gray-500">Logado</p>
+                <p className="text-[10px] text-gray-500 dark:text-gray-500 truncate max-w-[120px]">{userEmail}</p>
                 <span className="text-[10px] uppercase font-bold text-indigo-500">{userRole || '...'}</span>
               </div>
             </div>
+            
             <button onClick={onLogout} className="w-full flex items-center gap-3 px-4 py-2 text-sm text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors font-medium">
               <LogOut size={18} /> Sair do Sistema
             </button>
           </div>
         </div>
       </aside>
+
+      {showProfileModal && createPortal(
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in" onClick={(e) => e.stopPropagation()}>
+           <div className="bg-white dark:bg-gray-900 w-full max-w-sm rounded-2xl shadow-2xl p-6 border border-gray-200 dark:border-gray-800 animate-scale-in" onClick={(e) => e.stopPropagation()}>
+              
+              <div className="flex justify-between items-center mb-6">
+                <h3 className="text-lg font-bold text-gray-800 dark:text-white flex items-center gap-2">
+                   <User className="text-indigo-600" /> Meu Perfil
+                </h3>
+                <button onClick={() => setShowProfileModal(false)} className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200">
+                  <X size={24} />
+                </button>
+              </div>
+
+              <form onSubmit={handleUpdateProfile} className="space-y-4">
+                 
+                 <div>
+                    <label className="block text-xs font-bold text-gray-500 dark:text-gray-400 uppercase mb-1">Seu E-mail</label>
+                    <div className="p-2.5 bg-gray-100 dark:bg-gray-800 rounded-lg text-gray-600 dark:text-gray-300 text-sm border border-gray-200 dark:border-gray-700">
+                       {userEmail}
+                    </div>
+                 </div>
+
+                 <div>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Nome de Exibição</label>
+                    <input 
+                      type="text" 
+                      value={editName}
+                      onChange={(e) => setEditName(e.target.value)}
+                      className="w-full rounded-lg border border-gray-300 dark:border-gray-700 p-2.5 bg-white dark:bg-gray-800 text-gray-900 dark:text-white outline-none focus:ring-2 focus:ring-indigo-500"
+                    />
+                 </div>
+
+                 <div>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Alterar Senha</label>
+                    <div className="relative">
+                       <Lock size={18} className="absolute left-3 top-2.5 text-gray-400" />
+                       <input 
+                         type="password" 
+                         value={newPassword}
+                         onChange={(e) => setNewPassword(e.target.value)}
+                         placeholder="Nova senha (mín. 6 caracteres)"
+                         className="w-full pl-10 rounded-lg border border-gray-300 dark:border-gray-700 p-2.5 bg-white dark:bg-gray-800 text-gray-900 dark:text-white outline-none focus:ring-2 focus:ring-indigo-500"
+                         autoComplete="new-password"
+                       />
+                    </div>
+                    <p className="text-[10px] text-gray-500 mt-1">Deixe em branco se não quiser alterar a senha.</p>
+                 </div>
+
+                 <div className="pt-2">
+                    <button 
+                      type="submit" 
+                      disabled={loadingProfile}
+                      className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2.5 rounded-lg flex items-center justify-center gap-2 transition-all shadow-md"
+                    >
+                       {loadingProfile ? 'Salvando...' : <><Save size={18} /> Salvar Alterações</>}
+                    </button>
+                 </div>
+
+              </form>
+           </div>
+        </div>,
+        document.body
+      )}
     </>
   );
 };

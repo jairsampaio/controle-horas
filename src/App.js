@@ -4,12 +4,13 @@ import React, { useState, useEffect } from 'react';
 import { 
   Clock, DollarSign, User, FileText, Plus, Filter, Settings, Mail, Users, 
   LayoutDashboard, Briefcase, Hourglass, Timer, CheckCircle, FileCheck, 
-  Building2, Menu, Eye, EyeOff, ShieldCheck, Wallet, ArrowLeft 
+  Building2, Menu, Eye, EyeOff, ShieldCheck, Wallet, LayoutList, Kanban 
 } from 'lucide-react'; 
 import supabase from './services/supabase'; 
 import StatusCard from './components/StatusCard';
 import ClientModal from './components/ClientModal';
 import ServicesTable from './components/ServicesTable';
+import ServicesKanban from './components/ServicesKanban'; 
 import ClientsTable from './components/ClientsTable';
 import ServiceModal from './components/ServiceModal';
 import Auth from './components/Auth';
@@ -19,13 +20,15 @@ import ConfirmModal from './components/ConfirmModal';
 import * as XLSX from 'xlsx';
 import SolicitantesModal from './components/SolicitantesModal'; 
 import MultiSelect from './components/MultiSelect'; 
-import ChannelsModal from './components/ChannelsModal'; 
+import ChannelsManagement from './components/ChannelsManagement'; 
 import Sidebar from './components/Sidebar'; 
 import AdminTenants from './components/AdminTenants'; 
+import AdminModal from './components/AdminModal';
 import AdminFinance from './components/AdminFinance';
 import AdminPlans from './components/AdminPlans';
 import TeamManagement from './components/TeamManagement';
 import { formatCurrency, formatHoursInt } from './utils/formatters'; 
+
 
 const App = () => {
   // --- ESTADOS ---
@@ -35,7 +38,8 @@ const App = () => {
   const [loading, setLoading] = useState(true);
   
   const [activeTab, setActiveTab] = useState('dashboard');
-  const [tenantIdSelecionado, setTenantIdSelecionado] = useState(null);
+  const [viewMode, setViewMode] = useState('kanban'); 
+  const [selectedTenantId, setSelectedTenantId] = useState(null);
 
   const [showModal, setShowModal] = useState(false);
   const [emailEnviando, setEmailEnviando] = useState(false);
@@ -56,7 +60,7 @@ const App = () => {
 
   const [showSolicitantesModal, setShowSolicitantesModal] = useState(false);
   const [clienteParaSolicitantes, setClienteParaSolicitantes] = useState(null);
-  const [showChannelsModal, setShowChannelsModal] = useState(false);
+  // REMOVIDO: const [showChannelsManagement, setShowChannelsManagement] = useState(false); // Não precisa mais desse estado de modal
   const [todosSolicitantesDoCliente, setTodosSolicitantesDoCliente] = useState([]); 
   const [sortConfig, setSortConfig] = useState({ key: 'data', direction: 'desc' });
   
@@ -223,22 +227,22 @@ const App = () => {
   }, [session]);
 
   useEffect(() => {
-    const algumModalAberto = showModal || showClienteModal || showSolicitantesModal || showConfigModal || showChannelsModal;
+    const algumModalAberto = showModal || showClienteModal || showSolicitantesModal || showConfigModal;
     if (algumModalAberto) {
         if (window.location.hash !== '#modal') window.history.pushState({ type: 'modal' }, '', '#modal');
     } else if (activeTab !== 'dashboard') {
         if (window.location.hash !== `#${activeTab}`) window.history.pushState({ type: 'tab' }, '', `#${activeTab}`);
     }
     const handlePopState = () => {
-      if (showModal || showClienteModal || showSolicitantesModal || showConfigModal || showChannelsModal) {
-        setShowModal(false); setShowClienteModal(false); setShowSolicitantesModal(false); setShowConfigModal(false); setShowChannelsModal(false);
+      if (showModal || showClienteModal || showSolicitantesModal || showConfigModal) {
+        setShowModal(false); setShowClienteModal(false); setShowSolicitantesModal(false); setShowConfigModal(false); 
         return;
       }
       if (activeTab !== 'dashboard') setActiveTab('dashboard');
     };
     window.addEventListener('popstate', handlePopState);
     return () => window.removeEventListener('popstate', handlePopState);
-  }, [activeTab, showModal, showClienteModal, showSolicitantesModal, showConfigModal, showChannelsModal]);
+  }, [activeTab, showModal, showClienteModal, showSolicitantesModal, showConfigModal]);
 
   const salvarServico = async () => {
     try {
@@ -467,11 +471,6 @@ const App = () => {
   const handleManageTeam = (cliente) => { setClienteParaSolicitantes(cliente); setShowSolicitantesModal(true); };
   const handleSort = (key) => { let direction = 'asc'; if (sortConfig.key === key && sortConfig.direction === 'asc') direction = 'desc'; setSortConfig({ key, direction }); };
 
-  const handleVerDetalhesTenant = (id) => {
-    setTenantIdSelecionado(id);
-    setActiveTab('tenant-details'); 
-  };
-
   const servicosFiltrados = () => {
     let result = servicos.filter(s => {
       if (filtros.canal.length > 0) { const nomeCanalServico = s.canais?.nome || 'Direto'; if (!filtros.canal.includes(nomeCanalServico)) return false; }
@@ -528,7 +527,7 @@ const App = () => {
         onClose={() => setIsMobileMenuOpen(false)}
         onLogout={handleLogout}
         onOpenConfig={() => setShowConfigModal(true)}
-        onOpenChannels={() => setShowChannelsModal(true)}
+        onOpenChannels={() => setActiveTab('channels')} // <--- ALTERADO: Agora muda a aba, não abre modal
         userEmail={session?.user?.email}
       />
 
@@ -548,8 +547,8 @@ const App = () => {
               {activeTab === 'admin-finance' && <><Wallet className="text-yellow-600 dark:text-yellow-400" /> Financeiro</>}
               {activeTab === 'team' && <><Users className="text-indigo-600 dark:text-indigo-400" /> Gestão de Equipe</>}
               {activeTab === 'admin-plans' && <><FileText className="text-yellow-600 dark:text-yellow-400" /> Planos & Preços</>}
-
-              {activeTab === 'tenant-details' && <><Building2 className="text-indigo-600" /> Detalhes da Consultoria</>}
+              
+              {activeTab === 'channels' && <><Building2 className="text-indigo-600 dark:text-indigo-400" /> Canais & Parceiros</>}
             </h1>
           </div>
           
@@ -601,10 +600,33 @@ const App = () => {
 
                     {activeTab === 'servicos' && (
                         <div className="space-y-6">
+                            
+                            {/* CABEÇALHO DO MÓDULO DE SERVIÇOS (COM TOGGLE KANBAN) */}
                             <div className="bg-white dark:bg-gray-800 p-6 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 space-y-4">
-                                <div className="flex items-center gap-2 text-gray-800 dark:text-white font-bold mb-2">
-                                <Filter size={20} className="text-indigo-600 dark:text-indigo-400" /> Filtros Avançados
+                                <div className="flex justify-between items-center">
+                                    <div className="flex items-center gap-2 text-gray-800 dark:text-white font-bold">
+                                        <Filter size={20} className="text-indigo-600 dark:text-indigo-400" /> Filtros Avançados
+                                    </div>
+                                    
+                                    {/* --- TOGGLE KANBAN / LISTA --- */}
+                                    <div className="bg-gray-100 dark:bg-gray-700 p-1 rounded-lg border border-gray-200 dark:border-gray-600 flex">
+                                        <button 
+                                            onClick={() => setViewMode('list')}
+                                            className={`p-2 rounded-md transition-colors ${viewMode === 'list' ? 'bg-white dark:bg-gray-600 text-indigo-600 dark:text-indigo-400 shadow-sm' : 'text-gray-400 hover:text-gray-600 dark:hover:text-gray-300'}`}
+                                            title="Ver como Lista"
+                                        >
+                                            <LayoutList size={20} />
+                                        </button>
+                                        <button 
+                                            onClick={() => setViewMode('kanban')}
+                                            className={`p-2 rounded-md transition-colors ${viewMode === 'kanban' ? 'bg-white dark:bg-gray-600 text-indigo-600 dark:text-indigo-400 shadow-sm' : 'text-gray-400 hover:text-gray-600 dark:hover:text-gray-300'}`}
+                                            title="Ver como Kanban"
+                                        >
+                                            <Kanban size={20} />
+                                        </button>
+                                    </div>
                                 </div>
+
                                 <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
                                 
                                 <div className="col-span-full md:col-span-3 lg:col-span-3 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -626,11 +648,32 @@ const App = () => {
                                 </div>
                                 </div>
                             </div>
+                            
+                            {/* BOTÕES DE EXPORTAÇÃO */}
                             <div className="flex flex-wrap justify-end gap-3">
                                 <button onClick={handleExportarExcel} className="flex items-center gap-2 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700 px-4 py-2 rounded-lg text-sm font-medium transition-colors" title="Exportar Excel"><FileText size={18} className="text-green-600 dark:text-green-400" /> Excel</button>
                                 <button onClick={handleGerarPDF} className="flex items-center gap-2 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700 px-4 py-2 rounded-lg text-sm font-medium transition-colors" title="Gerar PDF"><FileText size={18} className="text-red-600 dark:text-red-400" /> PDF</button>
                             </div>
-                            <ServicesTable servicos={servicosFiltradosData} onStatusChange={alterarStatusRapido} onEdit={editarServico} onDelete={deletarServico} onSort={handleSort} sortConfig={sortConfig} /> 
+
+                            {/* --- ÁREA DE CONTEÚDO (LISTA OU KANBAN) --- */}
+                            {viewMode === 'list' ? (
+                                <ServicesTable 
+                                    servicos={servicosFiltradosData} 
+                                    onStatusChange={alterarStatusRapido} 
+                                    onEdit={editarServico} 
+                                    onDelete={deletarServico} 
+                                    onSort={handleSort} 
+                                    sortConfig={sortConfig} 
+                                />
+                            ) : (
+                                <div className="h-[600px]"> {/* Altura fixa para o Kanban rolar horizontalmente */}
+                                    <ServicesKanban 
+                                        servicos={servicosFiltradosData} 
+                                        onEditService={editarServico} 
+                                        onStatusChange={alterarStatusRapido}
+                                    />
+                                </div>
+                            )}
                         </div>
                     )}
 
@@ -655,24 +698,9 @@ const App = () => {
                     )}
 
                     {activeTab === 'admin-tenants' && (
-                        <AdminTenants onViewDetails={handleVerDetalhesTenant} />
-                    )}
-
-                    {activeTab === 'tenant-details' && (
-                        <div className="space-y-6">
-                            <button 
-                                onClick={() => setActiveTab('admin-tenants')}
-                                className="flex items-center gap-2 text-gray-600 hover:text-indigo-600 transition-colors mb-4"
-                            >
-                                <ArrowLeft size={20} /> Voltar para lista
-                            </button>
-                            
-                            <div className="bg-white p-8 rounded-lg shadow text-center">
-                                <h2 className="text-2xl font-bold mb-4">Dashboard da Consultoria</h2>
-                                <p className="text-gray-500">ID Selecionado: {tenantIdSelecionado}</p>
-                                <p className="text-sm mt-4 text-gray-400">Aqui você carregará os dados específicos desta empresa.</p>
-                            </div>
-                        </div>
+                        <AdminTenants 
+                          onViewDetails={(id) => setSelectedTenantId(id)} 
+                        />
                     )}
                     
                     {activeTab === 'admin-finance' && <AdminFinance />}
@@ -680,11 +708,24 @@ const App = () => {
                     {activeTab === 'team' && <TeamManagement showToast={showToast} />}
                     
                     {activeTab === 'admin-plans' && <AdminPlans />}
+
+                    {activeTab === 'channels' && (
+                        <ChannelsManagement 
+                          userId={session?.user?.id} 
+                          showToast={showToast} 
+                        />
+                    )}
                 </>
             )}
           </div>
         </main>
       </div>
+
+      <AdminModal 
+          isOpen={!!selectedTenantId} 
+          onClose={() => setSelectedTenantId(null)} 
+          tenantId={selectedTenantId} 
+      />
 
       <ServiceModal 
         isOpen={showModal} 
@@ -707,7 +748,8 @@ const App = () => {
       />
       
       <ConfigModal isOpen={showConfigModal} onClose={() => setShowConfigModal(false)} onSave={salvarConfiguracao} valorAtual={valorHoraPadrao} nomeAtual={nomeConsultor} />
-      <ChannelsModal isOpen={showChannelsModal} onClose={() => setShowChannelsModal(false)} userId={session?.user?.id} />
+      
+      {/* <ChannelsManagement ... /> -- REMOVIDO DAQUI -- */}
       
       <ConfirmModal
         isOpen={confirmModalOpen}

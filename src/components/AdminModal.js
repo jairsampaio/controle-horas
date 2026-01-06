@@ -1,234 +1,283 @@
 import React, { useState, useEffect } from 'react';
-import { X, Shield, Building2, Users, DollarSign, Calendar, AlertTriangle, CheckCircle, Ban, Search, MoreVertical } from 'lucide-react';
+import { 
+  X, Building2, Users, DollarSign, Calendar, 
+  Activity, CheckCircle, Ban, Mail, Phone, MapPin, 
+  Shield, Key, Lock, AlertTriangle 
+} from 'lucide-react';
 import supabase from '../services/supabase';
 
-const AdminModal = ({ isOpen, onClose, userEmail }) => {
-  const [tenants, setTenants] = useState([]);
-  const [loading, setLoading] = useState(false);
-  const [filtro, setFiltro] = useState('');
-  const [actionMenu, setActionMenu] = useState(null); // ID do tenant com menu aberto
+const AdminModal = ({ isOpen, onClose, tenantId }) => {
+  const [loading, setLoading] = useState(true);
+  const [activeTab, setActiveTab] = useState('overview'); // overview, team, finance
+  
+  // Dados da Consultoria
+  const [tenant, setTenant] = useState(null);
+  const [team, setTeam] = useState([]);
+  const [stats, setStats] = useState({
+    totalUsers: 0,
+    totalClients: 0,
+    totalServices: 0,
+    revenueEstimate: 0
+  });
+
+  // Estado para Reset de Senha (dentro do modal de detalhes)
+  const [resetLoading, setResetLoading] = useState(null);
 
   useEffect(() => {
-    if (isOpen) carregarERP();
-  }, [isOpen]);
+    if (isOpen && tenantId) {
+      fetchTenantDetails();
+    }
+  }, [isOpen, tenantId]);
 
-  const carregarERP = async () => {
+  const fetchTenantDetails = async () => {
     setLoading(true);
-    // Chama a função SQL poderosa que criamos
-    const { data, error } = await supabase.rpc('get_erp_metrics');
-    if (error) console.error(error);
-    else setTenants(data || []);
-    setLoading(false);
-  };
+    try {
+      // 1. Busca Dados da Consultoria
+      const { data: tenantData, error: tenantError } = await supabase
+        .from('consultorias')
+        .select('*')
+        .eq('id', tenantId)
+        .single();
+      
+      if (tenantError) throw tenantError;
+      setTenant(tenantData);
 
-  // Função Financeira: Renovar Assinatura
-  const handleRenovar = async (tenantId) => {
-    const hoje = new Date();
-    const proximoMes = new Date(hoje.setMonth(hoje.getMonth() + 1));
-    
-    const { error } = await supabase
-      .from('tenants')
-      .update({ 
-        status_financeiro: 'ativo',
-        data_vencimento: proximoMes.toISOString()
-      })
-      .eq('id', tenantId);
+      // 2. Busca Equipe
+      const { data: teamData } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('consultoria_id', tenantId)
+        .order('cargo', { ascending: true }); // Admin primeiro (alphabetical sort trick)
 
-    if (!error) {
-      alert('Pagamento confirmado! Acesso renovado por 30 dias.');
-      carregarERP();
-      setActionMenu(null);
+      setTeam(teamData || []);
+
+      // 3. Busca Métricas (Contagens)
+      // Clientes
+      const { count: clientCount } = await supabase
+        .from('clientes')
+        .select('*', { count: 'exact', head: true })
+        .eq('consultoria_id', tenantId);
+
+      // Serviços (Para estimar receita e atividade)
+      const { data: services } = await supabase
+        .from('servicos')
+        .select('valor')
+        .eq('consultoria_id', tenantId);
+
+      const totalRevenue = (services || []).reduce((acc, curr) => acc + (Number(curr.valor) || 0), 0);
+
+      setStats({
+        totalUsers: teamData?.length || 0,
+        totalClients: clientCount || 0,
+        totalServices: services?.length || 0,
+        revenueEstimate: totalRevenue
+      });
+
+    } catch (error) {
+      console.error("Erro ao carregar detalhes:", error);
+    } finally {
+      setLoading(false);
     }
   };
 
-  // Função Financeira: Bloquear Caloteiro
-  const handleBloquear = async (tenantId) => {
-    if (!window.confirm("Tem certeza? Isso vai impedir o login de todos os usuários desta consultoria.")) return;
+  // Função para Resetar Senha (Super Admin Power)
+  const handleResetPassword = async (userId, userName) => {
+    const novaSenha = prompt(`Digite a nova senha para ${userName}:`);
+    if (!novaSenha || novaSenha.length < 6) return alert("Senha inválida (mín 6 caracteres).");
 
-    const { error } = await supabase
-      .from('tenants')
-      .update({ status_financeiro: 'inadimplente' })
-      .eq('id', tenantId);
+    setResetLoading(userId);
+    try {
+        // Usa a função do banco para atualizar senha direto no Auth
+        const { error } = await supabase.auth.admin.updateUserById(
+            userId,
+            { password: novaSenha }
+        );
 
-    if (!error) {
-      carregarERP();
-      setActionMenu(null);
+        if (error) throw error;
+        alert("Senha alterada com sucesso!");
+    } catch (error) {
+        console.error(error);
+        alert("Erro: Você precisa de permissões de Super Admin no Supabase ou configurar a função RPC.");
+    } finally {
+        setResetLoading(null);
     }
   };
 
   if (!isOpen) return null;
 
-  // Filtragem local
-  const tenantsFiltrados = tenants.filter(t => 
-    t.nome_empresa.toLowerCase().includes(filtro.toLowerCase())
-  );
-
-  // Cálculos do seu faturamento (Simulado)
-  const totalReceitaMensal = tenants
-    .filter(t => t.status_financeiro === 'ativo')
-    .reduce((acc, curr) => acc + (curr.plano === 'enterprise' ? 299 : 149), 0); // Ex: Basic 149, Enterprise 299
-
   return (
-    <div className="fixed inset-0 bg-black/50 dark:bg-black/90 backdrop-blur-sm flex items-center justify-center p-4 z-[9999] animate-fade-in">
-      <div className="bg-gray-50 dark:bg-gray-900 w-full max-w-6xl h-[90vh] rounded-2xl shadow-2xl flex flex-col overflow-hidden border border-gray-200 dark:border-gray-700">
+    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 z-[9999] animate-fade-in">
+      <div className="bg-white dark:bg-gray-900 w-full max-w-5xl h-[85vh] rounded-2xl shadow-2xl flex flex-col overflow-hidden border border-gray-200 dark:border-gray-800">
         
-        {/* Header do ERP */}
-        <div className="bg-white dark:bg-gray-950 p-6 border-b border-gray-200 dark:border-gray-800 flex justify-between items-center">
-          <div className="flex items-center gap-4">
-            <div className="bg-indigo-600 p-3 rounded-xl shadow-lg shadow-indigo-200 dark:shadow-none">
-              <Shield className="text-white" size={24} />
+        {loading || !tenant ? (
+            <div className="flex-1 flex items-center justify-center flex-col gap-4">
+                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600"></div>
+                <p className="text-gray-500">Carregando raio-x da empresa...</p>
             </div>
-            <div>
-              <h2 className="text-2xl font-bold text-gray-800 dark:text-white tracking-tight">Painel SaaS Master</h2>
-              <p className="text-sm text-gray-500 dark:text-gray-400">Gerenciamento de Consultorias e Receita</p>
-            </div>
-          </div>
-          <button onClick={onClose} className="hover:bg-gray-100 dark:hover:bg-gray-800 p-2 rounded-full transition-colors text-gray-500">
-            <X size={24} />
-          </button>
-        </div>
-
-        {/* Dashboard de Métricas (KPIs) */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 p-6 bg-gray-50 dark:bg-gray-900">
-          <div className="bg-white dark:bg-gray-800 p-4 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm">
-            <p className="text-xs font-bold text-gray-400 uppercase">Consultorias Ativas</p>
-            <p className="text-2xl font-bold text-gray-800 dark:text-white mt-1 flex items-center gap-2">
-              <Building2 className="text-blue-500" /> {tenants.filter(t => t.status_financeiro === 'ativo').length}
-            </p>
-          </div>
-          <div className="bg-white dark:bg-gray-800 p-4 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm">
-            <p className="text-xs font-bold text-gray-400 uppercase">Total de Usuários</p>
-            <p className="text-2xl font-bold text-gray-800 dark:text-white mt-1 flex items-center gap-2">
-              <Users className="text-purple-500" /> {tenants.reduce((acc, t) => acc + t.total_usuarios, 0)}
-            </p>
-          </div>
-          <div className="bg-white dark:bg-gray-800 p-4 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm">
-            <p className="text-xs font-bold text-gray-400 uppercase">MRR (Mensal Recorrente)</p>
-            <p className="text-2xl font-bold text-green-600 dark:text-green-400 mt-1 flex items-center gap-2">
-              <DollarSign /> R$ {totalReceitaMensal.toLocaleString('pt-BR')}
-            </p>
-          </div>
-          <div className="bg-white dark:bg-gray-800 p-4 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm">
-            <p className="text-xs font-bold text-gray-400 uppercase">Inadimplentes</p>
-            <p className="text-2xl font-bold text-red-500 mt-1 flex items-center gap-2">
-              <AlertTriangle /> {tenants.filter(t => t.status_financeiro !== 'ativo').length}
-            </p>
-          </div>
-        </div>
-
-        {/* Barra de Ações */}
-        <div className="px-6 py-2 flex justify-between items-center bg-white dark:bg-gray-950 border-y border-gray-200 dark:border-gray-800">
-          <div className="relative w-96">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
-            <input 
-              type="text" 
-              placeholder="Buscar consultoria..." 
-              value={filtro}
-              onChange={(e) => setFiltro(e.target.value)}
-              className="w-full pl-10 pr-4 py-2 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 outline-none text-gray-700 dark:text-gray-200"
-            />
-          </div>
-          {/* Futuro botão de "+ Nova Consultoria" pode ir aqui */}
-        </div>
-
-        {/* Tabela de Consultorias */}
-        <div className="flex-1 overflow-auto bg-white dark:bg-gray-900">
-          <table className="w-full text-sm text-left">
-            <thead className="bg-gray-50 dark:bg-gray-950 text-gray-500 dark:text-gray-400 font-medium border-b border-gray-200 dark:border-gray-800 sticky top-0 z-10">
-              <tr>
-                <th className="px-6 py-4">Empresa (Tenant)</th>
-                <th className="px-6 py-4">Plano</th>
-                <th className="px-6 py-4 text-center">Usuários / Clientes</th>
-                <th className="px-6 py-4">Vencimento</th>
-                <th className="px-6 py-4">Status</th>
-                <th className="px-6 py-4 text-right">Ações</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
-              {loading ? (
-                <tr><td colSpan="6" className="p-10 text-center text-gray-500">Carregando dados financeiros...</td></tr>
-              ) : tenantsFiltrados.map((tenant) => (
-                <tr key={tenant.id} className="hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors group">
-                  <td className="px-6 py-4">
-                    <div className="flex flex-col">
-                      <span className="font-bold text-gray-900 dark:text-white text-base">{tenant.nome_empresa}</span>
-                      <span className="text-xs text-gray-400 font-mono select-all">ID: {tenant.id}</span>
+        ) : (
+            <>
+                {/* --- HEADER (IDENTIDADE) --- */}
+                <div className="bg-white dark:bg-gray-950 p-6 border-b border-gray-200 dark:border-gray-800 flex justify-between items-start">
+                    <div className="flex gap-5">
+                        <div className="w-16 h-16 bg-indigo-100 dark:bg-indigo-900/30 rounded-2xl flex items-center justify-center text-indigo-600 dark:text-indigo-400">
+                            <Building2 size={32} />
+                        </div>
+                        <div>
+                            <div className="flex items-center gap-3">
+                                <h2 className="text-2xl font-bold text-gray-900 dark:text-white">{tenant.nome}</h2>
+                                {tenant.status === 'ativa' ? (
+                                    <span className="px-2 py-0.5 rounded-full bg-green-100 text-green-700 text-xs font-bold uppercase border border-green-200">Ativa</span>
+                                ) : (
+                                    <span className="px-2 py-0.5 rounded-full bg-red-100 text-red-700 text-xs font-bold uppercase border border-red-200 flex items-center gap-1"><Ban size={10}/> Bloqueada</span>
+                                )}
+                            </div>
+                            <div className="flex items-center gap-4 mt-2 text-sm text-gray-500 dark:text-gray-400">
+                                <span className="flex items-center gap-1"><MapPin size={14}/> {tenant.cnpj || 'CNPJ não informado'}</span>
+                                <span className="flex items-center gap-1"><Calendar size={14}/> Cliente desde {new Date(tenant.created_at).toLocaleDateString()}</span>
+                            </div>
+                        </div>
                     </div>
-                  </td>
-                  
-                  <td className="px-6 py-4">
-                    <span className={`px-2 py-1 rounded-md text-xs font-bold uppercase ${
-                      tenant.plano === 'enterprise' 
-                      ? 'bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300' 
-                      : 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300'
-                    }`}>
-                      {tenant.plano}
-                    </span>
-                  </td>
-
-                  <td className="px-6 py-4 text-center">
-                    <div className="flex justify-center gap-3 text-gray-600 dark:text-gray-400">
-                      <div className="flex items-center gap-1" title="Usuários do Sistema"><Users size={14} /> {tenant.total_usuarios}</div>
-                      <span className="text-gray-300">|</span>
-                      <div className="flex items-center gap-1" title="Clientes Cadastrados"><Building2 size={14} /> {tenant.total_clientes_cadastrados}</div>
-                    </div>
-                  </td>
-
-                  <td className="px-6 py-4 text-gray-600 dark:text-gray-400">
-                    {tenant.data_vencimento ? (
-                      <div className="flex items-center gap-2">
-                        <Calendar size={14} />
-                        {new Date(tenant.data_vencimento).toLocaleDateString()}
-                      </div>
-                    ) : (
-                      <span className="text-gray-300">-</span>
-                    )}
-                  </td>
-
-                  <td className="px-6 py-4">
-                    {tenant.status_financeiro === 'ativo' ? (
-                      <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400">
-                        <CheckCircle size={12} /> Em dia
-                      </span>
-                    ) : (
-                      <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400 animate-pulse">
-                        <Ban size={12} /> Bloqueado
-                      </span>
-                    )}
-                  </td>
-
-                  <td className="px-6 py-4 text-right relative">
-                    <button 
-                      onClick={() => setActionMenu(actionMenu === tenant.id ? null : tenant.id)}
-                      className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-full text-gray-400 hover:text-indigo-600 transition-colors"
-                    >
-                      <MoreVertical size={18} />
+                    <button onClick={onClose} className="p-2 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-full transition-colors">
+                        <X size={24} className="text-gray-400" />
                     </button>
+                </div>
 
-                    {/* Menu de Contexto (Ações Financeiras) */}
-                    {actionMenu === tenant.id && (
-                      <div className="absolute right-10 top-8 w-48 bg-white dark:bg-gray-800 rounded-xl shadow-xl border border-gray-100 dark:border-gray-700 z-20 overflow-hidden animate-scale-in">
-                        <button 
-                          onClick={() => handleRenovar(tenant.id)}
-                          className="w-full text-left px-4 py-3 text-sm text-gray-700 dark:text-gray-200 hover:bg-green-50 dark:hover:bg-green-900/20 hover:text-green-700 flex items-center gap-2 transition-colors"
-                        >
-                          <CheckCircle size={16} /> Confirmar Pagto
-                        </button>
-                        <button 
-                          onClick={() => handleBloquear(tenant.id)}
-                          className="w-full text-left px-4 py-3 text-sm text-gray-700 dark:text-gray-200 hover:bg-red-50 dark:hover:bg-red-900/20 hover:text-red-700 flex items-center gap-2 transition-colors border-t border-gray-100 dark:border-gray-700"
-                        >
-                          <Ban size={16} /> Bloquear Acesso
-                        </button>
-                      </div>
+                {/* --- NAVIGATION TABS --- */}
+                <div className="flex border-b border-gray-200 dark:border-gray-800 px-6 bg-gray-50 dark:bg-gray-900/50">
+                    <button 
+                        onClick={() => setActiveTab('overview')}
+                        className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors flex items-center gap-2 ${activeTab === 'overview' ? 'border-indigo-600 text-indigo-600' : 'border-transparent text-gray-500 hover:text-gray-700'}`}
+                    >
+                        <Activity size={16}/> Visão Geral
+                    </button>
+                    <button 
+                        onClick={() => setActiveTab('team')}
+                        className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors flex items-center gap-2 ${activeTab === 'team' ? 'border-indigo-600 text-indigo-600' : 'border-transparent text-gray-500 hover:text-gray-700'}`}
+                    >
+                        <Users size={16}/> Equipe & Acessos
+                    </button>
+                    <button 
+                        onClick={() => setActiveTab('finance')}
+                        className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors flex items-center gap-2 ${activeTab === 'finance' ? 'border-indigo-600 text-indigo-600' : 'border-transparent text-gray-500 hover:text-gray-700'}`}
+                    >
+                        <DollarSign size={16}/> Financeiro
+                    </button>
+                </div>
+
+                {/* --- CONTENT AREA --- */}
+                <div className="flex-1 overflow-y-auto p-6 bg-gray-50 dark:bg-gray-900">
+                    
+                    {/* TAB: VISÃO GERAL */}
+                    {activeTab === 'overview' && (
+                        <div className="space-y-6">
+                            {/* KPI CARDS */}
+                            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                                <div className="bg-white dark:bg-gray-800 p-4 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700">
+                                    <p className="text-xs font-bold text-gray-400 uppercase tracking-wider">Usuários Ativos</p>
+                                    <p className="text-2xl font-bold text-gray-800 dark:text-white mt-1">{stats.totalUsers}</p>
+                                </div>
+                                <div className="bg-white dark:bg-gray-800 p-4 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700">
+                                    <p className="text-xs font-bold text-gray-400 uppercase tracking-wider">Base de Clientes</p>
+                                    <p className="text-2xl font-bold text-blue-600 mt-1">{stats.totalClients}</p>
+                                </div>
+                                <div className="bg-white dark:bg-gray-800 p-4 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700">
+                                    <p className="text-xs font-bold text-gray-400 uppercase tracking-wider">Serviços Totais</p>
+                                    <p className="text-2xl font-bold text-purple-600 mt-1">{stats.totalServices}</p>
+                                </div>
+                                <div className="bg-white dark:bg-gray-800 p-4 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700">
+                                    <p className="text-xs font-bold text-gray-400 uppercase tracking-wider">Faturamento (Est.)</p>
+                                    <p className="text-2xl font-bold text-green-600 mt-1">R$ {stats.revenueEstimate.toLocaleString('pt-BR')}</p>
+                                </div>
+                            </div>
+
+                            {/* "FAKE" ACTIVITY CHART (Visual CSS) */}
+                            <div className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700">
+                                <h3 className="font-bold text-gray-800 dark:text-white mb-4">Atividade Recente (Volume de Serviços)</h3>
+                                <div className="flex items-end justify-between h-32 gap-2">
+                                    {[40, 65, 30, 85, 50, 95, 40, 60, 75, 50, 80, 65].map((h, i) => (
+                                        <div key={i} className="w-full bg-indigo-50 dark:bg-indigo-900/20 rounded-t-sm relative group">
+                                            <div 
+                                                style={{ height: `${h}%` }} 
+                                                className="absolute bottom-0 w-full bg-indigo-500 rounded-t-sm transition-all duration-500 group-hover:bg-indigo-400"
+                                            ></div>
+                                        </div>
+                                    ))}
+                                </div>
+                                <div className="flex justify-between mt-2 text-xs text-gray-400 uppercase">
+                                    <span>Jan</span><span>Dez</span>
+                                </div>
+                            </div>
+                        </div>
                     )}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
 
+                    {/* TAB: EQUIPE */}
+                    {activeTab === 'team' && (
+                         <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden">
+                            <table className="w-full text-sm text-left">
+                                <thead className="bg-gray-50 dark:bg-gray-950 text-gray-500 dark:text-gray-400">
+                                    <tr>
+                                        <th className="px-6 py-3">Nome</th>
+                                        <th className="px-6 py-3">Email</th>
+                                        <th className="px-6 py-3">Cargo</th>
+                                        <th className="px-6 py-3 text-right">Ações (Super Admin)</th>
+                                    </tr>
+                                </thead>
+                                <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
+                                    {team.map(member => (
+                                        <tr key={member.id} className="hover:bg-gray-50 dark:hover:bg-gray-800/50">
+                                            <td className="px-6 py-4 font-medium text-gray-900 dark:text-white flex items-center gap-2">
+                                                <div className="w-8 h-8 rounded-full bg-gray-100 dark:bg-gray-700 flex items-center justify-center text-xs font-bold">
+                                                    {member.nome ? member.nome.charAt(0) : '?'}
+                                                </div>
+                                                {member.nome}
+                                            </td>
+                                            <td className="px-6 py-4 text-gray-500">{member.email}</td>
+                                            <td className="px-6 py-4">
+                                                <span className={`px-2 py-1 rounded text-xs font-bold uppercase ${member.cargo === 'admin' ? 'bg-purple-100 text-purple-700' : 'bg-gray-100 text-gray-600'}`}>
+                                                    {member.cargo}
+                                                </span>
+                                            </td>
+                                            <td className="px-6 py-4 text-right">
+                                                <button 
+                                                    onClick={() => handleResetPassword(member.id, member.nome)}
+                                                    className="text-indigo-600 hover:text-indigo-800 font-medium text-xs flex items-center gap-1 justify-end ml-auto hover:underline"
+                                                >
+                                                    {resetLoading === member.id ? 'Alterando...' : <><Key size={14}/> Resetar Senha</>}
+                                                </button>
+                                            </td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                         </div>
+                    )}
+
+                    {/* TAB: FINANCEIRO */}
+                    {activeTab === 'finance' && (
+                        <div className="flex flex-col items-center justify-center h-full text-center py-10">
+                            <div className="w-16 h-16 bg-green-100 dark:bg-green-900/30 rounded-full flex items-center justify-center text-green-600 mb-4">
+                                <DollarSign size={32} />
+                            </div>
+                            <h3 className="text-lg font-bold text-gray-800 dark:text-white">Assinatura Ativa</h3>
+                            <p className="text-gray-500 mb-6 max-w-md">
+                                Esta consultoria está no plano <strong>{tenant.plano}</strong>.
+                                O módulo de cobrança automática via Gateway ainda não está configurado.
+                            </p>
+                            <div className="bg-yellow-50 dark:bg-yellow-900/20 p-4 rounded-lg border border-yellow-200 dark:border-yellow-800 max-w-lg w-full text-left flex gap-3">
+                                <AlertTriangle className="text-yellow-600 shrink-0" />
+                                <div>
+                                    <h4 className="font-bold text-yellow-800 dark:text-yellow-500 text-sm">Próximos Passos</h4>
+                                    <p className="text-xs text-yellow-700 dark:text-yellow-400 mt-1">
+                                        Para gerenciar faturas e boletos reais, você precisará integrar com ASAAS, Stripe ou Mercado Pago.
+                                        Por enquanto, o controle é manual via status da empresa.
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+                </div>
+            </>
+        )}
       </div>
     </div>
   );
