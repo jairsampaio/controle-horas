@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
-import { createClient } from '@supabase/supabase-js'; 
+import { createClient } from '@supabase/supabase-js'; // Importação essencial para criar o usuário sem deslogar
 import { 
   Users, UserPlus, Mail, Shield, CheckCircle, X, Lock, User
 } from 'lucide-react';
@@ -20,7 +20,7 @@ const TeamManagement = ({ showToast }) => {
   // --- NOVO FORMULÁRIO (Para criação direta) ---
   const [nome, setNome] = useState('');
   const [email, setEmail] = useState('');
-  const [senha, setSenha] = useState(''); 
+  const [senha, setSenha] = useState(''); // Senha provisória
 
   // Função Principal de Carregamento
   const loadData = async () => {
@@ -78,23 +78,12 @@ const TeamManagement = ({ showToast }) => {
         throw new Error("A senha provisória deve ter no mínimo 6 caracteres.");
       }
 
-      // ==============================================================================
-      // ⚠️ ATENÇÃO: SUBSTITUA ABAIXO PELA SUA URL E KEY DO SUPABASE
-      // (Isso é necessário porque criar uma nova instância exige esses dados explícitos)
-      // ==============================================================================
-      const SUPABASE_URL = 'https://ubwutmslwlefviiabysc.supabase.co'; // <--- COLE SUA URL AQUI
-      const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVid3V0bXNsd2xlZnZpaWFieXNjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjUyMjQ4MTgsImV4cCI6MjA4MDgwMDgxOH0.lTlvqtu0hKtYDQXJB55BG9ueZ-MdtbCtBvSNQMII2b8';     // <--- COLE SUA ANON KEY AQUI
-      // ==============================================================================
-
-      // Validação simples pra você não esquecer
-      if (SUPABASE_URL.includes('SEU_PROJETO')) {
-         throw new Error("ERRO DE CONFIGURAÇÃO: Você precisa colocar a URL e a KEY nas linhas 71 e 72 do código TeamManagement.js");
-      }
-
-      // 1. Cria um cliente temporário ISOLADO (Não desloga você)
-      const tempClient = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+      // 1. Cria um cliente temporário do Supabase
+      // Isso é vital para criar um novo usuário SEM deslogar você (o admin)
+      // Usamos as mesmas chaves que já estão no seu services/supabase.js
+      const tempClient = createClient(supabase.supabaseUrl, supabase.supabaseKey, {
         auth: {
-          persistSession: false, // OBRIGATÓRIO: Não salva sessão no navegador
+          persistSession: false, // NÃO salvar a sessão no navegador
           autoRefreshToken: false,
           detectSessionInUrl: false
         }
@@ -113,10 +102,11 @@ const TeamManagement = ({ showToast }) => {
       if (!authData.user) throw new Error("Erro ao criar usuário no sistema de autenticação.");
 
       // 3. Chama o Banco APENAS para vincular à Consultoria correta
+      // O usuário já existe, agora só colocamos ele na "gaveta" certa
       const { data: rpcData, error: rpcError } = await supabase.rpc('vincular_funcionario_criado', {
         email_func: email.trim(),
         nome_func: nome,
-        cargo_func: 'colaborador' 
+        cargo_func: 'colaborador' // Define como colaborador por padrão
       });
 
       if (rpcError) throw rpcError;
