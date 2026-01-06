@@ -1,7 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { createClient } from '@supabase/supabase-js'; 
-import { Search, Plus, Building2, Edit, X, Save, Eye, User, Lock, Mail, Users, Ban, CheckCircle } from 'lucide-react';
+import { 
+  Search, Plus, Building2, Edit, X, Save, Eye, User, Lock, Mail, 
+  Users, Ban, CheckCircle, LayoutGrid, List 
+} from 'lucide-react';
 import supabase from '../services/supabase';
 
 // Componente de Badge (Visual do status)
@@ -12,7 +15,6 @@ const StatusBadge = ({ status }) => {
     cancelada: 'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-400'
   };
   
-  // Tratamento para status desconhecidos
   const statusKey = styles[status] ? status : 'cancelada';
   
   return (
@@ -26,6 +28,7 @@ const AdminTenants = ({ onViewDetails }) => {
   const [tenants, setTenants] = useState([]);
   const [loading, setLoading] = useState(true);
   const [busca, setBusca] = useState('');
+  const [viewMode, setViewMode] = useState('grid'); // 'grid' ou 'table'
   
   // Estados para o Modal
   const [showModal, setShowModal] = useState(false);
@@ -38,7 +41,6 @@ const AdminTenants = ({ onViewDetails }) => {
   const [formData, setFormData] = useState({
     nome: '',
     cnpj: '',
-    // Campos do Dono (Criação ou Edição)
     nome_dono: '',
     email_admin: '', 
     senha_admin: '' 
@@ -51,7 +53,6 @@ const AdminTenants = ({ onViewDetails }) => {
   const fetchTenants = async () => {
     setLoading(true);
     try {
-        // 1. Busca as consultorias
         const { data: consultorias, error } = await supabase
             .from('consultorias') 
             .select('*')
@@ -59,13 +60,10 @@ const AdminTenants = ({ onViewDetails }) => {
         
         if (error) throw error;
 
-        // 2. Busca a contagem de usuários para cada consultoria
-        // (Fazemos uma query separada para evitar complexidade de joins se as FKs não estiverem perfeitas)
         const { data: profiles } = await supabase
             .from('profiles')
             .select('consultoria_id');
 
-        // Calcula contagem
         const counts = {};
         if (profiles) {
             profiles.forEach(p => {
@@ -75,7 +73,6 @@ const AdminTenants = ({ onViewDetails }) => {
             });
         }
 
-        // Mescla a contagem nos dados das consultorias
         const tenantsWithCounts = (consultorias || []).map(t => ({
             ...t,
             userCount: counts[t.id] || 0
@@ -99,24 +96,22 @@ const AdminTenants = ({ onViewDetails }) => {
   const handleOpenEdit = async (tenant) => {
     setEditingId(tenant.id);
     
-    // Preenche dados básicos
     const newData = {
       nome: tenant.nome,
       cnpj: tenant.cnpj || '',
       nome_dono: 'Carregando...', 
       email_admin: 'Carregando...', 
-      senha_admin: '' // Senha não editamos na visualização
+      senha_admin: '' 
     };
     
     setFormData(newData);
     setShowModal(true);
 
-    // Busca o Dono (Admin) dessa consultoria para exibir
     const { data: adminProfile } = await supabase
         .from('profiles')
         .select('nome, email')
         .eq('consultoria_id', tenant.id)
-        .eq('cargo', 'admin') // Assume que o dono tem cargo admin
+        .eq('cargo', 'admin') 
         .limit(1)
         .single();
 
@@ -135,7 +130,6 @@ const AdminTenants = ({ onViewDetails }) => {
     }
   };
 
-  // Função para Bloquear/Ativar Consultoria
   const toggleStatus = async (tenant) => {
       const novoStatus = tenant.status === 'ativa' ? 'bloqueada' : 'ativa';
       const actionText = novoStatus === 'ativa' ? 'ATIVAR' : 'BLOQUEAR';
@@ -149,8 +143,7 @@ const AdminTenants = ({ onViewDetails }) => {
               .eq('id', tenant.id);
 
           if (error) throw error;
-          
-          fetchTenants(); // Recarrega a lista
+          fetchTenants(); 
       } catch (error) {
           console.error(error);
           alert("Erro ao alterar status.");
@@ -169,8 +162,7 @@ const AdminTenants = ({ onViewDetails }) => {
     setSaving(true);
     try {
       if (editingId) {
-        // --- MODO EDIÇÃO ---
-        // 1. Atualiza Empresa
+        // --- EDIÇÃO ---
         const { error } = await supabase
           .from('consultorias')
           .update({ 
@@ -181,8 +173,6 @@ const AdminTenants = ({ onViewDetails }) => {
 
         if (error) throw error;
 
-        // 2. Atualiza Nome do Dono (se encontrado)
-        // (Opcional: se quiser permitir editar o nome do dono aqui)
         if (formData.email_admin && formData.email_admin !== '-' && formData.email_admin !== 'Carregando...') {
             await supabase
                 .from('profiles')
@@ -191,32 +181,22 @@ const AdminTenants = ({ onViewDetails }) => {
         }
 
       } else {
-        // --- MODO CRIAÇÃO (Fluxo Corrigido via React) ---
-        
-        // 1. Validações
+        // --- CRIAÇÃO ---
         if (!formData.email_admin || !formData.senha_admin || !formData.nome_dono) {
             throw new Error("Preencha todos os dados do Dono da consultoria.");
         }
 
-        // ==============================================================================
-        // ⚠️ ATENÇÃO: SUBSTITUA ABAIXO PELA SUA URL E KEY
-        // ==============================================================================
         const SUPABASE_URL = 'https://ubwutmslwlefviiabysc.supabase.co'; 
         const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVid3V0bXNsd2xlZnZpaWFieXNjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjUyMjQ4MTgsImV4cCI6MjA4MDgwMDgxOH0.lTlvqtu0hKtYDQXJB55BG9ueZ-MdtbCtBvSNQMII2b8';
-        // ==============================================================================
 
-        // Cliente Temporário para criar o usuário sem deslogar o Admin
         const tempClient = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
             auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false }
         });
 
-        // 2. Cria o Usuário DONO
         const { data: authData, error: authError } = await tempClient.auth.signUp({
             email: formData.email_admin.trim(),
             password: formData.senha_admin,
-            options: {
-                data: { nome_completo: formData.nome_dono }
-            }
+            options: { data: { nome_completo: formData.nome_dono } }
         });
 
         if (authError) throw authError;
@@ -224,7 +204,6 @@ const AdminTenants = ({ onViewDetails }) => {
 
         const novoUserId = authData.user.id;
 
-        // 3. Cria a Consultoria na tabela
         const { data: consData, error: consError } = await supabase
             .from('consultorias')
             .insert([{ 
@@ -239,17 +218,12 @@ const AdminTenants = ({ onViewDetails }) => {
         if (consError) throw consError;
         const novaConsultoriaId = consData.id;
 
-        // 4. Vincula o Usuário criado à Consultoria e define como ADMIN
         const { error: profileError } = await supabase
             .from('profiles')
-            .update({ 
-                consultoria_id: novaConsultoriaId,
-                cargo: 'admin' 
-            })
+            .update({ consultoria_id: novaConsultoriaId, cargo: 'admin' })
             .eq('id', novoUserId);
 
         if (profileError) {
-             console.error("Erro ao vincular perfil, tentando insert manual...", profileError);
              await supabase.from('profiles').upsert({
                  id: novoUserId,
                  email: formData.email_admin,
@@ -274,7 +248,6 @@ const AdminTenants = ({ onViewDetails }) => {
     }
   };
 
-  // Filtro local
   const filteredTenants = tenants.filter(t => 
     (t.nome || '').toLowerCase().includes(busca.toLowerCase())
   );
@@ -287,7 +260,7 @@ const AdminTenants = ({ onViewDetails }) => {
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div>
             <h2 className="text-lg font-bold text-gray-800 dark:text-white">Gestão de Assinantes</h2>
-            <p className="text-sm text-gray-500">Gerencie as empresas e seus acessos.</p>
+            <p className="text-sm text-gray-500">Crie consultorias e defina seus administradores.</p>
           </div>
           <button 
             onClick={handleOpenCreate}
@@ -297,9 +270,9 @@ const AdminTenants = ({ onViewDetails }) => {
           </button>
         </div>
 
-        {/* Filtros */}
-        <div className="bg-white dark:bg-gray-800 p-4 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 flex flex-col md:flex-row gap-4">
-          <div className="relative flex-1">
+        {/* Filtros e Toggle de Visualização */}
+        <div className="bg-white dark:bg-gray-800 p-4 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 flex flex-col md:flex-row gap-4 items-center justify-between">
+          <div className="relative flex-1 w-full">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={20} />
             <input 
               type="text" 
@@ -309,86 +282,183 @@ const AdminTenants = ({ onViewDetails }) => {
               className="w-full pl-10 pr-4 py-2 rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white focus:ring-2 focus:ring-indigo-500 outline-none transition-all"
             />
           </div>
+
+          {/* Toggle View */}
+          <div className="bg-gray-100 dark:bg-gray-700 p-1 rounded-lg border border-gray-200 dark:border-gray-600 flex">
+            <button 
+                onClick={() => setViewMode('grid')}
+                className={`p-2 rounded-md transition-colors ${viewMode === 'grid' ? 'bg-white dark:bg-gray-600 text-indigo-600 dark:text-indigo-400 shadow-sm' : 'text-gray-400 hover:text-gray-600 dark:hover:text-gray-300'}`}
+                title="Cards"
+            >
+                <LayoutGrid size={20} />
+            </button>
+            <button 
+                onClick={() => setViewMode('table')}
+                className={`p-2 rounded-md transition-colors ${viewMode === 'table' ? 'bg-white dark:bg-gray-600 text-indigo-600 dark:text-indigo-400 shadow-sm' : 'text-gray-400 hover:text-gray-600 dark:hover:text-gray-300'}`}
+                title="Tabela"
+            >
+                <List size={20} />
+            </button>
+          </div>
         </div>
 
-        {/* Grid de Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {loading ? (
-             <div className="col-span-full text-center py-20 text-gray-500">Carregando consultorias...</div>
-          ) : filteredTenants.map(tenant => (
-            <div key={tenant.id} className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm hover:shadow-md transition-all duration-300 group flex flex-col justify-between">
-              
-              <div>
-                <div className="p-5 border-b border-gray-100 dark:border-gray-700 flex justify-between items-start">
-                  <div className="flex gap-3">
-                    <div className="w-10 h-10 bg-indigo-50 dark:bg-indigo-900/20 rounded-lg flex items-center justify-center text-indigo-600 dark:text-indigo-400">
-                      <Building2 size={20} />
+        {/* --- CONTEÚDO CONDICIONAL (GRADE OU TABELA) --- */}
+        {loading ? (
+             <div className="text-center py-20 text-gray-500">Carregando consultorias...</div>
+        ) : (
+            <>
+                {/* MODO GRADE (CARDS) */}
+                {viewMode === 'grid' ? (
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                        {filteredTenants.map(tenant => (
+                            <div key={tenant.id} className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm hover:shadow-md transition-all duration-300 group flex flex-col justify-between">
+                                <div>
+                                    <div className="p-5 border-b border-gray-100 dark:border-gray-700 flex justify-between items-start">
+                                        <div className="flex gap-3">
+                                            <div className="w-10 h-10 bg-indigo-50 dark:bg-indigo-900/20 rounded-lg flex items-center justify-center text-indigo-600 dark:text-indigo-400">
+                                            <Building2 size={20} />
+                                            </div>
+                                            <div>
+                                            <h3 className="font-bold text-gray-800 dark:text-white text-lg leading-tight">{tenant.nome}</h3>
+                                            <span className="text-xs text-gray-400 font-mono">ID: {tenant.id.slice(0,8)}...</span>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <div className="p-5 space-y-4">
+                                        <div className="flex justify-between items-center text-sm">
+                                            <span className="text-gray-500 dark:text-gray-400">Status</span>
+                                            <StatusBadge status={tenant.status || 'ativa'} />
+                                        </div>
+                                        
+                                        <div className="flex justify-between items-center text-sm">
+                                            <span className="text-gray-500 dark:text-gray-400 flex items-center gap-1"><Users size={14}/> Usuários</span>
+                                            <span className="font-bold text-gray-800 dark:text-white px-2 py-0.5 bg-gray-100 dark:bg-gray-700 rounded">
+                                                {tenant.userCount || 0}
+                                            </span>
+                                        </div>
+
+                                        <div className="flex justify-between items-center text-sm">
+                                            <span className="text-gray-500 dark:text-gray-400">Plano</span>
+                                            <span className="font-medium text-gray-800 dark:text-white px-2 py-0.5 bg-gray-100 dark:bg-gray-700 rounded capitalize">{tenant.plano || 'Pro'}</span>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div className="p-3 bg-gray-50 dark:bg-gray-900/50 border-t border-gray-100 dark:border-gray-700 flex gap-2">
+                                    <button 
+                                        onClick={() => onViewDetails && onViewDetails(tenant.id)}
+                                        className="flex-1 py-1.5 text-xs font-bold text-blue-600 bg-blue-50 hover:bg-blue-100 rounded transition-all flex items-center justify-center gap-2"
+                                    >
+                                        <Eye size={16} /> Ver Detalhes
+                                    </button>
+                                    
+                                    <button 
+                                        onClick={() => handleOpenEdit(tenant)}
+                                        className="px-3 py-1.5 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 rounded transition-colors"
+                                        title="Editar Dados"
+                                    >
+                                        <Edit size={16} />
+                                    </button>
+
+                                    <button 
+                                        onClick={() => toggleStatus(tenant)}
+                                        className={`px-3 py-1.5 rounded transition-colors ${
+                                            tenant.status === 'ativa' 
+                                            ? 'text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20' 
+                                            : 'text-green-500 hover:bg-green-50 dark:hover:bg-green-900/20'
+                                        }`}
+                                        title={tenant.status === 'ativa' ? 'Bloquear Acesso' : 'Liberar Acesso'}
+                                    >
+                                        {tenant.status === 'ativa' ? <Ban size={16} /> : <CheckCircle size={16} />}
+                                    </button>
+                                </div>
+                            </div>
+                        ))}
                     </div>
-                    <div>
-                      <h3 className="font-bold text-gray-800 dark:text-white text-lg leading-tight">{tenant.nome}</h3>
-                      <span className="text-xs text-gray-400 font-mono">ID: {tenant.id.slice(0,8)}...</span>
+                ) : (
+                    /* MODO TABELA */
+                    <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden">
+                        <div className="overflow-x-auto">
+                            <table className="w-full text-sm text-left">
+                                <thead className="bg-gray-50 dark:bg-gray-900 text-gray-500 dark:text-gray-400 font-medium border-b border-gray-200 dark:border-gray-800">
+                                    <tr>
+                                        <th className="px-6 py-3">Empresa</th>
+                                        <th className="px-6 py-3">CNPJ</th>
+                                        <th className="px-6 py-3">Plano</th>
+                                        <th className="px-6 py-3 text-center">Usuários</th>
+                                        <th className="px-6 py-3 text-center">Status</th>
+                                        <th className="px-6 py-3 text-right">Ações</th>
+                                    </tr>
+                                </thead>
+                                <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
+                                    {filteredTenants.map(tenant => (
+                                        <tr key={tenant.id} className="hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors">
+                                            <td className="px-6 py-4">
+                                                <div className="flex items-center gap-3">
+                                                    <div className="w-8 h-8 bg-indigo-50 dark:bg-indigo-900/20 rounded-lg flex items-center justify-center text-indigo-600 dark:text-indigo-400">
+                                                        <Building2 size={16} />
+                                                    </div>
+                                                    <div>
+                                                        <div className="font-bold text-gray-800 dark:text-white">{tenant.nome}</div>
+                                                        <div className="text-xs text-gray-400 font-mono">ID: {tenant.id.slice(0,8)}...</div>
+                                                    </div>
+                                                </div>
+                                            </td>
+                                            <td className="px-6 py-4 text-gray-500 dark:text-gray-400">
+                                                {tenant.cnpj || '-'}
+                                            </td>
+                                            <td className="px-6 py-4">
+                                                <span className="font-medium text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 px-2 py-0.5 rounded text-xs capitalize">
+                                                    {tenant.plano || 'Pro'}
+                                                </span>
+                                            </td>
+                                            <td className="px-6 py-4 text-center">
+                                                <span className="inline-flex items-center gap-1 font-bold text-gray-700 dark:text-gray-300">
+                                                    <Users size={14} className="text-gray-400"/> {tenant.userCount || 0}
+                                                </span>
+                                            </td>
+                                            <td className="px-6 py-4 text-center">
+                                                <StatusBadge status={tenant.status || 'ativa'} />
+                                            </td>
+                                            <td className="px-6 py-4 text-right">
+                                                <div className="flex justify-end gap-2">
+                                                    <button 
+                                                        onClick={() => onViewDetails && onViewDetails(tenant.id)}
+                                                        className="p-1.5 text-blue-600 bg-blue-50 hover:bg-blue-100 rounded transition-colors"
+                                                        title="Ver Detalhes"
+                                                    >
+                                                        <Eye size={16} />
+                                                    </button>
+                                                    <button 
+                                                        onClick={() => handleOpenEdit(tenant)}
+                                                        className="p-1.5 text-indigo-600 hover:bg-indigo-50 rounded transition-colors"
+                                                        title="Editar"
+                                                    >
+                                                        <Edit size={16} />
+                                                    </button>
+                                                    <button 
+                                                        onClick={() => toggleStatus(tenant)}
+                                                        className={`p-1.5 rounded transition-colors ${
+                                                            tenant.status === 'ativa' 
+                                                            ? 'text-gray-400 hover:text-red-500 hover:bg-red-50' 
+                                                            : 'text-green-500 hover:bg-green-50'
+                                                        }`}
+                                                        title={tenant.status === 'ativa' ? 'Bloquear' : 'Ativar'}
+                                                    >
+                                                        {tenant.status === 'ativa' ? <Ban size={16} /> : <CheckCircle size={16} />}
+                                                    </button>
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
                     </div>
-                  </div>
-                </div>
-
-                <div className="p-5 space-y-4">
-                  <div className="flex justify-between items-center text-sm">
-                    <span className="text-gray-500 dark:text-gray-400">Status</span>
-                    <StatusBadge status={tenant.status || 'ativa'} />
-                  </div>
-                  
-                  <div className="flex justify-between items-center text-sm">
-                    <span className="text-gray-500 dark:text-gray-400 flex items-center gap-1"><Users size={14}/> Usuários</span>
-                    <span className="font-bold text-gray-800 dark:text-white px-2 py-0.5 bg-gray-100 dark:bg-gray-700 rounded">
-                        {tenant.userCount || 0}
-                    </span>
-                  </div>
-
-                  <div className="flex justify-between items-center text-sm">
-                    <span className="text-gray-500 dark:text-gray-400">Plano</span>
-                    <span className="font-medium text-gray-800 dark:text-white px-2 py-0.5 bg-gray-100 dark:bg-gray-700 rounded capitalize">{tenant.plano || 'Pro'}</span>
-                  </div>
-                </div>
-              </div>
-
-              {/* BOTÕES DE AÇÃO */}
-              <div className="p-3 bg-gray-50 dark:bg-gray-900/50 border-t border-gray-100 dark:border-gray-700 flex gap-2">
-                
-                {/* Visualizar */}
-                <button 
-                  onClick={() => onViewDetails && onViewDetails(tenant.id)}
-                  className="flex-1 py-1.5 text-xs font-bold text-blue-600 bg-blue-50 hover:bg-blue-100 rounded transition-all flex items-center justify-center gap-2"
-                >
-                  <Eye size={16} /> Ver Detalhes
-                </button>
-                
-                {/* Editar */}
-                <button 
-                  onClick={() => handleOpenEdit(tenant)}
-                  className="px-3 py-1.5 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 rounded transition-colors"
-                  title="Editar Dados"
-                >
-                  <Edit size={16} />
-                </button>
-
-                {/* Bloquear / Ativar */}
-                <button 
-                  onClick={() => toggleStatus(tenant)}
-                  className={`px-3 py-1.5 rounded transition-colors ${
-                      tenant.status === 'ativa' 
-                      ? 'text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20' 
-                      : 'text-green-500 hover:bg-green-50 dark:hover:bg-green-900/20'
-                  }`}
-                  title={tenant.status === 'ativa' ? 'Bloquear Acesso' : 'Liberar Acesso'}
-                >
-                  {tenant.status === 'ativa' ? <Ban size={16} /> : <CheckCircle size={16} />}
-                </button>
-
-              </div>
-
-            </div>
-          ))}
-        </div>
+                )}
+            </>
+        )}
       </div>
 
       {/* --- MODAL (CREATE / EDIT) --- */}
