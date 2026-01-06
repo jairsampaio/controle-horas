@@ -10,15 +10,22 @@ const ServiceModal = ({ isOpen, onClose, onSave, formData, setFormData, clientes
   const [valorVisual, setValorVisual] = useState('');
   const [erroValidacao, setErroValidacao] = useState(''); 
 
-  // Sincroniza valor visual
+  // --- CORREÇÃO DEFINITIVA AQUI ---
+  // Assim que o modal abre, se o canal estiver vazio "", forçamos virar NULL
   useEffect(() => {
     if (isOpen) {
+      // Ajusta valor visual
       if (formData.valor_hora) {
         setValorVisual(formData.valor_hora.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
       } else {
         setValorVisual('');
       }
       setErroValidacao(''); 
+
+      // A VACINA: Se canal_id for string vazia, transforma em null imediatamente
+      if (formData.canal_id === "") {
+        setFormData(prev => ({ ...prev, canal_id: null }));
+      }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen]); 
@@ -88,12 +95,10 @@ const ServiceModal = ({ isOpen, onClose, onSave, formData, setFormData, clientes
     setLoading(false);
   };
 
-  // --- CORREÇÃO AQUI ---
-  // Transforma string vazia em NULL para campos UUID (como canal_id)
   const handleChange = (field, value) => {
     let valorTratado = value;
 
-    // Se o campo for canal_id e o valor for vazio, enviamos null para o banco não dar erro de UUID
+    // Garante que se o usuário selecionar a opção "vazia", vire null também
     if (field === 'canal_id' && value === '') {
         valorTratado = null;
     }
@@ -187,7 +192,6 @@ const ServiceModal = ({ isOpen, onClose, onSave, formData, setFormData, clientes
                   </select>
               </div>
               
-              {/* SOLICITANTE AGORA É OBRIGATÓRIO E COMBOBOX */}
               <div className="space-y-1">
                   <label className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider flex items-center gap-1">
                     <User size={12} /> Solicitante <span className="text-red-500">*</span>
@@ -202,7 +206,6 @@ const ServiceModal = ({ isOpen, onClose, onSave, formData, setFormData, clientes
                     disabled={!formData.cliente || loadingSolicitantes}
                     required 
                   >
-                    {/* Lógica de Opções */}
                     {!formData.cliente ? (
                         <option value="">Selecione um cliente primeiro</option>
                     ) : loadingSolicitantes ? (
