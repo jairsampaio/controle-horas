@@ -338,7 +338,7 @@ const TeamManagement = ({ showToast }) => {
                                         <p className="text-xs text-gray-500 dark:text-gray-400">{member.email}</p>
                                     </div>
                                 </div>
-                                <div className="flex flex-col items-end gap-1">
+                                <div className="flex flex-col items-end gap-1 shrink-0">
                                     <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase 
                                         ${member.cargo === 'super_admin' ? 'bg-yellow-100 text-yellow-700' : 
                                         member.cargo === 'admin' ? 'bg-purple-100 text-purple-700' : 
