@@ -28,7 +28,7 @@ const AdminTenants = ({ onViewDetails }) => {
   const [tenants, setTenants] = useState([]);
   const [loading, setLoading] = useState(true);
   const [busca, setBusca] = useState('');
-  const [viewMode, setViewMode] = useState('grid'); // 'grid' ou 'table'
+  const [viewMode, setViewMode] = useState('table'); // 'grid' ou 'table'
   
   // Estados para o Modal
   const [showModal, setShowModal] = useState(false);
