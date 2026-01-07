@@ -323,30 +323,40 @@ const TeamManagement = ({ showToast }) => {
                         </tbody>
                     </table>
                 </div>
-
+                
                 {/* 2. VISÃO MOBILE: CARDS (md:hidden) */}
                 <div className="md:hidden divide-y divide-gray-100 dark:divide-gray-800">
                     {members.map(member => (
                         <div key={member.id} className="p-5 flex flex-col gap-4">
                             <div className="flex justify-between items-start">
-                                <div className="flex items-center gap-3">
-                                    <div className="w-10 h-10 rounded-full bg-indigo-50 dark:bg-indigo-900/30 flex items-center justify-center text-indigo-600 dark:text-indigo-400 font-bold text-sm">
+                                
+                                {/* LADO ESQUERDO: Blindado para não empurrar o vizinho */}
+                                <div className="flex items-center gap-3 min-w-0 flex-1 mr-2">
+                                    <div className="w-10 h-10 rounded-full bg-indigo-50 dark:bg-indigo-900/30 flex items-center justify-center text-indigo-600 dark:text-indigo-400 font-bold text-sm shrink-0">
                                         {member.nome ? member.nome.charAt(0).toUpperCase() : '?'}
                                     </div>
-                                    <div>
-                                        <h4 className="font-bold text-gray-900 dark:text-white">{member.nome || 'Sem Nome'}</h4>
-                                        <p className="text-xs text-gray-500 dark:text-gray-400">{member.email}</p>
+                                    <div className="min-w-0"> {/* Essencial para o truncate funcionar */}
+                                        <h4 className="font-bold text-gray-900 dark:text-white truncate">
+                                            {member.nome || 'Sem Nome'}
+                                        </h4>
+                                        <p className="text-xs text-gray-500 dark:text-gray-400 truncate">
+                                            {member.email}
+                                        </p>
                                     </div>
                                 </div>
+
+                                {/* LADO DIREITO: Fixo, não encolhe e não quebra linha */}
                                 <div className="flex flex-col items-end gap-1 shrink-0">
-                                    <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase 
+                                    <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase whitespace-nowrap
                                         ${member.cargo === 'super_admin' ? 'bg-yellow-100 text-yellow-700' : 
                                         member.cargo === 'admin' ? 'bg-purple-100 text-purple-700' : 
                                         'bg-blue-100 text-blue-700'}`}>
-                                        {member.cargo || 'Colab'}
+                                        {member.cargo === 'super_admin' ? 'Super Admin' : (member.cargo || 'Colab')}
                                     </span>
                                     {member.ativo === false && (
-                                        <span className="text-[10px] font-bold text-red-500 bg-red-50 px-1.5 rounded">Bloqueado</span>
+                                        <span className="text-[10px] font-bold text-red-500 bg-red-50 px-1.5 rounded whitespace-nowrap">
+                                            Bloqueado
+                                        </span>
                                     )}
                                 </div>
                             </div>
