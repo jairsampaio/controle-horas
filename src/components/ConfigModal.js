@@ -1,31 +1,83 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { 
   X, Save, User, DollarSign, Settings, Bell, Shield, 
-  CreditCard, Layout, Mail, Camera, Check 
+  CreditCard, Layout, Mail, Camera, Check, Upload
 } from 'lucide-react';
 
-const ConfigModal = ({ isOpen, onClose, onSave, valorAtual, nomeAtual }) => { 
+const ConfigModal = ({ isOpen, onClose, onSave, valorAtual, nomeAtual, userEmail }) => { 
   const [activeTab, setActiveTab] = useState('geral');
+  const fileInputRef = useRef(null);
   
-  // Estados Reais (Vão pro Banco)
-  const [valor, setValor] = useState('');
+  // --- ESTADOS ---
+  const [valor, setValor] = useState(''); // Armazena número puro
+  const [valorDisplay, setValorDisplay] = useState(''); // Armazena string formatada (R$)
   const [nome, setNome] = useState('');
+  const [fotoPreview, setFotoPreview] = useState(null);
   
-  // Estados "Visuais" (Para dar o tchan, futuros features)
   const [cargo, setCargo] = useState('Consultor Especialista');
   const [notificacoesEmail, setNotificacoesEmail] = useState(true);
-  const [temaEscuro, setTemaEscuro] = useState(false);
+  
+  // Detecta se o sistema já está em dark mode ao abrir
+  const [temaEscuro, setTemaEscuro] = useState(
+    document.documentElement.classList.contains('dark')
+  );
 
   useEffect(() => {
     if (isOpen) {
-      setValor(valorAtual || '');
+      // Configura Nome
       setNome(nomeAtual || '');
+      
+      // Configura Valor com Máscara
+      const val = valorAtual || 0;
+      setValor(val);
+      setValorDisplay(formatCurrency(val));
     }
   }, [isOpen, valorAtual, nomeAtual]);
 
+  // --- LÓGICA DE TEMA ESCURO ---
+  useEffect(() => {
+    if (temaEscuro) {
+        document.documentElement.classList.add('dark');
+    } else {
+        document.documentElement.classList.remove('dark');
+    }
+  }, [temaEscuro]);
+
+  // --- MÁSCARA DE MOEDA ---
+  const formatCurrency = (value) => {
+    const number = Number(value);
+    return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(number);
+  };
+
+  const handleValorChange = (e) => {
+    // Remove tudo que não é dígito
+    let value = e.target.value.replace(/\D/g, '');
+    // Converte para decimal (divide por 100)
+    const numberValue = Number(value) / 100;
+    
+    setValor(numberValue); // Salva o número puro (ex: 150.50)
+    setValorDisplay(formatCurrency(numberValue)); // Mostra formatado (ex: R$ 150,50)
+  };
+
+  // --- UPLOAD DE FOTO (PREVIEW) ---
+  const handlePhotoClick = () => {
+    fileInputRef.current.click();
+  };
+
+  const handleFileChange = (e) => {
+    const file = e.target.files[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setFotoPreview(reader.result);
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
   const handleSubmit = (e) => {
     e.preventDefault();
-    // Aqui passamos também o cargo se você quiser salvar no futuro
+    // Envia o valor numérico puro e o nome
     onSave(valor, nome);
   };
 
@@ -64,15 +116,20 @@ const ConfigModal = ({ isOpen, onClose, onSave, valorAtual, nomeAtual }) => {
             </nav>
           </div>
           
+          {/* Card do Usuário (Dinâmico) */}
           <div className="px-2">
             <div className="p-3 bg-indigo-50 dark:bg-indigo-900/20 rounded-xl border border-indigo-100 dark:border-indigo-900/50">
                 <div className="flex items-center gap-3 mb-2">
-                    <div className="w-8 h-8 rounded-full bg-indigo-600 flex items-center justify-center text-white font-bold text-xs">
-                        {nome ? nome.charAt(0).toUpperCase() : 'U'}
-                    </div>
-                    <div>
-                        <p className="text-xs font-bold text-gray-900 dark:text-white truncate max-w-[100px]">{nome || 'Usuário'}</p>
-                        <p className="text-[10px] text-gray-500 dark:text-gray-400">Plano Pro</p>
+                    {fotoPreview ? (
+                        <img src={fotoPreview} alt="Perfil" className="w-8 h-8 rounded-full object-cover border border-indigo-200" />
+                    ) : (
+                        <div className="w-8 h-8 rounded-full bg-indigo-600 flex items-center justify-center text-white font-bold text-xs">
+                            {nome ? nome.charAt(0).toUpperCase() : 'U'}
+                        </div>
+                    )}
+                    <div className="overflow-hidden">
+                        <p className="text-xs font-bold text-gray-900 dark:text-white truncate">{nome || 'Usuário'}</p>
+                        <p className="text-[10px] text-gray-500 dark:text-gray-400 truncate">{userEmail || 'Conta Ativa'}</p>
                     </div>
                 </div>
             </div>
@@ -99,19 +156,37 @@ const ConfigModal = ({ isOpen, onClose, onSave, valorAtual, nomeAtual }) => {
                     {/* TAB: GERAL */}
                     {activeTab === 'geral' && (
                         <div className="space-y-6 animate-fade-in">
-                            {/* Avatar Fake Upload */}
+                            {/* Avatar Upload Real */}
                             <div className="flex items-center gap-4">
-                                <div className="relative group cursor-pointer">
-                                    <div className="w-20 h-20 rounded-full bg-gray-200 dark:bg-gray-800 flex items-center justify-center border-2 border-dashed border-gray-300 dark:border-gray-600 hover:border-indigo-500 transition-colors">
-                                        <User size={32} className="text-gray-400" />
-                                    </div>
+                                <div 
+                                    className="relative group cursor-pointer w-20 h-20"
+                                    onClick={handlePhotoClick}
+                                >
+                                    {fotoPreview ? (
+                                        <img src={fotoPreview} alt="Preview" className="w-full h-full rounded-full object-cover border-2 border-indigo-100 dark:border-gray-700" />
+                                    ) : (
+                                        <div className="w-full h-full rounded-full bg-gray-100 dark:bg-gray-800 flex items-center justify-center border-2 border-dashed border-gray-300 dark:border-gray-600 group-hover:border-indigo-500 transition-colors">
+                                            <Camera size={24} className="text-gray-400 group-hover:text-indigo-500" />
+                                        </div>
+                                    )}
+                                    
                                     <div className="absolute inset-0 bg-black/40 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-                                        <Camera size={20} className="text-white" />
+                                        <Upload size={20} className="text-white" />
                                     </div>
+                                    
+                                    {/* Input File Invisível */}
+                                    <input 
+                                        type="file" 
+                                        ref={fileInputRef} 
+                                        onChange={handleFileChange} 
+                                        accept="image/*" 
+                                        className="hidden" 
+                                    />
                                 </div>
                                 <div>
                                     <h4 className="text-sm font-bold text-gray-900 dark:text-white">Sua Foto</h4>
-                                    <p className="text-xs text-gray-500 max-w-[200px]">Isso será exibido no seu perfil e nos relatórios.</p>
+                                    <p className="text-xs text-gray-500 max-w-[200px] mb-2">Toque na imagem para alterar. Será exibida nos relatórios.</p>
+                                    <button type="button" onClick={handlePhotoClick} className="text-xs font-bold text-indigo-600 hover:underline">Escolher arquivo...</button>
                                 </div>
                             </div>
 
@@ -122,7 +197,7 @@ const ConfigModal = ({ isOpen, onClose, onSave, valorAtual, nomeAtual }) => {
                                         type="text" 
                                         value={nome}
                                         onChange={(e) => setNome(e.target.value)}
-                                        className="w-full border rounded-lg px-3 py-2.5 outline-none focus:ring-2 focus:ring-indigo-500 bg-gray-50 dark:bg-gray-800 border-gray-200 dark:border-gray-700 text-gray-900 dark:text-white"
+                                        className="w-full border rounded-lg px-3 py-2.5 outline-none focus:ring-2 focus:ring-indigo-500 bg-gray-50 dark:bg-gray-800 border-gray-200 dark:border-gray-700 text-gray-900 dark:text-white transition-all"
                                         placeholder="Seu nome completo"
                                     />
                                 </div>
@@ -132,7 +207,7 @@ const ConfigModal = ({ isOpen, onClose, onSave, valorAtual, nomeAtual }) => {
                                         type="text" 
                                         value={cargo}
                                         onChange={(e) => setCargo(e.target.value)}
-                                        className="w-full border rounded-lg px-3 py-2.5 outline-none focus:ring-2 focus:ring-indigo-500 bg-gray-50 dark:bg-gray-800 border-gray-200 dark:border-gray-700 text-gray-900 dark:text-white"
+                                        className="w-full border rounded-lg px-3 py-2.5 outline-none focus:ring-2 focus:ring-indigo-500 bg-gray-50 dark:bg-gray-800 border-gray-200 dark:border-gray-700 text-gray-900 dark:text-white transition-all"
                                         placeholder="Ex: Consultor Sênior"
                                     />
                                 </div>
@@ -146,30 +221,24 @@ const ConfigModal = ({ isOpen, onClose, onSave, valorAtual, nomeAtual }) => {
                             <div className="bg-green-50 dark:bg-green-900/20 p-4 rounded-xl border border-green-100 dark:border-green-800">
                                 <h4 className="text-green-800 dark:text-green-300 font-bold text-sm mb-1">Cálculo de Receita</h4>
                                 <p className="text-xs text-green-700 dark:text-green-400">
-                                    Defina seu valor hora base. Isso é usado para pré-preencher novos serviços e calcular estimativas de projeto.
+                                    Defina seu valor hora base para cálculos automáticos.
                                 </p>
                             </div>
 
                             <div>
                                 <label className="block text-xs font-bold text-gray-500 dark:text-gray-400 uppercase mb-1">Valor Hora Padrão</label>
-                                <div className="relative">
-                                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                                        <span className="text-gray-500 font-bold">R$</span>
-                                    </div>
-                                    <input 
-                                        type="number" 
-                                        step="0.01"
-                                        value={valor}
-                                        onChange={(e) => setValor(e.target.value)}
-                                        className="w-full pl-10 border rounded-lg px-3 py-2.5 outline-none focus:ring-2 focus:ring-green-500 bg-gray-50 dark:bg-gray-800 border-gray-200 dark:border-gray-700 text-gray-900 dark:text-white font-mono text-lg"
-                                        placeholder="0.00"
-                                    />
-                                </div>
+                                <input 
+                                    type="text" 
+                                    value={valorDisplay}
+                                    onChange={handleValorChange}
+                                    className="w-full border rounded-lg px-4 py-3 outline-none focus:ring-2 focus:ring-green-500 bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700 text-gray-900 dark:text-white font-bold text-xl"
+                                    placeholder="R$ 0,00"
+                                />
                             </div>
                         </div>
                     )}
 
-                    {/* TAB: SISTEMA (VISUAL) */}
+                    {/* TAB: SISTEMA (Funcional) */}
                     {activeTab === 'sistema' && (
                         <div className="space-y-6 animate-fade-in">
                             <div className="flex items-center justify-between p-4 rounded-xl border border-gray-100 dark:border-gray-700 hover:border-gray-200 dark:hover:border-gray-600 transition-colors cursor-pointer" onClick={() => setTemaEscuro(!temaEscuro)}>
@@ -178,18 +247,19 @@ const ConfigModal = ({ isOpen, onClose, onSave, valorAtual, nomeAtual }) => {
                                         <Layout size={20}/>
                                     </div>
                                     <div>
-                                        <h4 className="text-sm font-bold text-gray-900 dark:text-white">Modo Escuro (Simulação)</h4>
-                                        <p className="text-xs text-gray-500">Alternar entre tema claro e escuro</p>
+                                        <h4 className="text-sm font-bold text-gray-900 dark:text-white">Modo Escuro / Claro</h4>
+                                        <p className="text-xs text-gray-500">Altera a aparência de todo o sistema</p>
                                     </div>
                                 </div>
-                                <div className={`w-12 h-6 rounded-full p-1 transition-colors ${temaEscuro ? 'bg-indigo-600' : 'bg-gray-300'}`}>
-                                    <div className={`w-4 h-4 bg-white rounded-full shadow-sm transform transition-transform ${temaEscuro ? 'translate-x-6' : 'translate-x-0'}`}></div>
+                                {/* Toggle Visual e Funcional */}
+                                <div className={`w-12 h-6 rounded-full p-1 transition-colors duration-300 ${temaEscuro ? 'bg-indigo-600' : 'bg-gray-300'}`}>
+                                    <div className={`w-4 h-4 bg-white rounded-full shadow-sm transform transition-transform duration-300 ${temaEscuro ? 'translate-x-6' : 'translate-x-0'}`}></div>
                                 </div>
                             </div>
                         </div>
                     )}
 
-                    {/* TAB: NOTIFICAÇÕES (VISUAL) */}
+                    {/* TAB: NOTIFICAÇÕES */}
                     {activeTab === 'notificacoes' && (
                         <div className="space-y-6 animate-fade-in">
                             <div className="flex items-center justify-between">
@@ -198,8 +268,8 @@ const ConfigModal = ({ isOpen, onClose, onSave, valorAtual, nomeAtual }) => {
                                         <Mail size={20}/>
                                     </div>
                                     <div>
-                                        <h4 className="text-sm font-bold text-gray-900 dark:text-white">Relatórios por E-mail</h4>
-                                        <p className="text-xs text-gray-500">Receber cópia ao enviar relatórios</p>
+                                        <h4 className="text-sm font-bold text-gray-900 dark:text-white">Cópia de Relatórios</h4>
+                                        <p className="text-xs text-gray-500">Receber e-mail ao gerar PDFs (apenas informativo)</p>
                                     </div>
                                 </div>
                                 <button 

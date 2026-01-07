@@ -747,7 +747,7 @@ const App = () => {
         showToast={showToast} 
       />
       
-      <ConfigModal isOpen={showConfigModal} onClose={() => setShowConfigModal(false)} onSave={salvarConfiguracao} valorAtual={valorHoraPadrao} nomeAtual={nomeConsultor} />
+      <ConfigModal isOpen={showConfigModal} onClose={() => setShowConfigModal(false)} onSave={salvarConfiguracao} valorAtual={valorHoraPadrao} nomeAtual={nomeConsultor} userEmail={session?.user?.email}/>
       
       {/* <ChannelsManagement ... /> -- REMOVIDO DAQUI -- */}
       
