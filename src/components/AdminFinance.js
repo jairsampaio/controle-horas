@@ -2,8 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { 
   DollarSign, Calendar, CheckCircle, XCircle, AlertCircle, 
-  Search, Plus, Wallet, TrendingUp, TrendingDown, Filter, X, 
-  Clock, MoreHorizontal, Send, PieChart, BarChart2, ArrowDownRight
+  Search, Plus, Wallet, TrendingUp, Filter, X, 
+  Clock, Send, PieChart, BarChart2, ArrowDownRight
 } from 'lucide-react';
 import supabase from '../services/supabase';
 import { formatCurrency } from '../utils/formatters';
@@ -32,7 +32,6 @@ const AdminFinance = () => {
   const carregarFinanceiro = async () => {
     setLoading(true);
     try {
-      // 1. Buscar Faturas
       const { data: dataFaturas, error: erroFaturas } = await supabase
         .from('saas_faturas')
         .select('*, tenants(nome_empresa)')
@@ -41,7 +40,6 @@ const AdminFinance = () => {
       if (erroFaturas) throw erroFaturas;
       setFaturas(dataFaturas);
 
-      // 2. Buscar Empresas Ativas
       const { data: dataTenants } = await supabase
         .from('tenants')
         .select('id, nome_empresa')
@@ -50,7 +48,6 @@ const AdminFinance = () => {
       
       setTenants(dataTenants || []);
 
-      // 3. Calcular Métricas Avançadas
       const hoje = new Date().toISOString().split('T')[0];
       const calculo = dataFaturas.reduce((acc, fatura) => {
         const valor = parseFloat(fatura.valor || 0);
@@ -67,9 +64,7 @@ const AdminFinance = () => {
         return acc;
       }, { recebido: 0, pendente: 0, vencido: 0 });
 
-      // Projeção: Recebido + Pendente (O que já entrou + O que vai entrar)
       calculo.projecao = calculo.recebido + calculo.pendente;
-
       setMetrics(calculo);
 
     } catch (error) {
@@ -117,10 +112,46 @@ const AdminFinance = () => {
     f.referencia?.toLowerCase().includes(filtro.toLowerCase())
   );
 
+  // Helper para renderizar os botões de ação (reuso)
+  const renderActions = (fatura) => (
+    <div className="flex gap-2 justify-end md:justify-center">
+        {fatura.status === 'pendente' && (
+            <>
+                <button 
+                    onClick={() => alterarStatus(fatura.id, 'pago')}
+                    className="p-2 bg-green-50 text-green-600 rounded-lg hover:bg-green-100 transition-colors"
+                    title="Marcar como Pago"
+                >
+                    <CheckCircle size={18} />
+                </button>
+                <button 
+                    onClick={() => alert(`Lembrete enviado para ${fatura.tenants?.nome_empresa}!`)}
+                    className="p-2 bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-100 transition-colors"
+                    title="Enviar Lembrete"
+                >
+                    <Send size={18} />
+                </button>
+                <button 
+                    onClick={() => alterarStatus(fatura.id, 'cancelado')}
+                    className="p-2 bg-red-50 text-red-500 rounded-lg hover:bg-red-100 transition-colors"
+                    title="Cancelar"
+                >
+                    <XCircle size={18} />
+                </button>
+            </>
+        )}
+        {fatura.status === 'pago' && (
+            <span className="text-xs font-bold text-green-600 flex items-center gap-1 bg-green-50 px-2 py-1 rounded">
+                <CheckCircle size={14}/> Baixado
+            </span>
+        )}
+    </div>
+  );
+
   return (
-    <div className="space-y-8 animate-fade-in pb-10">
+    <div className="space-y-8 animate-fade-in pb-20">
       
-      {/* HEADER PRINCIPAL */}
+      {/* HEADER */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-white dark:bg-gray-800 p-6 rounded-3xl shadow-sm border border-gray-100 dark:border-gray-700">
         <div>
           <h1 className="text-2xl font-black text-gray-800 dark:text-white flex items-center gap-3">
@@ -129,30 +160,27 @@ const AdminFinance = () => {
             </div>
             Gestão Financeira
           </h1>
-          <p className="text-gray-500 dark:text-gray-400 mt-1 ml-1">Visão geral do faturamento e inadimplência.</p>
+          <p className="text-gray-500 dark:text-gray-400 mt-1 ml-1 text-sm">Controle de mensalidades.</p>
         </div>
         <button 
           onClick={() => setModalOpen(true)}
-          className="bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-3 rounded-xl font-bold flex items-center gap-2 shadow-lg shadow-indigo-200 dark:shadow-none transition-all hover:scale-105 active:scale-95"
+          className="w-full md:w-auto bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-3 rounded-xl font-bold flex justify-center items-center gap-2 shadow-lg shadow-indigo-200 dark:shadow-none transition-all active:scale-95"
         >
           <Plus size={20} /> Nova Cobrança
         </button>
       </div>
 
-      {/* KPI GRID (ESTILO CARTÃO DE CRÉDITO) */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-        
-        {/* Card 1: Receita Total */}
-        <div className="bg-gradient-to-br from-indigo-600 to-indigo-800 p-6 rounded-3xl text-white shadow-xl shadow-indigo-200 dark:shadow-none relative overflow-hidden group">
+      {/* KPI GRID */}
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <div className="bg-gradient-to-br from-indigo-600 to-indigo-800 p-6 rounded-3xl text-white shadow-xl shadow-indigo-200 dark:shadow-none relative overflow-hidden">
            <div className="absolute top-0 right-0 p-4 opacity-10"><DollarSign size={100} /></div>
            <p className="text-indigo-200 font-medium text-sm uppercase tracking-wider mb-1">Receita Realizada</p>
            <h3 className="text-3xl font-black">{formatCurrency(metrics.recebido)}</h3>
            <div className="mt-4 flex items-center gap-2 text-xs font-medium bg-white/10 w-fit px-2 py-1 rounded-lg backdrop-blur-sm">
-              <TrendingUp size={14} /> +12% vs mês anterior
+              <TrendingUp size={14} /> +12%
            </div>
         </div>
 
-        {/* Card 2: A Receber */}
         <div className="bg-white dark:bg-gray-800 p-6 rounded-3xl border border-gray-100 dark:border-gray-700 shadow-sm relative overflow-hidden">
            <div className="flex justify-between items-start mb-4">
               <div className="p-3 bg-blue-50 dark:bg-blue-900/20 text-blue-600 rounded-2xl"><Clock size={24} /></div>
@@ -162,7 +190,6 @@ const AdminFinance = () => {
            <h3 className="text-2xl font-bold text-gray-800 dark:text-white mt-1">{formatCurrency(metrics.pendente)}</h3>
         </div>
 
-        {/* Card 3: Inadimplência */}
         <div className="bg-white dark:bg-gray-800 p-6 rounded-3xl border border-red-100 dark:border-red-900/30 shadow-sm relative overflow-hidden">
            <div className="flex justify-between items-start mb-4">
               <div className="p-3 bg-red-50 dark:bg-red-900/20 text-red-500 rounded-2xl"><AlertCircle size={24} /></div>
@@ -172,7 +199,6 @@ const AdminFinance = () => {
            <h3 className="text-2xl font-bold text-red-600 dark:text-red-400 mt-1">{formatCurrency(metrics.vencido)}</h3>
         </div>
 
-        {/* Card 4: Projeção */}
         <div className="bg-white dark:bg-gray-800 p-6 rounded-3xl border border-gray-100 dark:border-gray-700 shadow-sm relative overflow-hidden">
            <div className="flex justify-between items-start mb-4">
               <div className="p-3 bg-green-50 dark:bg-green-900/20 text-green-600 rounded-2xl"><BarChart2 size={24} /></div>
@@ -182,19 +208,19 @@ const AdminFinance = () => {
         </div>
       </div>
 
-      {/* ÁREA PRINCIPAL: TABELA E FILTROS */}
+      {/* ÁREA PRINCIPAL: LISTA/TABELA */}
       <div className="bg-white dark:bg-gray-800 rounded-3xl shadow-sm border border-gray-100 dark:border-gray-700 overflow-hidden flex flex-col">
         
-        {/* Barra de Busca Estilizada */}
+        {/* Barra de Busca */}
         <div className="p-6 border-b border-gray-100 dark:border-gray-700 flex flex-col md:flex-row gap-4 items-center justify-between bg-gray-50/50 dark:bg-gray-900/50">
            <h3 className="font-bold text-gray-700 dark:text-gray-200 text-lg flex items-center gap-2">
-              <PieChart size={20} className="text-indigo-500"/> Histórico de Transações
+              <PieChart size={20} className="text-indigo-500"/> Histórico
            </h3>
            <div className="relative w-full md:w-80 group">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 group-focus-within:text-indigo-500 transition-colors" size={18} />
               <input 
                 type="text" 
-                placeholder="Buscar cliente ou referência..." 
+                placeholder="Buscar cliente..." 
                 value={filtro}
                 onChange={(e) => setFiltro(e.target.value)}
                 className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-sm focus:ring-2 focus:ring-indigo-500 outline-none transition-all shadow-sm"
@@ -202,102 +228,105 @@ const AdminFinance = () => {
            </div>
         </div>
 
-        {/* Tabela Clean */}
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm text-left">
-            <thead className="bg-gray-50 dark:bg-gray-900/50 text-gray-500 dark:text-gray-400 font-bold border-b border-gray-100 dark:border-gray-700">
-              <tr>
-                <th className="px-6 py-4">Status</th>
-                <th className="px-6 py-4">Cliente</th>
-                <th className="px-6 py-4">Vencimento</th>
-                <th className="px-6 py-4">Referência</th>
-                <th className="px-6 py-4 text-right">Valor</th>
-                <th className="px-6 py-4 text-center">Ações</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
-              {loading ? (
-                 <tr><td colSpan="6" className="p-12 text-center text-gray-400">Carregando dados...</td></tr>
-              ) : faturasFiltradas.length === 0 ? (
-                 <tr><td colSpan="6" className="p-12 text-center text-gray-400">Nenhum registro encontrado.</td></tr>
-              ) : faturasFiltradas.map((fatura) => {
-                const isAtrasado = fatura.status === 'pendente' && fatura.data_vencimento < new Date().toISOString().split('T')[0];
-                
-                return (
-                  <tr key={fatura.id} className="hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors group">
-                    <td className="px-6 py-4">
-                       {fatura.status === 'pago' ? (
-                          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400">
-                             <span className="w-1.5 h-1.5 rounded-full bg-green-500"></span> Pago
-                          </span>
-                       ) : fatura.status === 'cancelado' ? (
-                          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-gray-100 dark:bg-gray-700 text-gray-500">
-                             <span className="w-1.5 h-1.5 rounded-full bg-gray-400"></span> Cancelado
-                          </span>
-                       ) : isAtrasado ? (
-                          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400">
-                             <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse"></span> Atrasado
-                          </span>
-                       ) : (
-                          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400">
-                             <span className="w-1.5 h-1.5 rounded-full bg-yellow-500"></span> Aberto
-                          </span>
-                       )}
-                    </td>
-                    <td className="px-6 py-4 font-bold text-gray-800 dark:text-white">
-                        {fatura.tenants?.nome_empresa || 'Cliente Removido'}
-                    </td>
-                    <td className="px-6 py-4 text-gray-600 dark:text-gray-400 font-mono text-xs">
-                        {new Date(fatura.data_vencimento).toLocaleDateString()}
-                    </td>
-                    <td className="px-6 py-4 text-gray-500 dark:text-gray-400">
-                        {fatura.referencia || '-'}
-                    </td>
-                    <td className="px-6 py-4 text-right font-bold text-gray-800 dark:text-white font-mono">
-                        {formatCurrency(fatura.valor)}
-                    </td>
-                    <td className="px-6 py-4 text-center">
-                        <div className="flex justify-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                            {fatura.status === 'pendente' && (
-                                <>
-                                    <button 
-                                        onClick={() => alterarStatus(fatura.id, 'pago')}
-                                        className="p-1.5 text-green-600 hover:bg-green-50 rounded-lg transition-colors"
-                                        title="Marcar como Pago"
-                                    >
-                                        <CheckCircle size={18} />
-                                    </button>
+        {/* --- MODO RESPONSIVO HÍBRIDO --- */}
+        <div className="bg-gray-50 dark:bg-gray-900 p-4 md:p-0">
+            {loading ? (
+                <div className="p-12 text-center text-gray-400">Carregando dados...</div>
+            ) : faturasFiltradas.length === 0 ? (
+                <div className="p-12 text-center text-gray-400">Nenhum registro encontrado.</div>
+            ) : (
+                <>
+                    {/* VISÃO MOBILE: CARDS (Só aparece em telas pequenas `md:hidden`) */}
+                    <div className="space-y-4 md:hidden">
+                        {faturasFiltradas.map((fatura) => {
+                            const isAtrasado = fatura.status === 'pendente' && fatura.data_vencimento < new Date().toISOString().split('T')[0];
+                            return (
+                                <div key={fatura.id} className="bg-white dark:bg-gray-800 p-5 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 flex flex-col gap-3">
+                                    <div className="flex justify-between items-start">
+                                        <div>
+                                            <h4 className="font-bold text-gray-800 dark:text-white">{fatura.tenants?.nome_empresa || 'Cliente Removido'}</h4>
+                                            <p className="text-xs text-gray-500">{fatura.referencia || '-'}</p>
+                                        </div>
+                                        <div className="text-right">
+                                            <p className="font-bold text-gray-900 dark:text-white">{formatCurrency(fatura.valor)}</p>
+                                            <p className={`text-xs ${isAtrasado ? 'text-red-500 font-bold' : 'text-gray-400'}`}>
+                                                {new Date(fatura.data_vencimento).toLocaleDateString()}
+                                            </p>
+                                        </div>
+                                    </div>
                                     
-                                    {/* Botão de Enviar Cobrança (Fake) */}
-                                    <button 
-                                        onClick={() => alert(`Lembrete de cobrança enviado para ${fatura.tenants?.nome_empresa}!`)}
-                                        className="p-1.5 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
-                                        title="Enviar Lembrete por Email"
-                                    >
-                                        <Send size={18} />
-                                    </button>
+                                    <div className="flex justify-between items-center pt-3 border-t border-gray-100 dark:border-gray-700">
+                                        <div>
+                                            {fatura.status === 'pago' ? (
+                                                <span className="text-xs font-bold text-green-600 bg-green-50 px-2 py-1 rounded-full">Pago</span>
+                                            ) : fatura.status === 'cancelado' ? (
+                                                <span className="text-xs font-bold text-gray-500 bg-gray-100 px-2 py-1 rounded-full">Cancelado</span>
+                                            ) : isAtrasado ? (
+                                                <span className="text-xs font-bold text-red-600 bg-red-50 px-2 py-1 rounded-full">Atrasado</span>
+                                            ) : (
+                                                <span className="text-xs font-bold text-yellow-600 bg-yellow-50 px-2 py-1 rounded-full">Aberto</span>
+                                            )}
+                                        </div>
+                                        {/* Ações Mobile */}
+                                        {renderActions(fatura)}
+                                    </div>
+                                </div>
+                            );
+                        })}
+                    </div>
 
-                                    <button 
-                                        onClick={() => alterarStatus(fatura.id, 'cancelado')}
-                                        className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"
-                                        title="Cancelar"
-                                    >
-                                        <XCircle size={18} />
-                                    </button>
-                                </>
-                            )}
-                            {fatura.status === 'pago' && (
-                                <span className="text-xs text-green-600 font-bold flex items-center gap-1">
-                                    <CheckCircle size={14}/> Baixado
-                                </span>
-                            )}
-                        </div>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
+                    {/* VISÃO DESKTOP: TABELA (Só aparece em telas médias pra cima `hidden md:block`) */}
+                    <div className="hidden md:block overflow-x-auto bg-white dark:bg-gray-900">
+                        <table className="w-full text-sm text-left">
+                            <thead className="bg-gray-50 dark:bg-gray-900/50 text-gray-500 dark:text-gray-400 font-bold border-b border-gray-100 dark:border-gray-700">
+                                <tr>
+                                    <th className="px-6 py-4">Status</th>
+                                    <th className="px-6 py-4">Cliente</th>
+                                    <th className="px-6 py-4">Vencimento</th>
+                                    <th className="px-6 py-4">Referência</th>
+                                    <th className="px-6 py-4 text-right">Valor</th>
+                                    <th className="px-6 py-4 text-center">Ações</th>
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
+                                {faturasFiltradas.map((fatura) => {
+                                    const isAtrasado = fatura.status === 'pendente' && fatura.data_vencimento < new Date().toISOString().split('T')[0];
+                                    return (
+                                        <tr key={fatura.id} className="hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors group">
+                                            <td className="px-6 py-4">
+                                                {fatura.status === 'pago' ? (
+                                                    <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400">
+                                                        <span className="w-1.5 h-1.5 rounded-full bg-green-500"></span> Pago
+                                                    </span>
+                                                ) : fatura.status === 'cancelado' ? (
+                                                    <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-gray-100 dark:bg-gray-700 text-gray-500">
+                                                        <span className="w-1.5 h-1.5 rounded-full bg-gray-400"></span> Cancelado
+                                                    </span>
+                                                ) : isAtrasado ? (
+                                                    <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400">
+                                                        <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse"></span> Atrasado
+                                                    </span>
+                                                ) : (
+                                                    <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400">
+                                                        <span className="w-1.5 h-1.5 rounded-full bg-yellow-500"></span> Aberto
+                                                    </span>
+                                                )}
+                                            </td>
+                                            <td className="px-6 py-4 font-bold text-gray-800 dark:text-white">{fatura.tenants?.nome_empresa}</td>
+                                            <td className="px-6 py-4 text-gray-600 dark:text-gray-400 font-mono text-xs">{new Date(fatura.data_vencimento).toLocaleDateString()}</td>
+                                            <td className="px-6 py-4 text-gray-500 dark:text-gray-400">{fatura.referencia || '-'}</td>
+                                            <td className="px-6 py-4 text-right font-bold text-gray-800 dark:text-white font-mono">{formatCurrency(fatura.valor)}</td>
+                                            <td className="px-6 py-4 text-center opacity-0 group-hover:opacity-100 transition-opacity">
+                                                {renderActions(fatura)}
+                                            </td>
+                                        </tr>
+                                    );
+                                })}
+                            </tbody>
+                        </table>
+                    </div>
+                </>
+            )}
         </div>
       </div>
 
