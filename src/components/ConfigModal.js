@@ -1,10 +1,10 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { 
-  X, Save, User, DollarSign, Settings, Bell, Shield, 
-  CreditCard, Layout, Mail, Camera, Check, Upload
+  X, Save, User, DollarSign, Settings, Bell, 
+  Layout, Mail, Camera, Upload
 } from 'lucide-react';
 
-const ConfigModal = ({ isOpen, onClose, onSave, valorAtual, nomeAtual, userEmail }) => { 
+const ConfigModal = ({ isOpen, onClose, onSave, valorAtual, nomeAtual, userEmail, fotoAtual }) => { 
   const [activeTab, setActiveTab] = useState('geral');
   const fileInputRef = useRef(null);
   
@@ -27,12 +27,17 @@ const ConfigModal = ({ isOpen, onClose, onSave, valorAtual, nomeAtual, userEmail
       // Configura Nome
       setNome(nomeAtual || '');
       
+      // Configura Foto (se vier do banco)
+      if (fotoAtual) {
+        setFotoPreview(fotoAtual);
+      }
+      
       // Configura Valor com Máscara
       const val = valorAtual || 0;
       setValor(val);
       setValorDisplay(formatCurrency(val));
     }
-  }, [isOpen, valorAtual, nomeAtual]);
+  }, [isOpen, valorAtual, nomeAtual, fotoAtual]);
 
   // --- LÓGICA DE TEMA ESCURO ---
   useEffect(() => {
@@ -69,7 +74,7 @@ const ConfigModal = ({ isOpen, onClose, onSave, valorAtual, nomeAtual, userEmail
     if (file) {
       const reader = new FileReader();
       reader.onloadend = () => {
-        setFotoPreview(reader.result);
+        setFotoPreview(reader.result); // Converte para Base64
       };
       reader.readAsDataURL(file);
     }
@@ -77,33 +82,43 @@ const ConfigModal = ({ isOpen, onClose, onSave, valorAtual, nomeAtual, userEmail
 
   const handleSubmit = (e) => {
     e.preventDefault();
-    // Envia o valor numérico puro e o nome
-    onSave(valor, nome);
+    // Agora envia a foto também! O App.js precisa estar pronto para receber (valor, nome, foto)
+    onSave(valor, nome, fotoPreview);
   };
 
   if (!isOpen) return null;
 
   const tabs = [
-    { id: 'geral', label: 'Perfil & Marca', icon: User },
+    { id: 'geral', label: 'Perfil', icon: User },
     { id: 'financeiro', label: 'Financeiro', icon: DollarSign },
-    { id: 'sistema', label: 'Preferências', icon: Layout },
-    { id: 'notificacoes', label: 'Notificações', icon: Bell },
+    { id: 'sistema', label: 'Sistema', icon: Layout },
+    { id: 'notificacoes', label: 'Avisos', icon: Bell },
   ];
 
   return (
-    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 z-[9999] animate-fade-in">
-      <div className="bg-white dark:bg-gray-900 w-full max-w-2xl h-[600px] rounded-2xl shadow-2xl flex overflow-hidden border border-gray-100 dark:border-gray-800">
+    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-0 md:p-4 z-[9999] animate-fade-in">
+      {/* CORREÇÃO DE LAYOUT RESPONSIVO:
+          - h-full md:h-[600px]: No celular ocupa tela toda, no PC tem altura fixa.
+          - flex-col md:flex-row: No celular empilha (menu em cima), no PC lado a lado.
+      */}
+      <div className="bg-white dark:bg-gray-900 w-full md:max-w-2xl h-full md:h-[600px] md:rounded-2xl shadow-2xl flex flex-col md:flex-row overflow-hidden border border-gray-100 dark:border-gray-800">
         
         {/* SIDEBAR DE NAVEGAÇÃO */}
-        <div className="w-1/3 bg-gray-50 dark:bg-gray-950 border-r border-gray-200 dark:border-gray-800 p-4 flex flex-col justify-between">
+        <div className="w-full md:w-1/3 bg-gray-50 dark:bg-gray-950 border-b md:border-b-0 md:border-r border-gray-200 dark:border-gray-800 p-4 flex flex-col justify-between shrink-0">
           <div>
-            <h2 className="text-xs font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wider mb-4 px-2">Ajustes</h2>
-            <nav className="space-y-1">
+            <div className="flex justify-between items-center md:block mb-4">
+                <h2 className="text-xs font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wider px-2">Ajustes</h2>
+                {/* Botão fechar mobile */}
+                <button onClick={onClose} className="md:hidden text-gray-400 p-1"><X size={24}/></button>
+            </div>
+            
+            {/* Menu Horizontal no Mobile / Vertical no Desktop */}
+            <nav className="flex md:flex-col gap-2 overflow-x-auto md:overflow-visible pb-2 md:pb-0 hide-scrollbar">
               {tabs.map(tab => (
                 <button
                   key={tab.id}
                   onClick={() => setActiveTab(tab.id)}
-                  className={`w-full flex items-center gap-3 px-3 py-2.5 text-sm font-medium rounded-lg transition-all duration-200
+                  className={`flex-shrink-0 md:w-full flex items-center gap-3 px-3 py-2.5 text-sm font-medium rounded-lg transition-all duration-200 whitespace-nowrap
                     ${activeTab === tab.id 
                       ? 'bg-white dark:bg-gray-800 text-indigo-600 dark:text-indigo-400 shadow-sm ring-1 ring-gray-200 dark:ring-gray-700' 
                       : 'text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-900 hover:text-gray-900 dark:hover:text-gray-200'
@@ -116,8 +131,8 @@ const ConfigModal = ({ isOpen, onClose, onSave, valorAtual, nomeAtual, userEmail
             </nav>
           </div>
           
-          {/* Card do Usuário (Dinâmico) */}
-          <div className="px-2">
+          {/* Card do Usuário (Escondido em telas muito pequenas para dar espaço) */}
+          <div className="hidden md:block px-2">
             <div className="p-3 bg-indigo-50 dark:bg-indigo-900/20 rounded-xl border border-indigo-100 dark:border-indigo-900/50">
                 <div className="flex items-center gap-3 mb-2">
                     {fotoPreview ? (
@@ -137,10 +152,10 @@ const ConfigModal = ({ isOpen, onClose, onSave, valorAtual, nomeAtual, userEmail
         </div>
 
         {/* ÁREA DE CONTEÚDO */}
-        <div className="flex-1 flex flex-col bg-white dark:bg-gray-900">
+        <div className="flex-1 flex flex-col bg-white dark:bg-gray-900 overflow-hidden">
             
-            {/* Header Mobile/Desktop */}
-            <div className="h-16 border-b border-gray-100 dark:border-gray-800 flex items-center justify-between px-6">
+            {/* Header Desktop (Escondido no Mobile para ganhar espaço) */}
+            <div className="hidden md:flex h-16 border-b border-gray-100 dark:border-gray-800 items-center justify-between px-6 shrink-0">
                 <h3 className="text-lg font-bold text-gray-800 dark:text-white">
                     {tabs.find(t => t.id === activeTab)?.label}
                 </h3>
@@ -159,7 +174,7 @@ const ConfigModal = ({ isOpen, onClose, onSave, valorAtual, nomeAtual, userEmail
                             {/* Avatar Upload Real */}
                             <div className="flex items-center gap-4">
                                 <div 
-                                    className="relative group cursor-pointer w-20 h-20"
+                                    className="relative group cursor-pointer w-20 h-20 shrink-0"
                                     onClick={handlePhotoClick}
                                 >
                                     {fotoPreview ? (
@@ -287,7 +302,7 @@ const ConfigModal = ({ isOpen, onClose, onSave, valorAtual, nomeAtual, userEmail
             </div>
 
             {/* Footer Fixo */}
-            <div className="p-6 border-t border-gray-100 dark:border-gray-800 bg-gray-50 dark:bg-gray-900 flex justify-end gap-3">
+            <div className="p-6 border-t border-gray-100 dark:border-gray-800 bg-gray-50 dark:bg-gray-900 flex justify-end gap-3 shrink-0">
                 <button onClick={onClose} className="px-6 py-2.5 rounded-xl text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-white font-bold text-sm transition-colors">
                     Cancelar
                 </button>
