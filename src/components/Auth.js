@@ -110,9 +110,11 @@ const Auth = () => {
                 <div className="space-y-1">
                   <div className="flex justify-between items-center ml-1">
                     <label className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Senha</label>
+                    {/*
                     <button type="button" onClick={() => setView('recovery')} className="text-xs text-indigo-600 hover:text-indigo-800 dark:text-indigo-400 dark:hover:text-indigo-300 font-medium transition-colors">
                         Esqueci a senha
                     </button>
+                    */}
                   </div>
                   <div className="relative">
                     <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-gray-400">
