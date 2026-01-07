@@ -29,7 +29,6 @@ import AdminPlans from './components/AdminPlans';
 import TeamManagement from './components/TeamManagement';
 import { formatCurrency, formatHoursInt } from './utils/formatters'; 
 
-
 const App = () => {
   // --- ESTADOS ---
   const [servicos, setServicos] = useState([]);
@@ -38,7 +37,7 @@ const App = () => {
   const [loading, setLoading] = useState(true);
   
   const [activeTab, setActiveTab] = useState('dashboard');
-  const [viewMode, setViewMode] = useState('list'); 
+  const [viewMode, setViewMode] = useState('list'); // Padrão Lista para Mobile First
   const [selectedTenantId, setSelectedTenantId] = useState(null);
 
   const [showModal, setShowModal] = useState(false);
@@ -60,7 +59,7 @@ const App = () => {
 
   const [showSolicitantesModal, setShowSolicitantesModal] = useState(false);
   const [clienteParaSolicitantes, setClienteParaSolicitantes] = useState(null);
-  // REMOVIDO: const [showChannelsManagement, setShowChannelsManagement] = useState(false); // Não precisa mais desse estado de modal
+  
   const [todosSolicitantesDoCliente, setTodosSolicitantesDoCliente] = useState([]); 
   const [sortConfig, setSortConfig] = useState({ key: 'data', direction: 'desc' });
   
@@ -168,20 +167,44 @@ const App = () => {
     } catch (error) { console.error('Erro ao salvar config:', error); showToast('Erro ao salvar configuração.', 'erro'); } finally { setLoading(false); }
   };
 
+  // --- CARREGAR DADOS E APLICAR BARREIRA DE SEGURANÇA ---
   const carregarDados = async () => {
     try {
+      // 1. Busca o perfil completo do usuário logado (com dados da consultoria)
       const { data: userProfile, error: profileError } = await supabase
         .from('profiles')
-        .select('consultoria_id')
+        .select('*, consultorias(id, status)') // Faz Join para pegar status da consultoria
         .eq('id', session.user.id)
         .single();
 
-      if (profileError || !userProfile?.consultoria_id) {
-        console.error("Usuário sem consultoria vinculada.");
+      if (profileError || !userProfile) {
+        console.error("Usuário sem perfil.", profileError);
         return;
       }
 
+      // --- BARREIRA DE SEGURANÇA (O PULO DO GATO) ---
+      
+      // A. Verifica se o USUÁRIO está ativo
+      if (userProfile.ativo === false) {
+          await supabase.auth.signOut();
+          setSession(null);
+          alert("Seu acesso foi desativado pelo administrador.");
+          return;
+      }
+
+      // B. Verifica se a CONSULTORIA está ativa (Bloqueio do Super Admin)
+      if (userProfile.consultorias?.status === 'bloqueada') {
+          await supabase.auth.signOut();
+          setSession(null);
+          alert("O acesso da sua empresa está temporariamente suspenso. Contate o suporte.");
+          return;
+      }
+
+      // --- FIM DA BARREIRA ---
+
       const meuId = userProfile.consultoria_id;
+
+      if (!meuId) return;
 
       const { data: dataServicos, error: errorServicos } = await supabase
         .from('servicos_prestados')
@@ -217,15 +240,34 @@ const App = () => {
 
   useEffect(() => {
     getSession();
-    const { data: authListener } = supabase.auth.onAuthStateChange((_event, session) => { setSession(session); });
+    
+    const { data: authListener } = supabase.auth.onAuthStateChange((event, session) => { 
+        setSession(session); 
+        
+        // --- RESET DE ABA NO LOGIN ---
+        // Se o usuário acabou de logar, força ir para o Dashboard
+        // Isso evita que o Colaborador caia na tela "Minha Equipe" do Admin anterior
+        if (event === 'SIGNED_IN') {
+            setActiveTab('dashboard');
+        }
+    });
+    
     return () => { authListener.subscription.unsubscribe(); };
   }, []);
 
   useEffect(() => {
-    if (session) { setLoading(true); carregarDados(); carregarConfiguracao(); setLoading(false); } 
-    else { setServicos([]); setClientes([]); }
+    if (session) { 
+        setLoading(true); 
+        carregarDados(); // A barreira de segurança roda aqui dentro
+        carregarConfiguracao(); 
+        setLoading(false); 
+    } else { 
+        setServicos([]); 
+        setClientes([]); 
+    }
   }, [session]);
 
+  // Restante do código (modais, deletes, exports) permanece igual...
   useEffect(() => {
     const algumModalAberto = showModal || showClienteModal || showSolicitantesModal || showConfigModal;
     if (algumModalAberto) {
@@ -527,7 +569,7 @@ const App = () => {
         onClose={() => setIsMobileMenuOpen(false)}
         onLogout={handleLogout}
         onOpenConfig={() => setShowConfigModal(true)}
-        onOpenChannels={() => setActiveTab('channels')} // <--- ALTERADO: Agora muda a aba, não abre modal
+        onOpenChannels={() => setActiveTab('channels')} 
         userEmail={session?.user?.email}
       />
 
@@ -600,16 +642,14 @@ const App = () => {
 
                     {activeTab === 'servicos' && (
                         <div className="space-y-6">
-                            
-                            {/* CABEÇALHO DO MÓDULO DE SERVIÇOS (COM TOGGLE KANBAN) */}
                             <div className="bg-white dark:bg-gray-800 p-6 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 space-y-4">
                                 <div className="flex justify-between items-center">
                                     <div className="flex items-center gap-2 text-gray-800 dark:text-white font-bold">
                                         <Filter size={20} className="text-indigo-600 dark:text-indigo-400" /> Filtros Avançados
                                     </div>
                                     
-                                    {/* --- TOGGLE KANBAN / LISTA --- */}
-                                    <div className="hidden md:flex bg-gray-100 dark:bg-gray-700 p-1 rounded-lg border border-gray-200 dark:border-gray-600 flex">
+                                    {/* --- TOGGLE KANBAN / LISTA (Só aparece no Desktop) --- */}
+                                    <div className="hidden md:flex bg-gray-100 dark:bg-gray-700 p-1 rounded-lg border border-gray-200 dark:border-gray-600">
                                         <button 
                                             onClick={() => setViewMode('list')}
                                             className={`p-2 rounded-md transition-colors ${viewMode === 'list' ? 'bg-white dark:bg-gray-600 text-indigo-600 dark:text-indigo-400 shadow-sm' : 'text-gray-400 hover:text-gray-600 dark:hover:text-gray-300'}`}
@@ -649,14 +689,14 @@ const App = () => {
                                 </div>
                             </div>
                             
-                            {/* BOTÕES DE EXPORTAÇÃO */}
                             <div className="flex flex-wrap justify-end gap-3">
                                 <button onClick={handleExportarExcel} className="flex items-center gap-2 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700 px-4 py-2 rounded-lg text-sm font-medium transition-colors" title="Exportar Excel"><FileText size={18} className="text-green-600 dark:text-green-400" /> Excel</button>
                                 <button onClick={handleGerarPDF} className="flex items-center gap-2 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700 px-4 py-2 rounded-lg text-sm font-medium transition-colors" title="Gerar PDF"><FileText size={18} className="text-red-600 dark:text-red-400" /> PDF</button>
                             </div>
 
-                            {/* --- ÁREA DE CONTEÚDO (LISTA OU KANBAN) --- */}
-                            {viewMode === 'list' ? (
+                            {/* --- LÓGICA HÍBRIDA DE VISUALIZAÇÃO --- */}
+                            {/* No celular, SEMPRE mostra Lista (ignora o viewMode). No Desktop, respeita o viewMode. */}
+                            <div className="md:hidden">
                                 <ServicesTable 
                                     servicos={servicosFiltradosData} 
                                     onStatusChange={alterarStatusRapido} 
@@ -665,15 +705,27 @@ const App = () => {
                                     onSort={handleSort} 
                                     sortConfig={sortConfig} 
                                 />
-                            ) : (
-                                <div className="h-[600px]"> {/* Altura fixa para o Kanban rolar horizontalmente */}
-                                    <ServicesKanban 
+                            </div>
+                            <div className="hidden md:block">
+                                {viewMode === 'list' ? (
+                                    <ServicesTable 
                                         servicos={servicosFiltradosData} 
-                                        onEditService={editarServico} 
-                                        onStatusChange={alterarStatusRapido}
+                                        onStatusChange={alterarStatusRapido} 
+                                        onEdit={editarServico} 
+                                        onDelete={deletarServico} 
+                                        onSort={handleSort} 
+                                        sortConfig={sortConfig} 
                                     />
-                                </div>
-                            )}
+                                ) : (
+                                    <div className="h-[600px]"> 
+                                        <ServicesKanban 
+                                            servicos={servicosFiltradosData} 
+                                            onEditService={editarServico} 
+                                            onStatusChange={alterarStatusRapido}
+                                        />
+                                    </div>
+                                )}
+                            </div>
                         </div>
                     )}
 
@@ -747,9 +799,14 @@ const App = () => {
         showToast={showToast} 
       />
       
-      <ConfigModal isOpen={showConfigModal} onClose={() => setShowConfigModal(false)} onSave={salvarConfiguracao} valorAtual={valorHoraPadrao} nomeAtual={nomeConsultor} userEmail={session?.user?.email}/>
-      
-      {/* <ChannelsManagement ... /> -- REMOVIDO DAQUI -- */}
+      <ConfigModal 
+        isOpen={showConfigModal} 
+        onClose={() => setShowConfigModal(false)} 
+        onSave={salvarConfiguracao} 
+        valorAtual={valorHoraPadrao} 
+        nomeAtual={nomeConsultor}
+        userEmail={session?.user?.email} 
+      />
       
       <ConfirmModal
         isOpen={confirmModalOpen}
