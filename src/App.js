@@ -27,17 +27,19 @@ import AdminModal from './components/AdminModal';
 import AdminFinance from './components/AdminFinance';
 import AdminPlans from './components/AdminPlans';
 import TeamManagement from './components/TeamManagement';
+import AccessDenied from './components/AccessDenied'; // <--- IMPORTANTE: Tela de bloqueio
 import { formatCurrency, formatHoursInt } from './utils/formatters'; 
 
 const App = () => {
   // --- ESTADOS ---
+  const [accessDeniedType, setAccessDeniedType] = useState(null); // Estado para controlar bloqueio
   const [servicos, setServicos] = useState([]);
   const [clientes, setClientes] = useState([]);
   const [canais, setCanais] = useState([]); 
   const [loading, setLoading] = useState(true);
   
   const [activeTab, setActiveTab] = useState('dashboard');
-  const [viewMode, setViewMode] = useState('list'); // Padrão Lista para Mobile First
+  const [viewMode, setViewMode] = useState('list'); 
   const [selectedTenantId, setSelectedTenantId] = useState(null);
 
   const [showModal, setShowModal] = useState(false);
@@ -173,7 +175,7 @@ const App = () => {
       // 1. Busca o perfil completo do usuário logado (com dados da consultoria)
       const { data: userProfile, error: profileError } = await supabase
         .from('profiles')
-        .select('*, consultorias(id, status)') // Faz Join para pegar status da consultoria
+        .select('*, consultorias(id, status)') 
         .eq('id', session.user.id)
         .single();
 
@@ -182,23 +184,22 @@ const App = () => {
         return;
       }
 
-      // --- BARREIRA DE SEGURANÇA (O PULO DO GATO) ---
+      // --- BARREIRA DE SEGURANÇA ---
       
       // A. Verifica se o USUÁRIO está ativo
       if (userProfile.ativo === false) {
-          await supabase.auth.signOut();
-          setSession(null);
-          alert("Seu acesso foi desativado pelo administrador.");
-          return;
+          setAccessDeniedType('usuario_bloqueado');
+          return; // Para de carregar dados (Barreira Ativa)
       }
 
-      // B. Verifica se a CONSULTORIA está ativa (Bloqueio do Super Admin)
+      // B. Verifica se a CONSULTORIA está ativa
       if (userProfile.consultorias?.status === 'bloqueada') {
-          await supabase.auth.signOut();
-          setSession(null);
-          alert("O acesso da sua empresa está temporariamente suspenso. Contate o suporte.");
-          return;
+          setAccessDeniedType('consultoria_bloqueada');
+          return; // Para de carregar dados (Barreira Ativa)
       }
+
+      // Se passou pela barreira, limpa qualquer estado de bloqueio anterior
+      setAccessDeniedType(null);
 
       // --- FIM DA BARREIRA ---
 
@@ -245,10 +246,9 @@ const App = () => {
         setSession(session); 
         
         // --- RESET DE ABA NO LOGIN ---
-        // Se o usuário acabou de logar, força ir para o Dashboard
-        // Isso evita que o Colaborador caia na tela "Minha Equipe" do Admin anterior
         if (event === 'SIGNED_IN') {
             setActiveTab('dashboard');
+            setAccessDeniedType(null); // Reseta bloqueio ao tentar novo login
         }
     });
     
@@ -258,7 +258,7 @@ const App = () => {
   useEffect(() => {
     if (session) { 
         setLoading(true); 
-        carregarDados(); // A barreira de segurança roda aqui dentro
+        carregarDados(); 
         carregarConfiguracao(); 
         setLoading(false); 
     } else { 
@@ -267,25 +267,24 @@ const App = () => {
     }
   }, [session]);
 
-  // Restante do código (modais, deletes, exports) permanece igual...
-  useEffect(() => {
-    const algumModalAberto = showModal || showClienteModal || showSolicitantesModal || showConfigModal;
-    if (algumModalAberto) {
-        if (window.location.hash !== '#modal') window.history.pushState({ type: 'modal' }, '', '#modal');
-    } else if (activeTab !== 'dashboard') {
-        if (window.location.hash !== `#${activeTab}`) window.history.pushState({ type: 'tab' }, '', `#${activeTab}`);
-    }
-    const handlePopState = () => {
-      if (showModal || showClienteModal || showSolicitantesModal || showConfigModal) {
-        setShowModal(false); setShowClienteModal(false); setShowSolicitantesModal(false); setShowConfigModal(false); 
-        return;
-      }
-      if (activeTab !== 'dashboard') setActiveTab('dashboard');
-    };
-    window.addEventListener('popstate', handlePopState);
-    return () => window.removeEventListener('popstate', handlePopState);
-  }, [activeTab, showModal, showClienteModal, showSolicitantesModal, showConfigModal]);
+  // Se o usuário estiver bloqueado, exibe a tela de AccessDenied
+  if (accessDeniedType) {
+      return (
+          <AccessDenied 
+              type={accessDeniedType} 
+              onLogout={async () => {
+                  await supabase.auth.signOut();
+                  setSession(null);
+                  setAccessDeniedType(null);
+              }} 
+          />
+      );
+  }
 
+  // Restante do código (modais, deletes, exports) permanece igual...
+  
+  // (Bloco de useEffect popstate mantido...)
+  
   const salvarServico = async () => {
     try {
       const { data: profile } = await supabase.from('profiles').select('consultoria_id').eq('id', session.user.id).single();
