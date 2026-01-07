@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Mail, Lock, Eye, EyeOff, Loader2, AlertCircle, LogIn, ShieldCheck, ArrowLeft, Key } from 'lucide-react'; // Trocado para Key
+import { Mail, Lock, Eye, EyeOff, Loader2, AlertCircle, LogIn, ShieldCheck, ArrowLeft, Key } from 'lucide-react'; 
 import supabase from '../services/supabase';
 
 const Auth = () => {
@@ -86,7 +86,7 @@ const Auth = () => {
           )}
 
           {view === 'login' ? (
-              <form onSubmit={handleLogin} className="space-y-5">
+              <form onSubmit={handleLogin} className="space-y-5" autoComplete="off">
                 <div className="space-y-1">
                   <label className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider ml-1">Email Corporativo</label>
                   <div className="relative">
@@ -94,7 +94,10 @@ const Auth = () => {
                       <Mail size={18} />
                     </div>
                     <input
+                      id="email"
+                      name="email"
                       type="email"
+                      autoComplete="off" // Força o navegador a não sugerir agressivamente
                       placeholder="seu@email.com"
                       value={email}
                       onChange={(e) => setEmail(e.target.value)}
@@ -116,7 +119,10 @@ const Auth = () => {
                       <Lock size={18} />
                     </div>
                     <input
+                      id="password"
+                      name="password"
                       type={showPassword ? "text" : "password"}
+                      autoComplete="new-password" // O "Pulo do Gato": Evita preenchimento automático da senha antiga
                       placeholder="••••••••"
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
@@ -142,7 +148,7 @@ const Auth = () => {
                 </button>
               </form>
           ) : (
-              <form onSubmit={handleRecovery} className="space-y-5">
+              <form onSubmit={handleRecovery} className="space-y-5" autoComplete="off">
                 <p className="text-sm text-gray-600 dark:text-gray-400 text-center mb-4">
                     Digite seu e-mail para receber um link de redefinição de senha.
                 </p>
@@ -154,7 +160,10 @@ const Auth = () => {
                       <Mail size={18} />
                     </div>
                     <input
+                      id="email-recovery"
+                      name="email-recovery"
                       type="email"
+                      autoComplete="off"
                       placeholder="seu@email.com"
                       value={email}
                       onChange={(e) => setEmail(e.target.value)}
