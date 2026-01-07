@@ -38,7 +38,7 @@ const App = () => {
   const [loading, setLoading] = useState(true);
   
   const [activeTab, setActiveTab] = useState('dashboard');
-  const [viewMode, setViewMode] = useState('kanban'); 
+  const [viewMode, setViewMode] = useState('list'); 
   const [selectedTenantId, setSelectedTenantId] = useState(null);
 
   const [showModal, setShowModal] = useState(false);
@@ -609,7 +609,7 @@ const App = () => {
                                     </div>
                                     
                                     {/* --- TOGGLE KANBAN / LISTA --- */}
-                                    <div className="bg-gray-100 dark:bg-gray-700 p-1 rounded-lg border border-gray-200 dark:border-gray-600 flex">
+                                    <div className="hidden md:flex bg-gray-100 dark:bg-gray-700 p-1 rounded-lg border border-gray-200 dark:border-gray-600 flex">
                                         <button 
                                             onClick={() => setViewMode('list')}
                                             className={`p-2 rounded-md transition-colors ${viewMode === 'list' ? 'bg-white dark:bg-gray-600 text-indigo-600 dark:text-indigo-400 shadow-sm' : 'text-gray-400 hover:text-gray-600 dark:hover:text-gray-300'}`}
