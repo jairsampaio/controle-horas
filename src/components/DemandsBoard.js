@@ -2,23 +2,27 @@ import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { 
   Target, Clock, DollarSign, Plus, X, Save, CheckCircle, 
-  User, Briefcase, Award, AlertCircle 
+  User, Briefcase, Award, AlertCircle, Calendar, Edit2, Building2, UserX
 } from 'lucide-react';
 import supabase from '../services/supabase';
-import { formatCurrency } from '../utils/formatters'; // Supondo que exista, senão use Intl direto
 
 const DemandsBoard = ({ userId, userRole, showToast }) => {
   const [demandas, setDemandas] = useState([]);
   const [candidaturas, setCandidaturas] = useState([]);
+  const [clientes, setClientes] = useState([]); // Lista para o select
   const [loading, setLoading] = useState(true);
   
-  // Modal de Criação
+  // Modal de Criação/Edição
   const [showModal, setShowModal] = useState(false);
-  const [novaDemanda, setNovaDemanda] = useState({
+  const [editingId, setEditingId] = useState(null); // ID da demanda sendo editada
+  
+  const [formData, setFormData] = useState({
     titulo: '',
     descricao: '',
-    tipo_pagamento: 'horas', // ou 'valor_fixo'
-    estimativa: ''
+    tipo_pagamento: 'horas',
+    estimativa: '',
+    cliente_id: '',
+    data_expiracao: ''
   });
 
   useEffect(() => {
@@ -28,31 +32,41 @@ const DemandsBoard = ({ userId, userRole, showToast }) => {
   const carregarTudo = async () => {
     setLoading(true);
     try {
-        // 1. Pega Consultoria ID
         const { data: profile } = await supabase.from('profiles').select('consultoria_id').eq('id', userId).single();
         if (!profile) return;
 
-        // 2. Busca Demandas (com dados do vencedor se houver)
+        // 1. Busca Demandas (com dados do vencedor e do cliente)
         const { data: demandsData, error: demandsError } = await supabase
             .from('demandas')
-            .select(`*, vencedor:vencedor_id(nome)`)
+            .select(`
+                *, 
+                vencedor:vencedor_id(nome),
+                cliente:cliente_id(nome)
+            `)
             .eq('consultoria_id', profile.consultoria_id)
             .order('created_at', { ascending: false });
 
         if (demandsError) throw demandsError;
         setDemandas(demandsData);
 
-        // 3. Busca Minhas Candidaturas (para saber se já apliquei) ou Todas (se for admin)
-        let queryCand = supabase.from('candidaturas').select(`*, consultor:consultor_id(nome, email)`);
+        // 2. Busca Clientes (para o select do modal)
+        const { data: clientsData } = await supabase
+            .from('clientes')
+            .select('id, nome')
+            .eq('consultoria_id', profile.consultoria_id)
+            .eq('ativo', true)
+            .order('nome');
         
-        // Se for admin, quero ver todas as candidaturas dessas demandas. 
-        // Se for colaborador, preciso saber onde EU me candidatei para bloquear o botão.
-        // Simplificação: Trazemos tudo dessa consultoria (filtrar no front ou query complexa)
-        // Para MVP, vamos trazer todas as candidaturas relacionadas às demandas carregadas
+        setClientes(clientsData || []);
+
+        // 3. Busca Candidaturas
         const demandasIds = demandsData.map(d => d.id);
         if (demandasIds.length > 0) {
-            queryCand = queryCand.in('demanda_id', demandasIds);
-            const { data: candData } = await queryCand;
+            const { data: candData } = await supabase
+                .from('candidaturas')
+                .select(`*, consultor:consultor_id(nome, email)`)
+                .in('demanda_id', demandasIds);
+            
             setCandidaturas(candData || []);
         } else {
             setCandidaturas([]);
@@ -60,34 +74,63 @@ const DemandsBoard = ({ userId, userRole, showToast }) => {
 
     } catch (error) {
         console.error(error);
-        if(showToast) showToast('Erro ao carregar demandas.', 'erro');
+        if(showToast) showToast('Erro ao carregar mural.', 'erro');
     } finally {
         setLoading(false);
     }
   };
 
-  const handleCriarDemanda = async (e) => {
+  const abrirModalCriacao = () => {
+      setEditingId(null);
+      setFormData({ 
+          titulo: '', descricao: '', tipo_pagamento: 'horas', estimativa: '', cliente_id: '', data_expiracao: '' 
+      });
+      setShowModal(true);
+  };
+
+  const abrirModalEdicao = (demanda) => {
+      setEditingId(demanda.id);
+      setFormData({
+          titulo: demanda.titulo,
+          descricao: demanda.descricao,
+          tipo_pagamento: demanda.tipo_pagamento,
+          estimativa: demanda.estimativa,
+          cliente_id: demanda.cliente_id || '',
+          data_expiracao: demanda.data_expiracao || ''
+      });
+      setShowModal(true);
+  };
+
+  const handleSalvar = async (e) => {
     e.preventDefault();
     try {
         const { data: profile } = await supabase.from('profiles').select('consultoria_id').eq('id', userId).single();
         
-        const { error } = await supabase.from('demandas').insert([{
-            ...novaDemanda,
+        const payload = {
+            ...formData,
             consultoria_id: profile.consultoria_id,
-            criado_por: userId,
-            status: 'aberta'
-        }]);
+            // Se for criação, adiciona criado_por e status inicial
+            ...(editingId ? {} : { criado_por: userId, status: 'aberta' })
+        };
 
-        if (error) throw error;
+        if (editingId) {
+            // Update
+            const { error } = await supabase.from('demandas').update(payload).eq('id', editingId);
+            if (error) throw error;
+            if(showToast) showToast('Demanda atualizada!', 'sucesso');
+        } else {
+            // Insert
+            const { error } = await supabase.from('demandas').insert([payload]);
+            if (error) throw error;
+            if(showToast) showToast('Demanda publicada no mural!', 'sucesso');
+        }
         
-        if(showToast) showToast('Demanda publicada no mural!', 'sucesso');
         setShowModal(false);
-        setNovaDemanda({ titulo: '', descricao: '', tipo_pagamento: 'horas', estimativa: '' });
         carregarTudo();
 
     } catch (error) {
         console.error(error);
-        if(showToast) showToast('Erro ao criar demanda.', 'erro');
+        if(showToast) showToast('Erro ao salvar demanda.', 'erro');
     }
   };
 
@@ -108,19 +151,15 @@ const DemandsBoard = ({ userId, userRole, showToast }) => {
   };
 
   const handleAprovar = async (demandaId, consultorId) => {
-      if(!window.confirm("Confirmar este consultor para a demanda?")) return;
+      if(!window.confirm("Confirmar este consultor e encerrar a demanda?")) return;
 
       try {
-          // 1. Atualiza a demanda com o vencedor e fecha
           const { error: demError } = await supabase
             .from('demandas')
             .update({ vencedor_id: consultorId, status: 'atribuida' })
             .eq('id', demandaId);
           
           if(demError) throw demError;
-
-          // 2. (Opcional) Atualiza status das candidaturas para histórico
-          // ...
 
           if(showToast) showToast('Consultor aprovado e demanda atribuída!', 'sucesso');
           carregarTudo();
@@ -131,14 +170,15 @@ const DemandsBoard = ({ userId, userRole, showToast }) => {
       }
   };
 
-  // Helpers de UI
-  const jaMeCandidatei = (demandaId) => {
-      return candidaturas.some(c => c.demanda_id === demandaId && c.consultor_id === userId);
+  const isExpired = (dateString) => {
+      if (!dateString) return false;
+      const hoje = new Date().toISOString().split('T')[0];
+      return dateString < hoje;
   };
 
-  const getCandidatosDaDemanda = (demandaId) => {
-      return candidaturas.filter(c => c.demanda_id === demandaId);
-  };
+  // Helpers de UI
+  const jaMeCandidatei = (demandaId) => candidaturas.some(c => c.demanda_id === demandaId && c.consultor_id === userId);
+  const getCandidatosDaDemanda = (demandaId) => candidaturas.filter(c => c.demanda_id === demandaId);
 
   return (
     <div className="space-y-6 animate-fade-in pb-10">
@@ -151,13 +191,13 @@ const DemandsBoard = ({ userId, userRole, showToast }) => {
                 </h1>
                 <p className="text-gray-500 dark:text-gray-400 text-sm">
                     {userRole === 'admin' || userRole === 'super_admin' 
-                        ? 'Publique demandas e encontre o consultor ideal.' 
-                        : 'Encontre novas demandas e aumente sua receita.'}
+                        ? 'Gerencie demandas e distribua tarefas.' 
+                        : 'Candidate-se a novas oportunidades.'}
                 </p>
             </div>
             {(userRole === 'admin' || userRole === 'super_admin') && (
                 <button 
-                    onClick={() => setShowModal(true)}
+                    onClick={abrirModalCriacao}
                     className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2.5 rounded-xl font-bold flex items-center gap-2 shadow-lg shadow-indigo-200 dark:shadow-none transition-all active:scale-95"
                 >
                     <Plus size={20} /> Nova Demanda
@@ -171,7 +211,7 @@ const DemandsBoard = ({ userId, userRole, showToast }) => {
         ) : demandas.length === 0 ? (
             <div className="text-center py-10 flex flex-col items-center">
                 <Briefcase size={48} className="text-gray-200 mb-4" />
-                <p className="text-gray-500">Nenhuma demanda aberta no momento.</p>
+                <p className="text-gray-500">Nenhuma demanda encontrada.</p>
             </div>
         ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
@@ -180,47 +220,93 @@ const DemandsBoard = ({ userId, userRole, showToast }) => {
                     const souCandidato = jaMeCandidatei(demanda.id);
                     const isOwner = (userRole === 'admin' || userRole === 'super_admin');
                     const isFinalizada = demanda.status !== 'aberta';
+                    const expirada = isExpired(demanda.data_expiracao);
+                    
+                    // Lógica de "Perdi a vaga"
+                    const perdiVaga = souCandidato && isFinalizada && demanda.vencedor_id && demanda.vencedor_id !== userId;
 
                     return (
-                        <div key={demanda.id} className={`bg-white dark:bg-gray-800 rounded-2xl border shadow-sm transition-all flex flex-col
-                            ${isFinalizada ? 'border-green-200 dark:border-green-900 opacity-75' : 'border-gray-200 dark:border-gray-700 hover:shadow-md'}
+                        <div key={demanda.id} className={`bg-white dark:bg-gray-800 rounded-2xl border shadow-sm transition-all flex flex-col relative group
+                            ${isFinalizada || expirada ? 'border-gray-200 dark:border-gray-700 opacity-90' : 'border-gray-200 dark:border-gray-700 hover:shadow-md hover:border-indigo-200'}
                         `}>
-                            
+                            {/* Botão de Editar (Apenas Admin e se não finalizada) */}
+                            {isOwner && !isFinalizada && (
+                                <button 
+                                    onClick={() => abrirModalEdicao(demanda)}
+                                    className="absolute top-4 right-4 p-2 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors opacity-0 group-hover:opacity-100 z-10"
+                                    title="Editar Demanda"
+                                >
+                                    <Edit2 size={16} />
+                                </button>
+                            )}
+
                             <div className="p-6 flex-1">
-                                {/* Badge de Status */}
-                                <div className="flex justify-between items-start mb-4">
-                                    <span className={`px-2.5 py-1 rounded-lg text-xs font-bold uppercase tracking-wide
-                                        ${demanda.status === 'aberta' ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300' : 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300'}
+                                {/* Badges Superiores */}
+                                <div className="flex flex-wrap gap-2 mb-3">
+                                    <span className={`px-2.5 py-1 rounded-lg text-xs font-bold uppercase tracking-wide flex items-center gap-1
+                                        ${isFinalizada 
+                                            ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300' 
+                                            : expirada 
+                                                ? 'bg-red-100 text-red-600 dark:bg-red-900/30 dark:text-red-300'
+                                                : 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300'}
                                     `}>
-                                        {demanda.status === 'aberta' ? 'Em Aberto' : 'Atribuída'}
+                                        {isFinalizada ? <CheckCircle size={12}/> : expirada ? <AlertCircle size={12}/> : <Target size={12}/>}
+                                        {isFinalizada ? 'Concluída' : expirada ? 'Expirada' : 'Em Aberto'}
                                     </span>
+                                    
+                                    {/* Data de Expiração */}
+                                    {demanda.data_expiracao && !isFinalizada && (
+                                        <span className={`flex items-center gap-1 text-xs font-bold px-2 py-1 rounded-lg
+                                            ${expirada ? 'text-red-500 bg-red-50' : 'text-gray-500 bg-gray-100 dark:bg-gray-700'}
+                                        `}>
+                                            <Calendar size={12}/> 
+                                            {expirada ? 'Expirou' : new Date(demanda.data_expiracao).toLocaleDateString()}
+                                        </span>
+                                    )}
+                                </div>
+
+                                <h3 className="text-lg font-bold text-gray-800 dark:text-white mb-2 leading-tight pr-8">
+                                    {demanda.titulo}
+                                </h3>
+                                
+                                {demanda.cliente && (
+                                    <p className="text-xs font-bold text-indigo-600 dark:text-indigo-400 mb-2 flex items-center gap-1">
+                                        <Building2 size={12}/> {demanda.cliente.nome}
+                                    </p>
+                                )}
+
+                                <p className="text-sm text-gray-500 dark:text-gray-400 line-clamp-3 mb-4">
+                                    {demanda.descricao}
+                                </p>
+
+                                {/* Estimativa */}
+                                <div className="flex items-center gap-2">
                                     {demanda.tipo_pagamento === 'horas' ? (
-                                        <span className="flex items-center gap-1 text-xs font-bold text-gray-500 bg-gray-100 dark:bg-gray-700 px-2 py-1 rounded-lg">
-                                            <Clock size={14}/> {demanda.estimativa}h
+                                        <span className="flex items-center gap-1 text-xs font-bold text-gray-600 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 px-2 py-1 rounded">
+                                            <Clock size={14}/> {demanda.estimativa}h Previstas
                                         </span>
                                     ) : (
-                                        <span className="flex items-center gap-1 text-xs font-bold text-green-600 bg-green-50 dark:bg-green-900/20 px-2 py-1 rounded-lg">
+                                        <span className="flex items-center gap-1 text-xs font-bold text-green-600 bg-green-50 dark:bg-green-900/20 px-2 py-1 rounded">
                                             <DollarSign size={14}/> R$ {demanda.estimativa}
                                         </span>
                                     )}
                                 </div>
 
-                                <h3 className="text-lg font-bold text-gray-800 dark:text-white mb-2 leading-tight">
-                                    {demanda.titulo}
-                                </h3>
-                                <p className="text-sm text-gray-500 dark:text-gray-400 line-clamp-3">
-                                    {demanda.descricao}
-                                </p>
-
                                 {/* Área do Vencedor (Se atribuída) */}
                                 {isFinalizada && demanda.vencedor && (
-                                    <div className="mt-4 p-3 bg-green-50 dark:bg-green-900/20 rounded-xl border border-green-100 dark:border-green-800 flex items-center gap-3">
-                                        <div className="bg-green-200 dark:bg-green-800 p-1.5 rounded-full">
-                                            <Award size={16} className="text-green-700 dark:text-green-200"/>
+                                    <div className={`mt-4 p-3 rounded-xl border flex items-center gap-3
+                                        ${demanda.vencedor_id === userId 
+                                            ? 'bg-green-50 dark:bg-green-900/20 border-green-100 dark:border-green-800' 
+                                            : 'bg-gray-50 dark:bg-gray-900/50 border-gray-200 dark:border-gray-700'}
+                                    `}>
+                                        <div className={`p-1.5 rounded-full ${demanda.vencedor_id === userId ? 'bg-green-200 dark:bg-green-800' : 'bg-gray-200 dark:bg-gray-700'}`}>
+                                            <Award size={16} className={demanda.vencedor_id === userId ? 'text-green-700 dark:text-green-200' : 'text-gray-500'}/>
                                         </div>
                                         <div>
-                                            <p className="text-xs text-green-800 dark:text-green-300 font-bold">Responsável</p>
-                                            <p className="text-xs text-green-700 dark:text-green-400">{demanda.vencedor?.nome}</p>
+                                            <p className="text-xs font-bold opacity-70">
+                                                {demanda.vencedor_id === userId ? 'Parabéns! Você venceu.' : 'Responsável'}
+                                            </p>
+                                            <p className="text-sm font-bold">{demanda.vencedor?.nome}</p>
                                         </div>
                                     </div>
                                 )}
@@ -229,7 +315,7 @@ const DemandsBoard = ({ userId, userRole, showToast }) => {
                             {/* Footer do Card */}
                             <div className="p-4 border-t border-gray-100 dark:border-gray-700 bg-gray-50 dark:bg-gray-900/50 rounded-b-2xl">
                                 
-                                {/* VISÃO DO ADMIN: Lista de Candidatos */}
+                                {/* VISÃO DO ADMIN */}
                                 {isOwner && !isFinalizada && (
                                     <div className="space-y-3">
                                         <p className="text-xs font-bold text-gray-400 uppercase flex items-center gap-1">
@@ -257,11 +343,11 @@ const DemandsBoard = ({ userId, userRole, showToast }) => {
                                     </div>
                                 )}
 
-                                {/* VISÃO DO CONSULTOR: Botão de Candidatura */}
-                                {!isOwner && !isFinalizada && (
+                                {/* VISÃO DO CONSULTOR */}
+                                {!isOwner && !isFinalizada && !expirada && (
                                     <>
                                         {souCandidato ? (
-                                            <button disabled className="w-full py-2 bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400 rounded-lg text-sm font-bold flex justify-center items-center gap-2 cursor-not-allowed">
+                                            <button disabled className="w-full py-2 bg-blue-50 text-blue-600 dark:bg-blue-900/20 dark:text-blue-400 rounded-lg text-sm font-bold flex justify-center items-center gap-2 cursor-not-allowed">
                                                 <CheckCircle size={16}/> Candidatura Enviada
                                             </button>
                                         ) : (
@@ -269,16 +355,21 @@ const DemandsBoard = ({ userId, userRole, showToast }) => {
                                                 onClick={() => handleCandidatar(demanda.id)}
                                                 className="w-full py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-sm font-bold transition-colors shadow-md shadow-indigo-200 dark:shadow-none"
                                             >
-                                                Quero pegar essa demanda!
+                                                Quero participar!
                                             </button>
                                         )}
                                     </>
                                 )}
 
-                                {/* Se finalizada, mostra apenas aviso */}
-                                {isFinalizada && !isOwner && (
+                                {/* Mensagens de Status Finais */}
+                                {perdiVaga && (
+                                    <div className="text-center text-xs text-red-500 font-bold flex items-center justify-center gap-1">
+                                        <UserX size={14}/> Não selecionado desta vez
+                                    </div>
+                                )}
+                                {(expirada && !isFinalizada && !isOwner) && (
                                     <div className="text-center text-xs text-gray-400 font-medium">
-                                        Demanda encerrada
+                                        Prazo de candidatura encerrado
                                     </div>
                                 )}
                             </div>
@@ -288,35 +379,50 @@ const DemandsBoard = ({ userId, userRole, showToast }) => {
             </div>
         )}
 
-        {/* MODAL NOVA DEMANDA */}
+        {/* MODAL NOVA/EDITAR DEMANDA */}
         {showModal && createPortal(
             <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in" onClick={(e) => e.stopPropagation()}>
                 <div className="bg-white dark:bg-gray-900 w-full max-w-lg rounded-2xl p-6 shadow-2xl animate-scale-in border border-gray-200 dark:border-gray-800" onClick={(e) => e.stopPropagation()}>
                     <div className="flex justify-between mb-6">
                         <h3 className="font-bold text-lg text-gray-800 dark:text-white flex items-center gap-2">
-                            <Plus className="text-indigo-600"/> Nova Oportunidade
+                            {editingId ? <Edit2 className="text-blue-600"/> : <Plus className="text-indigo-600"/>} 
+                            {editingId ? 'Editar Demanda' : 'Nova Oportunidade'}
                         </h3>
                         <button onClick={() => setShowModal(false)}><X className="text-gray-400"/></button>
                     </div>
-                    <form onSubmit={handleCriarDemanda} className="space-y-4">
+                    <form onSubmit={handleSalvar} className="space-y-4">
                         <div>
                             <label className="block text-sm font-medium mb-1 text-gray-600 dark:text-gray-400">Título da Demanda</label>
                             <input 
                                 type="text" 
-                                value={novaDemanda.titulo} 
-                                onChange={e => setNovaDemanda({...novaDemanda, titulo: e.target.value})} 
+                                value={formData.titulo} 
+                                onChange={e => setFormData({...formData, titulo: e.target.value})} 
                                 className="w-full border dark:border-gray-700 rounded-lg p-3 bg-white dark:bg-gray-800 text-gray-900 dark:text-white outline-none focus:ring-2 focus:ring-indigo-500" 
                                 placeholder="Ex: Ajuste de Relatório Contábil" 
                                 required 
                             />
+                        </div>
+
+                        <div>
+                            <label className="block text-sm font-medium mb-1 text-gray-600 dark:text-gray-400">Cliente (Opcional)</label>
+                            <select 
+                                value={formData.cliente_id} 
+                                onChange={e => setFormData({...formData, cliente_id: e.target.value})} 
+                                className="w-full border dark:border-gray-700 rounded-lg p-3 bg-white dark:bg-gray-800 text-gray-900 dark:text-white outline-none focus:ring-2 focus:ring-indigo-500"
+                            >
+                                <option value="">Sem vínculo com cliente</option>
+                                {clientes.map(c => (
+                                    <option key={c.id} value={c.id}>{c.nome}</option>
+                                ))}
+                            </select>
                         </div>
                         
                         <div className="grid grid-cols-2 gap-4">
                             <div>
                                 <label className="block text-sm font-medium mb-1 text-gray-600 dark:text-gray-400">Tipo</label>
                                 <select 
-                                    value={novaDemanda.tipo_pagamento} 
-                                    onChange={e => setNovaDemanda({...novaDemanda, tipo_pagamento: e.target.value})} 
+                                    value={formData.tipo_pagamento} 
+                                    onChange={e => setFormData({...formData, tipo_pagamento: e.target.value})} 
                                     className="w-full border dark:border-gray-700 rounded-lg p-3 bg-white dark:bg-gray-800 text-gray-900 dark:text-white outline-none focus:ring-2 focus:ring-indigo-500"
                                 >
                                     <option value="horas">Horas</option>
@@ -325,13 +431,13 @@ const DemandsBoard = ({ userId, userRole, showToast }) => {
                             </div>
                             <div>
                                 <label className="block text-sm font-medium mb-1 text-gray-600 dark:text-gray-400">
-                                    {novaDemanda.tipo_pagamento === 'horas' ? 'Qtd Horas' : 'Valor (R$)'}
+                                    {formData.tipo_pagamento === 'horas' ? 'Qtd Horas' : 'Valor (R$)'}
                                 </label>
                                 <input 
                                     type="number" 
-                                    step={novaDemanda.tipo_pagamento === 'horas' ? "1" : "0.01"}
-                                    value={novaDemanda.estimativa} 
-                                    onChange={e => setNovaDemanda({...novaDemanda, estimativa: e.target.value})} 
+                                    step={formData.tipo_pagamento === 'horas' ? "1" : "0.01"}
+                                    value={formData.estimativa} 
+                                    onChange={e => setFormData({...formData, estimativa: e.target.value})} 
                                     className="w-full border dark:border-gray-700 rounded-lg p-3 bg-white dark:bg-gray-800 text-gray-900 dark:text-white outline-none focus:ring-2 focus:ring-indigo-500" 
                                     placeholder="0" 
                                     required 
@@ -340,10 +446,20 @@ const DemandsBoard = ({ userId, userRole, showToast }) => {
                         </div>
 
                         <div>
+                            <label className="block text-sm font-medium mb-1 text-gray-600 dark:text-gray-400">Data Limite (Expiração)</label>
+                            <input 
+                                type="date" 
+                                value={formData.data_expiracao} 
+                                onChange={e => setFormData({...formData, data_expiracao: e.target.value})} 
+                                className="w-full border dark:border-gray-700 rounded-lg p-3 bg-white dark:bg-gray-800 text-gray-900 dark:text-white outline-none focus:ring-2 focus:ring-indigo-500" 
+                            />
+                        </div>
+
+                        <div>
                             <label className="block text-sm font-medium mb-1 text-gray-600 dark:text-gray-400">Descrição Detalhada</label>
                             <textarea 
-                                value={novaDemanda.descricao} 
-                                onChange={e => setNovaDemanda({...novaDemanda, descricao: e.target.value})} 
+                                value={formData.descricao} 
+                                onChange={e => setFormData({...formData, descricao: e.target.value})} 
                                 className="w-full border dark:border-gray-700 rounded-lg p-3 bg-white dark:bg-gray-800 text-gray-900 dark:text-white outline-none focus:ring-2 focus:ring-indigo-500 min-h-[100px]" 
                                 placeholder="Descreva o que precisa ser feito..." 
                                 required 
@@ -353,7 +469,7 @@ const DemandsBoard = ({ userId, userRole, showToast }) => {
                         <div className="pt-2 flex gap-3">
                             <button type="button" onClick={() => setShowModal(false)} className="flex-1 py-3 bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 rounded-xl font-bold">Cancelar</button>
                             <button type="submit" className="flex-1 bg-indigo-600 text-white py-3 rounded-xl font-bold hover:bg-indigo-700 transition-colors shadow-lg">
-                                Publicar
+                                {editingId ? 'Salvar Alterações' : 'Publicar'}
                             </button>
                         </div>
                     </form>

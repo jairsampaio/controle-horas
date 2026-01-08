@@ -28,11 +28,12 @@ import AdminFinance from './components/AdminFinance';
 import AdminPlans from './components/AdminPlans';
 import TeamManagement from './components/TeamManagement';
 import AccessDenied from './components/AccessDenied'; 
-import DemandsBoard from './components/DemandsBoard'; // <--- Importado
+import DemandsBoard from './components/DemandsBoard'; 
 import { formatCurrency, formatHoursInt } from './utils/formatters'; 
 
 const App = () => {
   // --- ESTADOS ---
+  const [userRole, setUserRole] = useState(null); // <--- NOVO ESTADO PARA O CARGO
   const [accessDeniedType, setAccessDeniedType] = useState(null); 
   const [servicos, setServicos] = useState([]);
   const [clientes, setClientes] = useState([]);
@@ -185,6 +186,9 @@ const App = () => {
         return;
       }
 
+      // --- GUARDA O CARGO CORRETO NO ESTADO ---
+      setUserRole(userProfile.cargo); // <--- AQUI ESTÁ A CORREÇÃO!
+
       // --- BARREIRA DE SEGURANÇA ---
       if (userProfile.ativo === false) {
           setAccessDeniedType('usuario_bloqueado');
@@ -260,21 +264,7 @@ const App = () => {
     }
   }, [session]);
 
-  if (accessDeniedType) {
-      return (
-          <AccessDenied 
-              type={accessDeniedType} 
-              onLogout={async () => {
-                  await supabase.auth.signOut();
-                  setSession(null);
-                  setAccessDeniedType(null);
-              }} 
-          />
-      );
-  }
-
-  // Restante do código (modais, deletes, exports) permanece igual...
-  
+  // MOVI O HOOK PARA CIMA
   useEffect(() => {
     const algumModalAberto = showModal || showClienteModal || showSolicitantesModal || showConfigModal;
     if (algumModalAberto) {
@@ -566,6 +556,21 @@ const App = () => {
   const opcoesStatus = ['Pendente', 'Em aprovação', 'Aprovado', 'NF Emitida', 'Pago'];
   const clientesAtivos = clientes.filter(c => c.ativo !== false);
 
+  // --- SE O USUÁRIO ESTIVER BLOQUEADO, RETORNA A TELA DE BLOQUEIO ---
+  if (accessDeniedType) {
+      return (
+          <AccessDenied 
+              type={accessDeniedType} 
+              onLogout={async () => {
+                  await supabase.auth.signOut();
+                  setSession(null);
+                  setAccessDeniedType(null);
+              }} 
+          />
+      );
+  }
+
+  // --- RENDERIZAÇÃO PRINCIPAL DO APP ---
   return (
     <div className="flex h-screen bg-gray-50 dark:bg-gray-950 overflow-hidden">
       
@@ -758,7 +763,7 @@ const App = () => {
                     {activeTab === 'demandas' && (
                         <DemandsBoard 
                             userId={session?.user?.id} 
-                            userRole={session?.user?.user_metadata?.cargo || 'colaborador'} 
+                            userRole={userRole} // <--- AQUI ESTÁ A CORREÇÃO: USANDO O STATE
                             showToast={showToast} 
                         />
                     )}
