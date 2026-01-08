@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { createPortal } from 'react-dom'; // Necessário para o blur funcionar na tela toda
+import { createPortal } from 'react-dom'; 
 import { Plus, Trash2, Edit2, Save, RotateCcw, Building2, Eye, EyeOff, Search, AlertCircle } from 'lucide-react'; 
 import supabase from '../services/supabase';
 import ConfirmModal from './ConfirmModal'; 
@@ -10,6 +10,9 @@ const ChannelsManagement = ({ userId, showToast }) => {
   const [mostrarInativos, setMostrarInativos] = useState(false); 
   const [busca, setBusca] = useState('');
   
+  // Estado para armazenar o ID da consultoria
+  const [consultoriaId, setConsultoriaId] = useState(null);
+
   // Estados do Formulário
   const [nome, setNome] = useState('');
   const [ativo, setAtivo] = useState(true);
@@ -19,18 +22,35 @@ const ChannelsManagement = ({ userId, showToast }) => {
   const [showConfirm, setShowConfirm] = useState(false);
   const [canalAlvo, setCanalAlvo] = useState(null);
 
-  // --- CARREGAR CANAIS (Simplificado) ---
+  // --- 1. BUSCAR A CONSULTORIA DO USUÁRIO ---
+  useEffect(() => {
+    const fetchConsultoria = async () => {
+      if (!userId) return;
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('consultoria_id')
+        .eq('id', userId)
+        .single();
+      
+      if (data && !error) {
+        setConsultoriaId(data.consultoria_id);
+      }
+    };
+    fetchConsultoria();
+  }, [userId]);
+
+  // --- 2. CARREGAR CANAIS (Pela Consultoria) ---
   const carregarCanais = useCallback(async () => {
-    if (!userId) return; // Proteção
+    // Só carrega se já tivermos o ID da consultoria
+    if (!consultoriaId) return; 
 
     setLoading(true);
     try {
         let query = supabase
           .from('canais')
           .select('*')
-          // Se o seu banco usa RLS (Row Level Security), essa linha abaixo pode não ser necessária, 
-          // mas garante que só traga dados deste usuário se o RLS falhar.
-          .eq('user_id', userId) 
+          // AGORA FILTRA PELA CONSULTORIA (Para todos da empresa verem)
+          .eq('consultoria_id', consultoriaId) 
           .order('nome', { ascending: true });
 
         if (!mostrarInativos) {
@@ -48,7 +68,7 @@ const ChannelsManagement = ({ userId, showToast }) => {
     } finally {
         setLoading(false);
     }
-  }, [mostrarInativos, userId, showToast]);
+  }, [mostrarInativos, consultoriaId, showToast]); // Depende do consultoriaId agora
 
   useEffect(() => {
     carregarCanais();
@@ -64,23 +84,23 @@ const ChannelsManagement = ({ userId, showToast }) => {
     setEditingId(canal.id);
     setNome(canal.nome);
     setAtivo(canal.ativo);
-    // Scroll suave para o form (mobile principalmente)
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
-  // --- SALVAR (Simplificado: usa user_id direto) ---
+  // --- 3. SALVAR (Incluindo consultoria_id) ---
   const handleSalvar = async (e) => {
     e.preventDefault();
     if (!nome.trim()) return;
-    if (!userId) {
-        if(showToast) showToast('Erro: Usuário não identificado.', 'erro');
+    if (!userId || !consultoriaId) {
+        if(showToast) showToast('Erro: Consultoria não identificada.', 'erro');
         return;
     }
 
     const payload = {
       nome: nome,
       ativo: ativo,
-      user_id: userId // <--- VOLTAMOS AO ORIGINAL QUE FUNCIONAVA
+      user_id: userId, // Quem criou (Log)
+      consultoria_id: consultoriaId // A qual empresa pertence (Importante!)
     };
 
     let error;
@@ -315,7 +335,6 @@ const ChannelsManagement = ({ userId, showToast }) => {
           </div>
       </div>
 
-      {/* AQUI ESTÁ A CORREÇÃO DO BLUR: createPortal PARA O BODY */}
       {showConfirm && createPortal(
         <ConfirmModal
           isOpen={showConfirm}
