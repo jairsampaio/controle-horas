@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom'; 
 import { 
   LayoutDashboard, Briefcase, Users, Settings, LogOut, X, 
-  ShieldCheck, Wallet, FileText, Building2, Lightbulb, User, Lock, Save
+  ShieldCheck, Wallet, FileText, Building2, Lightbulb, User, Lock, Save, Target
 } from 'lucide-react';
 import supabase from '../services/supabase';
 
@@ -126,6 +126,7 @@ const Sidebar = ({ activeTab, setActiveTab, isOpen, onClose, onLogout, onOpenCon
             
             <MenuButton id="dashboard" icon={LayoutDashboard} label="Dashboard" />
             <MenuButton id="servicos" icon={Briefcase} label="Meus Serviços" />
+            <MenuButton id="demandas" icon={Target} label="Mural de Demandas" />
             
             {/* CORRIGIDO: Agora usa MenuButton e aponta para a aba 'channels' */}
             <MenuButton id="channels" icon={Building2} label="Canais / Parceiros" />

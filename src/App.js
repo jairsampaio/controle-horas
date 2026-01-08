@@ -4,7 +4,7 @@ import React, { useState, useEffect } from 'react';
 import { 
   Clock, DollarSign, User, FileText, Plus, Filter, Settings, Mail, Users, 
   LayoutDashboard, Briefcase, Hourglass, Timer, CheckCircle, FileCheck, 
-  Building2, Menu, Eye, EyeOff, ShieldCheck, Wallet, LayoutList, Kanban 
+  Building2, Menu, Eye, EyeOff, ShieldCheck, Wallet, LayoutList, Kanban, Target 
 } from 'lucide-react'; 
 import supabase from './services/supabase'; 
 import StatusCard from './components/StatusCard';
@@ -28,6 +28,7 @@ import AdminFinance from './components/AdminFinance';
 import AdminPlans from './components/AdminPlans';
 import TeamManagement from './components/TeamManagement';
 import AccessDenied from './components/AccessDenied'; // <--- IMPORTANTE: Tela de bloqueio
+import DemandsBoard from './components/DemandsBoard';
 import { formatCurrency, formatHoursInt } from './utils/formatters'; 
 
 const App = () => {
@@ -583,6 +584,7 @@ const App = () => {
               {activeTab === 'dashboard' && <><LayoutDashboard className="text-indigo-600 dark:text-indigo-400" /> Dashboard</>}
               {activeTab === 'servicos' && <><Briefcase className="text-indigo-600 dark:text-indigo-400" /> Meus Serviços</>}
               {activeTab === 'clientes' && <><Users className="text-indigo-600 dark:text-indigo-400" /> Clientes</>}
+              {activeTab === 'demandas' && <><Target className="text-indigo-600 dark:text-indigo-400" /> Mural de Oportunidades</>}
               
               {activeTab === 'admin-tenants' && <><ShieldCheck className="text-yellow-600 dark:text-yellow-400" /> Gestão de Assinantes</>}
               {activeTab === 'admin-finance' && <><Wallet className="text-yellow-600 dark:text-yellow-400" /> Financeiro</>}
@@ -692,6 +694,13 @@ const App = () => {
                                 <button onClick={handleExportarExcel} className="flex items-center gap-2 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700 px-4 py-2 rounded-lg text-sm font-medium transition-colors" title="Exportar Excel"><FileText size={18} className="text-green-600 dark:text-green-400" /> Excel</button>
                                 <button onClick={handleGerarPDF} className="flex items-center gap-2 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700 px-4 py-2 rounded-lg text-sm font-medium transition-colors" title="Gerar PDF"><FileText size={18} className="text-red-600 dark:text-red-400" /> PDF</button>
                             </div>
+                            {activeTab === 'demandas' && (
+                            <DemandsBoard 
+                                userId={session?.user?.id} 
+                                userRole={session?.user?.user_metadata?.cargo || 'colaborador'} // Ou pegue do state se já tiver
+                                showToast={showToast} 
+                            />
+                          )}
 
                             {/* --- LÓGICA HÍBRIDA DE VISUALIZAÇÃO --- */}
                             {/* No celular, SEMPRE mostra Lista (ignora o viewMode). No Desktop, respeita o viewMode. */}
