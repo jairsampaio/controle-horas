@@ -1,9 +1,89 @@
-import React from 'react';
-import { Edit2, Trash2, Calendar, ArrowUp, ArrowDown, Building2 } from 'lucide-react'; 
+import React, { useState, useEffect, useRef } from 'react';
+import { Edit2, Trash2, Calendar, ArrowUp, ArrowDown, Building2, Filter, Check, X, Search } from 'lucide-react'; 
 import { formatCurrency, formatHours } from '../utils/formatters';
+import supabase from '../services/supabase';
 
 const ServicesTable = ({ servicos, onStatusChange, onEdit, onDelete, onSort, sortConfig }) => {
   
+  // --- ESTADOS ---
+  const [consultores, setConsultores] = useState([]);
+  const [filtrosConsultores, setFiltrosConsultores] = useState([]);
+  const [isDropdownOpen, setIsDropdownOpen] = useState(false);
+  const [isAdmin, setIsAdmin] = useState(false);
+  
+  // Novo estado para a busca textual
+  const [searchTerm, setSearchTerm] = useState('');
+
+  // Ref para detectar clique fora
+  const dropdownRef = useRef(null);
+
+  // --- EFEITO: FECHAR AO CLICAR FORA ---
+  useEffect(() => {
+    function handleClickOutside(event) {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
+        setIsDropdownOpen(false);
+        setSearchTerm('');
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, [dropdownRef]);
+
+  // --- EFEITO: CARREGAR DADOS DO ADMIN ---
+  useEffect(() => {
+    const carregarDadosAdmin = async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('role, consultoria_id')
+        .eq('id', user.id)
+        .single();
+
+      const cargosDeChefia = ['admin', 'dono', 'super_admin', 'admin_consultoria'];
+
+      if (profile && cargosDeChefia.includes(profile.role)) {
+        setIsAdmin(true);
+        const { data: listaConsultores } = await supabase
+          .from('profiles')
+          .select('id, nome_completo, email')
+          .eq('consultoria_id', profile.consultoria_id)
+          .eq('ativo', true)
+          .order('nome_completo');
+          
+        setConsultores(listaConsultores || []);
+      }
+    };
+    carregarDadosAdmin();
+  }, []);
+
+  // --- LÓGICA DE FILTRAGEM ---
+  
+  // 1. Filtra os serviços baseado nos IDs selecionados
+  const servicosFiltrados = filtrosConsultores.length > 0
+    ? servicos.filter(s => filtrosConsultores.includes(s.consultor_id))
+    : servicos;
+
+  // 2. Filtra a LISTA de consultores baseado no que foi digitado na busca
+  const consultoresVisiveis = consultores.filter(c => 
+     (c.nome_completo || c.email).toLowerCase().includes(searchTerm.toLowerCase())
+  );
+
+  const toggleConsultor = (id) => {
+    setFiltrosConsultores(prev => 
+      prev.includes(id) ? prev.filter(item => item !== id) : [...prev, id]
+    );
+  };
+
+  const limparFiltros = (e) => {
+    e.stopPropagation(); // Impede que abra/feche o menu ao clicar no X
+    setFiltrosConsultores([]);
+  };
+
+  // --- AUXILIARES ---
   const formatData = (dataStr) => {
     return new Date(dataStr + 'T00:00:00').toLocaleDateString('pt-BR');
   };
@@ -32,7 +112,6 @@ const ServicesTable = ({ servicos, onStatusChange, onEdit, onDelete, onSort, sor
       return '-'; 
   };
 
-  // --- EMPTY STATE ---
   if (servicos.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center py-16 text-center bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 shadow-sm">
@@ -49,9 +128,122 @@ const ServicesTable = ({ servicos, onStatusChange, onEdit, onDelete, onSort, sor
 
   return (
     <>
+      {/* --- ÁREA DE FILTRO (VISÍVEL APENAS PARA ADMIN) --- */}
+      {isAdmin && (
+        <div className="mb-6 bg-white dark:bg-gray-800 p-4 rounded-xl border border-gray-100 dark:border-gray-700 shadow-sm flex items-center gap-3">
+          <div className="p-2 bg-indigo-50 dark:bg-indigo-900/20 rounded-lg text-indigo-600 dark:text-indigo-400">
+            <Filter size={20} />
+          </div>
+          <div className="flex-1">
+            <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase mb-1">
+              Filtrar por Consultor
+            </label>
+            
+            {/* CONTAINER DO DROPDOWN COM REF */}
+            <div className="relative" ref={dropdownRef}>
+              
+              {/* BOTÃO PRINCIPAL */}
+              <button
+                onClick={() => setIsDropdownOpen(!isDropdownOpen)}
+                className="w-full md:w-72 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 text-gray-900 dark:text-gray-100 text-sm rounded-lg focus:ring-indigo-500 focus:border-indigo-500 p-2.5 text-left flex justify-between items-center group"
+              >
+                <span className="truncate pr-2">
+                  {filtrosConsultores.length === 0 
+                    ? "Todos os Consultores" 
+                    : `${filtrosConsultores.length} selecionado(s)`}
+                </span>
+                
+                {/* LÓGICA DO ÍCONE: SE TIVER SELEÇÃO MOSTRA X, SENÃO MOSTRA SETA */}
+                {filtrosConsultores.length > 0 ? (
+                  <div 
+                    onClick={limparFiltros}
+                    className="p-1 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-500 hover:text-red-500 transition-colors"
+                    title="Limpar seleção"
+                  >
+                    <X size={14} />
+                  </div>
+                ) : (
+                  <ArrowDown size={14} className={`transition-transform text-gray-500 ${isDropdownOpen ? 'rotate-180' : ''}`} />
+                )}
+              </button>
+
+              {/* CONTEÚDO DO DROPDOWN */}
+              {isDropdownOpen && (
+                <div className="absolute z-20 w-full md:w-72 mt-1 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-xl overflow-hidden animate-in fade-in zoom-in-95 duration-100">
+                  
+                  {/* CAMPO DE BUSCA */}
+                  <div className="p-2 border-b border-gray-100 dark:border-gray-700 bg-gray-50 dark:bg-gray-900/50">
+                    <div className="relative">
+                      <Search size={14} className="absolute left-2.5 top-2.5 text-gray-400" />
+                      <input
+                        type="text"
+                        placeholder="Buscar consultor..."
+                        value={searchTerm}
+                        onChange={(e) => setSearchTerm(e.target.value)}
+                        className="w-full pl-8 pr-3 py-1.5 text-sm bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-md focus:ring-1 focus:ring-indigo-500 focus:outline-none"
+                        autoFocus
+                      />
+                    </div>
+                  </div>
+
+                  {/* LISTA DE OPÇÕES */}
+                  <div className="max-h-60 overflow-y-auto custom-scrollbar">
+                    {consultoresVisiveis.length === 0 ? (
+                       <div className="p-4 text-center text-xs text-gray-400">
+                         Nenhum consultor encontrado.
+                       </div>
+                    ) : (
+                      consultoresVisiveis.map((consultor) => {
+                        const isSelected = filtrosConsultores.includes(consultor.id);
+                        return (
+                          <div 
+                            key={consultor.id} 
+                            onClick={() => toggleConsultor(consultor.id)}
+                            className={`flex items-center p-3 cursor-pointer transition-colors border-l-4 ${
+                              isSelected 
+                                ? 'bg-indigo-50 dark:bg-indigo-900/20 border-indigo-500' 
+                                : 'hover:bg-gray-50 dark:hover:bg-gray-700 border-transparent'
+                            }`}
+                          >
+                            <div className={`w-4 h-4 rounded border flex items-center justify-center mr-3 flex-shrink-0 ${
+                              isSelected 
+                                ? 'bg-indigo-600 border-indigo-600 text-white' 
+                                : 'border-gray-300 dark:border-gray-600'
+                            }`}>
+                              {isSelected && <Check size={12} strokeWidth={3} />} 
+                            </div>
+                            <div className="flex flex-col truncate">
+                              <span className={`text-sm truncate ${isSelected ? 'font-semibold text-indigo-700 dark:text-indigo-300' : 'text-gray-700 dark:text-gray-200'}`}>
+                                {consultor.nome_completo || consultor.email}
+                              </span>
+                            </div>
+                          </div>
+                        );
+                      })
+                    )}
+                  </div>
+                  
+                  {/* RODAPÉ DO DROPDOWN (INFO) */}
+                  <div className="bg-gray-50 dark:bg-gray-900/50 p-2 text-xs text-center text-gray-400 border-t border-gray-100 dark:border-gray-700">
+                    {filtrosConsultores.length} selecionado(s)
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+          
+          {/* MENSAGEM DE RESUMO AO LADO (DESKTOP) */}
+          {filtrosConsultores.length > 0 && (
+             <div className="hidden md:block text-sm text-indigo-600 dark:text-indigo-400 font-medium animate-pulse">
+               Exibindo resultados filtrados
+             </div>
+          )}
+        </div>
+      )}
+
       {/* --- VERSÃO MOBILE (CARDS) --- */}
       <div className="md:hidden space-y-4">
-        {servicos.map(servico => (
+        {servicosFiltrados.map(servico => (
           <div key={servico.id} className="bg-white dark:bg-gray-800 p-4 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 space-y-3 relative overflow-hidden">
             
             {getCanalNome(servico) !== '-' && (
@@ -105,6 +297,12 @@ const ServicesTable = ({ servicos, onStatusChange, onEdit, onDelete, onSort, sor
             </div>
           </div>
         ))}
+        
+        {filtrosConsultores.length > 0 && servicosFiltrados.length === 0 && (
+            <div className="text-center py-8 text-gray-500">
+                Nenhum serviço encontrado para este consultor.
+            </div>
+        )}
       </div>
 
       {/* --- VERSÃO DESKTOP (TABELA) --- */}
@@ -148,7 +346,7 @@ const ServicesTable = ({ servicos, onStatusChange, onEdit, onDelete, onSort, sor
             </thead>
             
             <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
-              {servicos.map(servico => (
+              {servicosFiltrados.map(servico => (
                 <tr key={servico.id} className="group hover:bg-gray-50 dark:hover:bg-gray-700/30 transition-colors duration-150">
                   
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600 dark:text-gray-300">
@@ -236,6 +434,14 @@ const ServicesTable = ({ servicos, onStatusChange, onEdit, onDelete, onSort, sor
                   </td>
                 </tr>
               ))}
+              {/* Mensagem na tabela se o filtro estiver vazio */}
+              {filtrosConsultores.length > 0 && servicosFiltrados.length === 0 && (
+                 <tr>
+                   <td colSpan="7" className="text-center py-8 text-gray-500">
+                     Nenhum serviço encontrado para este consultor.
+                   </td>
+                 </tr>
+              )}
             </tbody>
           </table>
         </div>

@@ -2,21 +2,51 @@ import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { createClient } from '@supabase/supabase-js'; 
 import { 
-  Users, UserPlus, Mail, Shield, CheckCircle, X, Lock, User, Edit, Ban, Key, Save, AlertTriangle, MoreHorizontal
+  Users, UserPlus, Shield, CheckCircle, X, Edit, Ban, Key, AlertTriangle, Phone, DollarSign, CreditCard, Landmark
 } from 'lucide-react';
 import supabase from '../services/supabase';
+
+// --- FUNÇÕES DE MÁSCARA (Helpers) ---
+const maskPhone = (value) => {
+  if (!value) return "";
+  return value
+    .replace(/\D/g, "")
+    .replace(/(\d{2})(\d)/, "($1) $2")
+    .replace(/(\d{5})(\d)/, "$1-$2")
+    .replace(/(-\d{4})\d+?$/, "$1");
+};
+
+const maskCurrency = (value) => {
+  if (!value) return "";
+  let v = value.replace(/\D/g, "");
+  v = (v / 100).toFixed(2) + "";
+  v = v.replace(".", ",");
+  v = v.replace(/(\d)(?=(\d{3})+(?!\d))/g, "$1.");
+  return v;
+};
+
+// Converte string formatada (1.000,00) para float (1000.00) para salvar no banco
+const parseCurrency = (value) => {
+  if (!value) return 0;
+  if (typeof value === 'number') return value;
+  return parseFloat(value.replace(/\./g, '').replace(',', '.'));
+};
 
 const TeamManagement = ({ showToast }) => {
   const [members, setMembers] = useState([]);
   const [loading, setLoading] = useState(true);
-  
-  // Estado para o Cargo do usuário logado (Admin/Super Admin)
   const [currentUserRole, setCurrentUserRole] = useState(null);
 
   // --- MODAL CRIAR ---
   const [createModalOpen, setCreateModalOpen] = useState(false);
   const [inviteLoading, setInviteLoading] = useState(false);
-  const [newMember, setNewMember] = useState({ nome: '', email: '', senha: '' });
+  
+  // Estado inicial com os novos campos
+  const [newMember, setNewMember] = useState({ 
+    nome: '', email: '', senha: '', 
+    whatsapp: '', valor_hora: '', 
+    banco: '', agencia: '', conta: '', chave_pix: '' 
+  });
 
   // --- MODAL EDITAR ---
   const [editModalOpen, setEditModalOpen] = useState(false);
@@ -29,7 +59,6 @@ const TeamManagement = ({ showToast }) => {
   const [resetLoading, setResetLoading] = useState(false);
   const [memberToReset, setMemberToReset] = useState(null);
 
-  // Função Principal de Carregamento
   const loadData = async () => {
     setLoading(true);
     try {
@@ -38,15 +67,14 @@ const TeamManagement = ({ showToast }) => {
       
       const { data: userProfile, error: profileError } = await supabase
         .from('profiles')
-        .select('consultoria_id, cargo') 
+        .select('consultoria_id, role') 
         .eq('id', user.id)
         .single();
 
       if (profileError || !userProfile?.consultoria_id) return;
 
-      setCurrentUserRole(userProfile.cargo);
+      setCurrentUserRole(userProfile.role);
 
-      // Busca membros da mesma consultoria
       const { data: membersData, error: membersError } = await supabase
         .from('profiles')
         .select('*')
@@ -69,6 +97,15 @@ const TeamManagement = ({ showToast }) => {
     loadData();
   }, []);
 
+  // --- HANDLERS DE MÁSCARA NOS INPUTS ---
+  const handlePhoneChange = (e, setter, state) => {
+    setter({ ...state, whatsapp: maskPhone(e.target.value) });
+  };
+
+  const handleCurrencyChange = (e, setter, state) => {
+    setter({ ...state, valor_hora: maskCurrency(e.target.value) });
+  };
+
   // --- 1. CRIAR MEMBRO ---
   const handleCreateMember = async (e) => {
     e.preventDefault();
@@ -84,6 +121,7 @@ const TeamManagement = ({ showToast }) => {
         auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false }
       });
 
+      // 1. Cria usuário Auth
       const { data: authData, error: authError } = await tempClient.auth.signUp({
         email: newMember.email.trim(),
         password: newMember.senha,
@@ -93,6 +131,7 @@ const TeamManagement = ({ showToast }) => {
       if (authError) throw authError;
       if (!authData.user) throw new Error("Erro ao criar usuário.");
 
+      // 2. Vincula (RPC)
       const { data: rpcData, error: rpcError } = await supabase.rpc('vincular_funcionario_criado', {
         email_func: newMember.email.trim(),
         nome_func: newMember.nome,
@@ -102,9 +141,31 @@ const TeamManagement = ({ showToast }) => {
       if (rpcError) throw rpcError;
       if (rpcData && rpcData.status === 'erro') throw new Error(rpcData.msg);
 
-      if (showToast) showToast(`Funcionário criado com sucesso!`, 'sucesso');
+      // 3. Atualiza dados extras (Bancários separados)
+      const { error: updateError } = await supabase
+        .from('profiles')
+        .update({
+          whatsapp: newMember.whatsapp,
+          valor_hora: parseCurrency(newMember.valor_hora),
+          banco: newMember.banco,
+          agencia: newMember.agencia,
+          conta: newMember.conta,
+          chave_pix: newMember.chave_pix
+        })
+        .eq('email', newMember.email.trim());
+
+      if (updateError) {
+        console.error("Erro ao salvar dados extras", updateError);
+      } else {
+        if (showToast) showToast(`Funcionário criado com sucesso!`, 'sucesso');
+      }
+
       setCreateModalOpen(false);
-      setNewMember({ nome: '', email: '', senha: '' });
+      setNewMember({ 
+        nome: '', email: '', senha: '', 
+        whatsapp: '', valor_hora: '', 
+        banco: '', agencia: '', conta: '', chave_pix: '' 
+      });
       loadData();
 
     } catch (error) {
@@ -119,7 +180,15 @@ const TeamManagement = ({ showToast }) => {
 
   // --- 2. EDITAR MEMBRO ---
   const openEditModal = (member) => {
-    setEditingMember({ ...member });
+    // Formata o valor hora que vem do banco (número) para string (R$)
+    const valorFormatado = member.valor_hora 
+      ? member.valor_hora.toFixed(2).replace('.', ',').replace(/(\d)(?=(\d{3})+(?!\d))/g, "$1.")
+      : '';
+
+    setEditingMember({ 
+      ...member,
+      valor_hora: valorFormatado // Converte para o formato de input
+    });
     setEditModalOpen(true);
   };
 
@@ -131,7 +200,13 @@ const TeamManagement = ({ showToast }) => {
             .from('profiles')
             .update({ 
                 nome: editingMember.nome,
-                cargo: editingMember.cargo 
+                role: editingMember.role,
+                whatsapp: editingMember.whatsapp,
+                valor_hora: parseCurrency(editingMember.valor_hora),
+                banco: editingMember.banco,
+                agencia: editingMember.agencia,
+                conta: editingMember.conta,
+                chave_pix: editingMember.chave_pix
             })
             .eq('id', editingMember.id);
 
@@ -204,10 +279,9 @@ const TeamManagement = ({ showToast }) => {
       }
   };
 
-  // --- HELPER DE RENDERIZAÇÃO DE AÇÕES (REUSO) ---
+  // --- HELPER DE RENDERIZAÇÃO DE AÇÕES ---
   const renderActions = (member) => (
     <div className="flex gap-2 justify-end md:justify-center">
-        {/* Reset Senha */}
         <button 
             onClick={() => openResetModal(member)}
             title="Redefinir Senha"
@@ -216,7 +290,6 @@ const TeamManagement = ({ showToast }) => {
             <Key size={18} />
         </button>
         
-        {/* Editar */}
         <button 
             onClick={() => openEditModal(member)}
             title="Editar Dados"
@@ -225,7 +298,6 @@ const TeamManagement = ({ showToast }) => {
             <Edit size={18} />
         </button>
 
-        {/* Bloquear/Ativar */}
         <button 
             onClick={() => toggleStatus(member)}
             title={member.ativo !== false ? "Bloquear Acesso" : "Desbloquear Acesso"}
@@ -265,19 +337,20 @@ const TeamManagement = ({ showToast }) => {
 
         {/* --- CONTEÚDO RESPONSIVO --- */}
         {loading ? (
-             <div className="text-center py-20 text-gray-500">Carregando equipe...</div>
+              <div className="text-center py-20 text-gray-500">Carregando equipe...</div>
         ) : members.length === 0 ? (
-             <div className="text-center py-20 text-gray-500">Nenhum membro encontrado.</div>
+              <div className="text-center py-20 text-gray-500">Nenhum membro encontrado.</div>
         ) : (
             <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden">
                 
-                {/* 1. VISÃO DESKTOP: TABELA (hidden md:block) */}
+                {/* 1. VISÃO DESKTOP: TABELA */}
                 <div className="hidden md:block overflow-x-auto">
                     <table className="w-full text-sm text-left">
                         <thead className="bg-gray-50 dark:bg-gray-900/50 text-gray-500 dark:text-gray-400 font-medium border-b border-gray-200 dark:border-gray-800">
                             <tr>
                                 <th className="px-6 py-4">Membro</th>
                                 <th className="px-6 py-4">Cargo</th>
+                                <th className="px-6 py-4">Info. Adicional</th>
                                 <th className="px-6 py-4 text-center">Status</th>
                                 <th className="px-6 py-4 text-center">Ações</th>
                             </tr>
@@ -298,11 +371,26 @@ const TeamManagement = ({ showToast }) => {
                                     </td>
                                     <td className="px-6 py-4">
                                         <span className={`px-2.5 py-0.5 rounded-full text-xs font-bold uppercase 
-                                            ${member.cargo === 'super_admin' ? 'bg-yellow-100 text-yellow-700' : 
-                                            member.cargo === 'admin' ? 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400' : 
+                                            ${member.role === 'super_admin' ? 'bg-yellow-100 text-yellow-700' : 
+                                            member.role === 'admin' ? 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400' : 
                                             'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400'}`}>
-                                            {member.cargo || 'Colaborador'}
+                                            {member.role === 'super_admin' ? 'Super Admin' : (member.role || 'Colaborador')}
                                         </span>
+                                    </td>
+                                    <td className="px-6 py-4">
+                                        <div className="flex flex-col text-xs text-gray-500 dark:text-gray-400 gap-1">
+                                            {member.whatsapp && (
+                                                <span className="flex items-center gap-1"><Phone size={10}/> {member.whatsapp}</span>
+                                            )}
+                                            {member.valor_hora > 0 && (
+                                                <span className="flex items-center gap-1 font-semibold text-green-600"><DollarSign size={10}/> R$ {member.valor_hora.toFixed(2).replace('.', ',')} /h</span>
+                                            )}
+                                            {member.banco && (
+                                                <span className="flex items-center gap-1" title={`${member.banco} | Ag: ${member.agencia} | CC: ${member.conta}`}>
+                                                  <Landmark size={10}/> {member.banco}
+                                                </span>
+                                            )}
+                                        </div>
                                     </td>
                                     <td className="px-6 py-4 text-center">
                                         {member.ativo !== false ? (
@@ -324,18 +412,16 @@ const TeamManagement = ({ showToast }) => {
                     </table>
                 </div>
                 
-                {/* 2. VISÃO MOBILE: CARDS (md:hidden) */}
+                {/* 2. VISÃO MOBILE */}
                 <div className="md:hidden divide-y divide-gray-100 dark:divide-gray-800">
                     {members.map(member => (
                         <div key={member.id} className="p-5 flex flex-col gap-4">
                             <div className="flex justify-between items-start">
-                                
-                                {/* LADO ESQUERDO: Blindado para não empurrar o vizinho */}
                                 <div className="flex items-center gap-3 min-w-0 flex-1 mr-2">
                                     <div className="w-10 h-10 rounded-full bg-indigo-50 dark:bg-indigo-900/30 flex items-center justify-center text-indigo-600 dark:text-indigo-400 font-bold text-sm shrink-0">
                                         {member.nome ? member.nome.charAt(0).toUpperCase() : '?'}
                                     </div>
-                                    <div className="min-w-0"> {/* Essencial para o truncate funcionar */}
+                                    <div className="min-w-0">
                                         <h4 className="font-bold text-gray-900 dark:text-white truncate">
                                             {member.nome || 'Sem Nome'}
                                         </h4>
@@ -344,20 +430,13 @@ const TeamManagement = ({ showToast }) => {
                                         </p>
                                     </div>
                                 </div>
-
-                                {/* LADO DIREITO: Fixo, não encolhe e não quebra linha */}
                                 <div className="flex flex-col items-end gap-1 shrink-0">
                                     <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase whitespace-nowrap
-                                        ${member.cargo === 'super_admin' ? 'bg-yellow-100 text-yellow-700' : 
-                                        member.cargo === 'admin' ? 'bg-purple-100 text-purple-700' : 
+                                        ${member.role === 'super_admin' ? 'bg-yellow-100 text-yellow-700' : 
+                                        member.role === 'admin' ? 'bg-purple-100 text-purple-700' : 
                                         'bg-blue-100 text-blue-700'}`}>
-                                        {member.cargo === 'super_admin' ? 'Super Admin' : (member.cargo || 'Colab')}
+                                        {member.role === 'super_admin' ? 'Super Admin' : (member.role || 'Colab')}
                                     </span>
-                                    {member.ativo === false && (
-                                        <span className="text-[10px] font-bold text-red-500 bg-red-50 px-1.5 rounded whitespace-nowrap">
-                                            Bloqueado
-                                        </span>
-                                    )}
                                 </div>
                             </div>
                             
@@ -375,21 +454,43 @@ const TeamManagement = ({ showToast }) => {
       {/* --- MODAL DE CRIAÇÃO --- */}
       {createModalOpen && createPortal(
         <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in" onClick={(e) => e.stopPropagation()}>
-          <div className="bg-white dark:bg-gray-900 w-full max-w-md rounded-2xl p-6 shadow-2xl animate-scale-in border border-gray-200 dark:border-gray-800" onClick={(e) => e.stopPropagation()}>
+          <div className="bg-white dark:bg-gray-900 w-full max-w-md rounded-2xl p-6 shadow-2xl animate-scale-in border border-gray-200 dark:border-gray-800 overflow-y-auto max-h-[90vh]" onClick={(e) => e.stopPropagation()}>
             <div className="flex justify-between mb-6">
                 <h3 className="font-bold text-lg text-gray-800 dark:text-white">Cadastrar</h3>
                 <button onClick={() => setCreateModalOpen(false)} className="text-gray-400 hover:text-gray-600"><X /></button>
             </div>
             <form onSubmit={handleCreateMember} className="space-y-4">
+              {/* Avisos */}
               <div className="bg-blue-50 dark:bg-blue-900/20 p-3 rounded-lg text-blue-800 dark:text-blue-300 text-xs flex gap-2 border border-blue-100 dark:border-blue-900/50">
                   <Shield size={16} className="shrink-0"/>
-                  <p>O novo usuário receberá acesso imediato ao sistema com a senha definida abaixo.</p>
+                  <p>O usuário receberá acesso imediato com a senha abaixo.</p>
               </div>
+
+              {/* Dados Básicos */}
               <input type="text" value={newMember.nome} onChange={e => setNewMember({...newMember, nome: e.target.value})} className="w-full border dark:border-gray-700 rounded-lg p-3 bg-white dark:bg-gray-800 text-gray-900 dark:text-white outline-none focus:ring-2 focus:ring-indigo-500" placeholder="Nome Completo" required />
               <input type="email" value={newMember.email} onChange={e => setNewMember({...newMember, email: e.target.value})} className="w-full border dark:border-gray-700 rounded-lg p-3 bg-white dark:bg-gray-800 text-gray-900 dark:text-white outline-none focus:ring-2 focus:ring-indigo-500" placeholder="Email Corporativo" required />
               <input type="text" value={newMember.senha} onChange={e => setNewMember({...newMember, senha: e.target.value})} className="w-full border dark:border-gray-700 rounded-lg p-3 bg-white dark:bg-gray-800 text-gray-900 dark:text-white outline-none focus:ring-2 focus:ring-indigo-500" placeholder="Senha Inicial (min 6)" required minLength={6} />
               
-              <div className="pt-2 flex gap-3">
+              {/* Contato e Valor */}
+              <div className="grid grid-cols-2 gap-4">
+                <input type="text" value={newMember.whatsapp} onChange={e => handlePhoneChange(e, setNewMember, newMember)} className="w-full border dark:border-gray-700 rounded-lg p-3 bg-white dark:bg-gray-800 text-gray-900 dark:text-white outline-none focus:ring-2 focus:ring-indigo-500" placeholder="Whatsapp (00) 00000-0000" />
+                <input type="text" value={newMember.valor_hora} onChange={e => handleCurrencyChange(e, setNewMember, newMember)} className="w-full border dark:border-gray-700 rounded-lg p-3 bg-white dark:bg-gray-800 text-gray-900 dark:text-white outline-none focus:ring-2 focus:ring-indigo-500" placeholder="Valor Hora (R$)" />
+              </div>
+
+              {/* Dados Bancários Separados */}
+              <div className="space-y-3 pt-2">
+                <div className="text-xs font-bold text-gray-500 uppercase tracking-wider">Dados Bancários (Para Pagamento)</div>
+                <div className="grid grid-cols-2 gap-4">
+                    <input type="text" value={newMember.banco} onChange={e => setNewMember({...newMember, banco: e.target.value})} className="w-full border dark:border-gray-700 rounded-lg p-3 bg-white dark:bg-gray-800 text-gray-900 dark:text-white outline-none focus:ring-2 focus:ring-indigo-500" placeholder="Banco (Ex: Nubank)" />
+                    <input type="text" value={newMember.agencia} onChange={e => setNewMember({...newMember, agencia: e.target.value})} className="w-full border dark:border-gray-700 rounded-lg p-3 bg-white dark:bg-gray-800 text-gray-900 dark:text-white outline-none focus:ring-2 focus:ring-indigo-500" placeholder="Agência" />
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                    <input type="text" value={newMember.conta} onChange={e => setNewMember({...newMember, conta: e.target.value})} className="w-full border dark:border-gray-700 rounded-lg p-3 bg-white dark:bg-gray-800 text-gray-900 dark:text-white outline-none focus:ring-2 focus:ring-indigo-500" placeholder="Conta Corrente" />
+                    <input type="text" value={newMember.chave_pix} onChange={e => setNewMember({...newMember, chave_pix: e.target.value})} className="w-full border dark:border-gray-700 rounded-lg p-3 bg-white dark:bg-gray-800 text-gray-900 dark:text-white outline-none focus:ring-2 focus:ring-indigo-500" placeholder="Chave PIX" />
+                </div>
+              </div>
+
+              <div className="pt-4 flex gap-3">
                   <button type="button" onClick={() => setCreateModalOpen(false)} className="flex-1 py-3 bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 rounded-xl font-bold">Cancelar</button>
                   <button type="submit" disabled={inviteLoading} className="flex-1 bg-indigo-600 text-white py-3 rounded-xl font-bold hover:bg-indigo-700 transition-colors disabled:opacity-50">
                       {inviteLoading ? 'Criando...' : 'Criar Membro'}
@@ -403,7 +504,7 @@ const TeamManagement = ({ showToast }) => {
       {/* --- MODAL DE EDIÇÃO --- */}
       {editModalOpen && createPortal(
         <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in" onClick={(e) => e.stopPropagation()}>
-          <div className="bg-white dark:bg-gray-900 w-full max-w-md rounded-2xl p-6 shadow-2xl animate-scale-in border border-gray-200 dark:border-gray-800" onClick={(e) => e.stopPropagation()}>
+          <div className="bg-white dark:bg-gray-900 w-full max-w-md rounded-2xl p-6 shadow-2xl animate-scale-in border border-gray-200 dark:border-gray-800 overflow-y-auto max-h-[90vh]" onClick={(e) => e.stopPropagation()}>
             <div className="flex justify-between mb-6">
                 <h3 className="font-bold text-lg flex items-center gap-2 text-gray-800 dark:text-white"><Edit size={20} className="text-blue-600"/> Editar Membro</h3>
                 <button onClick={() => setEditModalOpen(false)} className="text-gray-400 hover:text-gray-600"><X /></button>
@@ -413,10 +514,38 @@ const TeamManagement = ({ showToast }) => {
                   <label className="block text-sm font-medium mb-1 text-gray-600 dark:text-gray-400">Nome Completo</label>
                   <input type="text" value={editingMember?.nome || ''} onChange={e => setEditingMember({...editingMember, nome: e.target.value})} className="w-full border dark:border-gray-700 rounded-lg p-3 bg-white dark:bg-gray-800 text-gray-900 dark:text-white outline-none focus:ring-2 focus:ring-blue-500" required />
               </div>
+              
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                    <label className="block text-sm font-medium mb-1 text-gray-600 dark:text-gray-400">Whatsapp</label>
+                    <input type="text" value={editingMember?.whatsapp || ''} onChange={e => handlePhoneChange(e, setEditingMember, editingMember)} className="w-full border dark:border-gray-700 rounded-lg p-3 bg-white dark:bg-gray-800 text-gray-900 dark:text-white outline-none focus:ring-2 focus:ring-blue-500" />
+                </div>
+                <div>
+                    <label className="block text-sm font-medium mb-1 text-gray-600 dark:text-gray-400">Valor Hora</label>
+                    <input type="text" value={editingMember?.valor_hora || ''} onChange={e => handleCurrencyChange(e, setEditingMember, editingMember)} className="w-full border dark:border-gray-700 rounded-lg p-3 bg-white dark:bg-gray-800 text-gray-900 dark:text-white outline-none focus:ring-2 focus:ring-blue-500" />
+                </div>
+              </div>
+
+              {/* Dados Bancários na Edição */}
+              <div className="bg-gray-50 dark:bg-gray-800/50 p-3 rounded-lg space-y-3 border border-gray-100 dark:border-gray-700">
+                <span className="text-xs font-bold text-gray-500 uppercase">Dados Bancários</span>
+                <div className="grid grid-cols-2 gap-3">
+                    <input type="text" value={editingMember?.banco || ''} onChange={e => setEditingMember({...editingMember, banco: e.target.value})} className="w-full border dark:border-gray-700 rounded bg-white dark:bg-gray-900 p-2 text-sm" placeholder="Banco" />
+                    <input type="text" value={editingMember?.agencia || ''} onChange={e => setEditingMember({...editingMember, agencia: e.target.value})} className="w-full border dark:border-gray-700 rounded bg-white dark:bg-gray-900 p-2 text-sm" placeholder="Agência" />
+                    <input type="text" value={editingMember?.conta || ''} onChange={e => setEditingMember({...editingMember, conta: e.target.value})} className="w-full border dark:border-gray-700 rounded bg-white dark:bg-gray-900 p-2 text-sm" placeholder="Conta" />
+                    <input type="text" value={editingMember?.chave_pix || ''} onChange={e => setEditingMember({...editingMember, chave_pix: e.target.value})} className="w-full border dark:border-gray-700 rounded bg-white dark:bg-gray-900 p-2 text-sm" placeholder="Chave Pix" />
+                </div>
+              </div>
+
               <div>
                   <label className="block text-sm font-medium mb-1 text-gray-600 dark:text-gray-400">Cargo</label>
-                  <select value={editingMember?.cargo || 'colaborador'} onChange={e => setEditingMember({...editingMember, cargo: e.target.value})} className="w-full border dark:border-gray-700 rounded-lg p-3 bg-white dark:bg-gray-800 text-gray-900 dark:text-white outline-none focus:ring-2 focus:ring-blue-500">
+                  <select 
+                    value={editingMember?.role || 'colaborador'} 
+                    onChange={e => setEditingMember({...editingMember, role: e.target.value})} 
+                    className="w-full border dark:border-gray-700 rounded-lg p-3 bg-white dark:bg-gray-800 text-gray-900 dark:text-white outline-none focus:ring-2 focus:ring-blue-500"
+                  >
                     <option value="colaborador">Colaborador</option>
+                    <option value="consultor">Consultor</option>
                     <option value="admin">Admin (Gestor)</option>
                   </select>
               </div>
@@ -431,7 +560,7 @@ const TeamManagement = ({ showToast }) => {
         </div>, document.body
       )}
 
-      {/* --- MODAL DE RESET DE SENHA --- */}
+      {/* --- MODAL DE RESET DE SENHA (Mantido igual) --- */}
       {resetModalOpen && createPortal(
         <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in" onClick={(e) => e.stopPropagation()}>
           <div className="bg-white dark:bg-gray-900 w-full max-w-md rounded-2xl p-6 shadow-2xl border border-red-100 dark:border-red-900/30 animate-scale-in" onClick={(e) => e.stopPropagation()}>
