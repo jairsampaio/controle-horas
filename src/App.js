@@ -27,13 +27,13 @@ import AdminModal from './components/AdminModal';
 import AdminFinance from './components/AdminFinance';
 import AdminPlans from './components/AdminPlans';
 import TeamManagement from './components/TeamManagement';
-import AccessDenied from './components/AccessDenied'; // <--- IMPORTANTE: Tela de bloqueio
-import DemandsBoard from './components/DemandsBoard';
+import AccessDenied from './components/AccessDenied'; 
+import DemandsBoard from './components/DemandsBoard'; // <--- Importado
 import { formatCurrency, formatHoursInt } from './utils/formatters'; 
 
 const App = () => {
   // --- ESTADOS ---
-  const [accessDeniedType, setAccessDeniedType] = useState(null); // Estado para controlar bloqueio
+  const [accessDeniedType, setAccessDeniedType] = useState(null); 
   const [servicos, setServicos] = useState([]);
   const [clientes, setClientes] = useState([]);
   const [canais, setCanais] = useState([]); 
@@ -186,22 +186,16 @@ const App = () => {
       }
 
       // --- BARREIRA DE SEGURANÇA ---
-      
-      // A. Verifica se o USUÁRIO está ativo
       if (userProfile.ativo === false) {
           setAccessDeniedType('usuario_bloqueado');
-          return; // Para de carregar dados (Barreira Ativa)
+          return; 
       }
 
-      // B. Verifica se a CONSULTORIA está ativa
       if (userProfile.consultorias?.status === 'bloqueada') {
           setAccessDeniedType('consultoria_bloqueada');
-          return; // Para de carregar dados (Barreira Ativa)
+          return; 
       }
-
-      // Se passou pela barreira, limpa qualquer estado de bloqueio anterior
       setAccessDeniedType(null);
-
       // --- FIM DA BARREIRA ---
 
       const meuId = userProfile.consultoria_id;
@@ -245,11 +239,9 @@ const App = () => {
     
     const { data: authListener } = supabase.auth.onAuthStateChange((event, session) => { 
         setSession(session); 
-        
-        // --- RESET DE ABA NO LOGIN ---
         if (event === 'SIGNED_IN') {
             setActiveTab('dashboard');
-            setAccessDeniedType(null); // Reseta bloqueio ao tentar novo login
+            setAccessDeniedType(null); 
         }
     });
     
@@ -268,7 +260,6 @@ const App = () => {
     }
   }, [session]);
 
-  // Se o usuário estiver bloqueado, exibe a tela de AccessDenied
   if (accessDeniedType) {
       return (
           <AccessDenied 
@@ -284,8 +275,24 @@ const App = () => {
 
   // Restante do código (modais, deletes, exports) permanece igual...
   
-  // (Bloco de useEffect popstate mantido...)
-  
+  useEffect(() => {
+    const algumModalAberto = showModal || showClienteModal || showSolicitantesModal || showConfigModal;
+    if (algumModalAberto) {
+        if (window.location.hash !== '#modal') window.history.pushState({ type: 'modal' }, '', '#modal');
+    } else if (activeTab !== 'dashboard') {
+        if (window.location.hash !== `#${activeTab}`) window.history.pushState({ type: 'tab' }, '', `#${activeTab}`);
+    }
+    const handlePopState = () => {
+      if (showModal || showClienteModal || showSolicitantesModal || showConfigModal) {
+        setShowModal(false); setShowClienteModal(false); setShowSolicitantesModal(false); setShowConfigModal(false); 
+        return;
+      }
+      if (activeTab !== 'dashboard') setActiveTab('dashboard');
+    };
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, [activeTab, showModal, showClienteModal, showSolicitantesModal, showConfigModal]);
+
   const salvarServico = async () => {
     try {
       const { data: profile } = await supabase.from('profiles').select('consultoria_id').eq('id', session.user.id).single();
@@ -694,16 +701,7 @@ const App = () => {
                                 <button onClick={handleExportarExcel} className="flex items-center gap-2 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700 px-4 py-2 rounded-lg text-sm font-medium transition-colors" title="Exportar Excel"><FileText size={18} className="text-green-600 dark:text-green-400" /> Excel</button>
                                 <button onClick={handleGerarPDF} className="flex items-center gap-2 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700 px-4 py-2 rounded-lg text-sm font-medium transition-colors" title="Gerar PDF"><FileText size={18} className="text-red-600 dark:text-red-400" /> PDF</button>
                             </div>
-                            {activeTab === 'demandas' && (
-                            <DemandsBoard 
-                                userId={session?.user?.id} 
-                                userRole={session?.user?.user_metadata?.cargo || 'colaborador'} // Ou pegue do state se já tiver
-                                showToast={showToast} 
-                            />
-                          )}
 
-                            {/* --- LÓGICA HÍBRIDA DE VISUALIZAÇÃO --- */}
-                            {/* No celular, SEMPRE mostra Lista (ignora o viewMode). No Desktop, respeita o viewMode. */}
                             <div className="md:hidden">
                                 <ServicesTable 
                                     servicos={servicosFiltradosData} 
@@ -755,6 +753,14 @@ const App = () => {
                             </div>
                             <ClientsTable clientes={clientesParaTabela} onEdit={editarCliente} onDeleteClick={handleRequestInactivate} onReactivate={reativarCliente} onManageTeam={handleManageTeam} />
                         </div>
+                    )}
+
+                    {activeTab === 'demandas' && (
+                        <DemandsBoard 
+                            userId={session?.user?.id} 
+                            userRole={session?.user?.user_metadata?.cargo || 'colaborador'} 
+                            showToast={showToast} 
+                        />
                     )}
 
                     {activeTab === 'admin-tenants' && (
