@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { createPortal } from 'react-dom'; // <--- IMPORTANTE: Importar o Portal
+import { createPortal } from 'react-dom';
 import { 
   Package, Check, Edit, Trash2, Plus, X, Star, Users
 } from 'lucide-react';
@@ -26,6 +26,7 @@ const AdminPlans = () => {
     carregarPlanos();
   }, []);
 
+  // --- CARREGAR PLANOS ---
   const carregarPlanos = async () => {
     setLoading(true);
     const { data, error } = await supabase
@@ -38,6 +39,7 @@ const AdminPlans = () => {
     setLoading(false);
   };
 
+  // --- SALVAR (CRIAR/EDITAR) ---
   const handleSave = async (e) => {
     e.preventDefault();
     try {
@@ -63,12 +65,15 @@ const AdminPlans = () => {
     }
   };
 
+  // --- DELETAR ---
   const handleDelete = async (id) => {
-    if (!window.confirm('Tem certeza? Isso pode afetar clientes vinculados.')) return;
+    if (!window.confirm('Tem certeza? Isso pode afetar a exibição para novos clientes.')) return;
     const { error } = await supabase.from('saas_planos').delete().eq('id', id);
     if (!error) carregarPlanos();
+    else alert("Erro ao excluir. Talvez existam empresas vinculadas a este plano.");
   };
 
+  // --- MODAL ---
   const openModal = (plano = null) => {
     if (plano) {
       setEditingPlan(plano);
@@ -95,10 +100,11 @@ const AdminPlans = () => {
   const ModalContent = () => (
     <div 
       className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in"
+      onClick={() => setModalOpen(false)}
     >
       <div 
         className="bg-white dark:bg-gray-800 rounded-xl shadow-2xl w-full max-w-lg flex flex-col max-h-[90vh] border border-gray-200 dark:border-gray-700 animate-scale-in overflow-hidden"
-        onClick={(e) => e.stopPropagation()} // Evita fechar se clicar dentro
+        onClick={(e) => e.stopPropagation()} 
       >
         
         {/* Cabeçalho Colorido */}
@@ -279,7 +285,6 @@ const AdminPlans = () => {
         )}
       </div>
 
-      {/* AQUI ESTÁ A MÁGICA: PORTAL PARA O BODY */}
       {modalOpen && createPortal(
         <ModalContent />,
         document.body

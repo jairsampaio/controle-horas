@@ -2,11 +2,11 @@ import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { createClient } from '@supabase/supabase-js'; 
 import { 
-  Users, UserPlus, Shield, CheckCircle, X, Edit, Ban, Key, AlertTriangle, Phone, DollarSign, CreditCard, Landmark
+  Users, UserPlus, Shield, CheckCircle, X, Edit, Ban, Key, AlertTriangle, Phone, DollarSign, Landmark
 } from 'lucide-react';
 import supabase from '../services/supabase';
 
-// --- FUNÇÕES DE MÁSCARA (Helpers) ---
+// --- HELPER: Máscara de Telefone (00) 00000-0000 ---
 const maskPhone = (value) => {
   if (!value) return "";
   return value
@@ -16,6 +16,7 @@ const maskPhone = (value) => {
     .replace(/(-\d{4})\d+?$/, "$1");
 };
 
+// --- HELPER: Máscara de Moeda (Visual) ---
 const maskCurrency = (value) => {
   if (!value) return "";
   let v = value.replace(/\D/g, "");
@@ -25,11 +26,13 @@ const maskCurrency = (value) => {
   return v;
 };
 
-// Converte string formatada (1.000,00) para float (1000.00) para salvar no banco
+// --- HELPER: Parser de Moeda (Salvar no Banco) ---
+// Converte "1.000,00" -> 1000.00
 const parseCurrency = (value) => {
   if (!value) return 0;
   if (typeof value === 'number') return value;
-  return parseFloat(value.replace(/\./g, '').replace(',', '.'));
+  const cleanValue = parseFloat(value.replace(/\./g, '').replace(',', '.'));
+  return isNaN(cleanValue) ? 0 : cleanValue;
 };
 
 const TeamManagement = ({ showToast }) => {
@@ -37,34 +40,34 @@ const TeamManagement = ({ showToast }) => {
   const [loading, setLoading] = useState(true);
   const [currentUserRole, setCurrentUserRole] = useState(null);
 
-  // --- MODAL CRIAR ---
+  // --- ESTADOS DOS MODAIS ---
   const [createModalOpen, setCreateModalOpen] = useState(false);
   const [inviteLoading, setInviteLoading] = useState(false);
+  const [editModalOpen, setEditModalOpen] = useState(false);
+  const [editLoading, setEditLoading] = useState(false);
+  const [resetModalOpen, setResetModalOpen] = useState(false);
+  const [resetLoading, setResetLoading] = useState(false);
+
+  // --- ESTADOS DE DADOS ---
+  const [editingMember, setEditingMember] = useState(null);
+  const [memberToReset, setMemberToReset] = useState(null);
+  const [resetPassword, setResetPassword] = useState('');
   
-  // Estado inicial com os novos campos
+  // Estado para novo membro (reflete colunas da tabela 'profiles')
   const [newMember, setNewMember] = useState({ 
     nome: '', email: '', senha: '', 
     whatsapp: '', valor_hora: '', 
     banco: '', agencia: '', conta: '', chave_pix: '' 
   });
 
-  // --- MODAL EDITAR ---
-  const [editModalOpen, setEditModalOpen] = useState(false);
-  const [editingMember, setEditingMember] = useState(null);
-  const [editLoading, setEditLoading] = useState(false);
-
-  // --- MODAL RESET SENHA ---
-  const [resetModalOpen, setResetModalOpen] = useState(false);
-  const [resetPassword, setResetPassword] = useState('');
-  const [resetLoading, setResetLoading] = useState(false);
-  const [memberToReset, setMemberToReset] = useState(null);
-
+  // --- CARREGAR DADOS ---
   const loadData = async () => {
     setLoading(true);
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
       
+      // 1. Identifica a consultoria e permissão do usuário logado
       const { data: userProfile, error: profileError } = await supabase
         .from('profiles')
         .select('consultoria_id, role') 
@@ -75,6 +78,7 @@ const TeamManagement = ({ showToast }) => {
 
       setCurrentUserRole(userProfile.role);
 
+      // 2. Busca todos os membros da MESMA consultoria
       const { data: membersData, error: membersError } = await supabase
         .from('profiles')
         .select('*')
@@ -97,7 +101,7 @@ const TeamManagement = ({ showToast }) => {
     loadData();
   }, []);
 
-  // --- HANDLERS DE MÁSCARA NOS INPUTS ---
+  // --- HANDLERS DE INPUTS ---
   const handlePhoneChange = (e, setter, state) => {
     setter({ ...state, whatsapp: maskPhone(e.target.value) });
   };
@@ -106,7 +110,7 @@ const TeamManagement = ({ showToast }) => {
     setter({ ...state, valor_hora: maskCurrency(e.target.value) });
   };
 
-  // --- 1. CRIAR MEMBRO ---
+  // --- AÇÃO 1: CRIAR MEMBRO ---
   const handleCreateMember = async (e) => {
     e.preventDefault();
     setInviteLoading(true);
@@ -114,6 +118,8 @@ const TeamManagement = ({ showToast }) => {
     try {
       if (newMember.senha.length < 6) throw new Error("A senha deve ter no mínimo 6 caracteres.");
 
+      // SEGURANÇA: Idealmente, mova estas chaves para variáveis de ambiente (.env)
+      // Usamos um cliente temporário para não deslogar o admin atual ao criar outro user
       const SUPABASE_URL = 'https://ubwutmslwlefviiabysc.supabase.co'; 
       const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVid3V0bXNsd2xlZnZpaWFieXNjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjUyMjQ4MTgsImV4cCI6MjA4MDgwMDgxOH0.lTlvqtu0hKtYDQXJB55BG9ueZ-MdtbCtBvSNQMII2b8';
 
@@ -121,7 +127,7 @@ const TeamManagement = ({ showToast }) => {
         auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false }
       });
 
-      // 1. Cria usuário Auth
+      // Passo A: Criar Login (Auth)
       const { data: authData, error: authError } = await tempClient.auth.signUp({
         email: newMember.email.trim(),
         password: newMember.senha,
@@ -131,7 +137,8 @@ const TeamManagement = ({ showToast }) => {
       if (authError) throw authError;
       if (!authData.user) throw new Error("Erro ao criar usuário.");
 
-      // 2. Vincula (RPC)
+      // Passo B: Vincular à Consultoria (RPC)
+      // Nota: O parâmetro 'cargo_func' define o papel inicial (colaborador/consultor)
       const { data: rpcData, error: rpcError } = await supabase.rpc('vincular_funcionario_criado', {
         email_func: newMember.email.trim(),
         nome_func: newMember.nome,
@@ -141,7 +148,7 @@ const TeamManagement = ({ showToast }) => {
       if (rpcError) throw rpcError;
       if (rpcData && rpcData.status === 'erro') throw new Error(rpcData.msg);
 
-      // 3. Atualiza dados extras (Bancários separados)
+      // Passo C: Atualizar Dados Complementares (Whatsapp, Banco, etc)
       const { error: updateError } = await supabase
         .from('profiles')
         .update({
@@ -156,10 +163,12 @@ const TeamManagement = ({ showToast }) => {
 
       if (updateError) {
         console.error("Erro ao salvar dados extras", updateError);
+        if (showToast) showToast("Usuário criado, mas erro ao salvar dados bancários.", 'alerta');
       } else {
         if (showToast) showToast(`Funcionário criado com sucesso!`, 'sucesso');
       }
 
+      // Limpeza
       setCreateModalOpen(false);
       setNewMember({ 
         nome: '', email: '', senha: '', 
@@ -178,16 +187,16 @@ const TeamManagement = ({ showToast }) => {
     }
   };
 
-  // --- 2. EDITAR MEMBRO ---
+  // --- AÇÃO 2: EDITAR MEMBRO ---
   const openEditModal = (member) => {
-    // Formata o valor hora que vem do banco (número) para string (R$)
+    // Formata o valor numérico do banco (100.50) para string visual (1.000,50)
     const valorFormatado = member.valor_hora 
       ? member.valor_hora.toFixed(2).replace('.', ',').replace(/(\d)(?=(\d{3})+(?!\d))/g, "$1.")
       : '';
 
     setEditingMember({ 
       ...member,
-      valor_hora: valorFormatado // Converte para o formato de input
+      valor_hora: valorFormatado
     });
     setEditModalOpen(true);
   };
@@ -223,7 +232,7 @@ const TeamManagement = ({ showToast }) => {
     }
   };
 
-  // --- 3. BLOQUEAR / DESBLOQUEAR ---
+  // --- AÇÃO 3: ALTERAR STATUS (BLOQUEIO) ---
   const toggleStatus = async (member) => {
       const novoStatus = member.ativo === false ? true : false;
       const textoAcao = novoStatus ? "desbloqueado" : "bloqueado";
@@ -246,7 +255,7 @@ const TeamManagement = ({ showToast }) => {
       }
   };
 
-  // --- 4. RESETAR SENHA ---
+  // --- AÇÃO 4: RESETAR SENHA ---
   const openResetModal = (member) => {
       setMemberToReset(member);
       setResetPassword('');
@@ -279,7 +288,7 @@ const TeamManagement = ({ showToast }) => {
       }
   };
 
-  // --- HELPER DE RENDERIZAÇÃO DE AÇÕES ---
+  // --- RENDERIZAÇÃO: BOTÕES DE AÇÃO ---
   const renderActions = (member) => (
     <div className="flex gap-2 justify-end md:justify-center">
         <button 
@@ -316,7 +325,7 @@ const TeamManagement = ({ showToast }) => {
     <>
       <div className="space-y-6 animate-fade-in relative z-0 pb-10">
         
-        {/* Header */}
+        {/* Header da Página */}
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-white dark:bg-gray-800 p-6 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700">
           <div>
             <h1 className="text-xl font-bold text-gray-800 dark:text-white flex items-center gap-2">
@@ -335,7 +344,7 @@ const TeamManagement = ({ showToast }) => {
           )}
         </div>
 
-        {/* --- CONTEÚDO RESPONSIVO --- */}
+        {/* Listagem de Membros */}
         {loading ? (
               <div className="text-center py-20 text-gray-500">Carregando equipe...</div>
         ) : members.length === 0 ? (
@@ -560,7 +569,7 @@ const TeamManagement = ({ showToast }) => {
         </div>, document.body
       )}
 
-      {/* --- MODAL DE RESET DE SENHA (Mantido igual) --- */}
+      {/* --- MODAL DE RESET DE SENHA --- */}
       {resetModalOpen && createPortal(
         <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in" onClick={(e) => e.stopPropagation()}>
           <div className="bg-white dark:bg-gray-900 w-full max-w-md rounded-2xl p-6 shadow-2xl border border-red-100 dark:border-red-900/30 animate-scale-in" onClick={(e) => e.stopPropagation()}>

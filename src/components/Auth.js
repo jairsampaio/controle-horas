@@ -10,8 +10,10 @@ const Auth = () => {
   const [errorMsg, setErrorMsg] = useState('');
   const [successMsg, setSuccessMsg] = useState('');
   
+  // Controle de visualização: 'login' ou 'recovery'
   const [view, setView] = useState('login'); 
 
+  // --- LOGIN ---
   const handleLogin = async (e) => {
     e.preventDefault();
     setLoading(true);
@@ -22,13 +24,14 @@ const Auth = () => {
     if (error) {
       const msg = error.message.toLowerCase();
       if (msg.includes('invalid login credentials')) setErrorMsg('E-mail ou senha incorretos.');
-      else if (msg.includes('email not confirmed')) setErrorMsg('E-mail não confirmado.');
-      else setErrorMsg('Erro ao acessar. Verifique suas credenciais.');
+      else if (msg.includes('email not confirmed')) setErrorMsg('E-mail não confirmado. Verifique sua caixa de entrada.');
+      else setErrorMsg('Erro ao acessar. Tente novamente.');
     }
     
     setLoading(false);
   };
 
+  // --- RECUPERAÇÃO DE SENHA ---
   const handleRecovery = async (e) => {
     e.preventDefault();
     setLoading(true);
@@ -36,13 +39,13 @@ const Auth = () => {
     setSuccessMsg('');
 
     const { error } = await supabase.auth.resetPasswordForEmail(email, {
-      redirectTo: window.location.origin, 
+      redirectTo: window.location.origin, // Redireciona para a home do app após clicar no email
     });
 
     if (error) {
       setErrorMsg(error.message);
     } else {
-      setSuccessMsg('Email de recuperação enviado! Verifique sua caixa de entrada.');
+      setSuccessMsg('Email de recuperação enviado! Verifique sua caixa de entrada (e spam).');
     }
     setLoading(false);
   };
@@ -51,6 +54,7 @@ const Auth = () => {
     <div className="min-h-screen bg-gray-50 dark:bg-gray-950 flex items-center justify-center p-4 transition-colors duration-500">
       <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl w-full max-w-sm overflow-hidden border border-gray-100 dark:border-gray-700 animate-fade-in-up">
         
+        {/* Header Decorativo */}
         <div className="bg-indigo-900 dark:bg-indigo-950 p-8 text-center relative overflow-hidden group">
           <div className="absolute top-0 left-0 w-full h-full bg-white opacity-5 transform -skew-x-12 translate-x-full group-hover:translate-x-0 transition-transform duration-700"></div>
           
@@ -73,6 +77,7 @@ const Auth = () => {
 
         <div className="p-8">
           
+          {/* Mensagens de Feedback */}
           {errorMsg && (
             <div className="mb-6 p-3 rounded-lg bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-600 dark:text-red-300 text-sm flex items-center gap-2">
               <AlertCircle size={16} /> {errorMsg}
@@ -85,8 +90,9 @@ const Auth = () => {
             </div>
           )}
 
+          {/* FORMULÁRIO DE LOGIN */}
           {view === 'login' ? (
-              <form onSubmit={handleLogin} className="space-y-5" autoComplete="off">
+              <form onSubmit={handleLogin} className="space-y-5" autoComplete="on">
                 <div className="space-y-1">
                   <label className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider ml-1">Email Corporativo</label>
                   <div className="relative">
@@ -97,7 +103,7 @@ const Auth = () => {
                       id="email"
                       name="email"
                       type="email"
-                      autoComplete="off" // Força o navegador a não sugerir agressivamente
+                      autoComplete="email"
                       placeholder="seu@email.com"
                       value={email}
                       onChange={(e) => setEmail(e.target.value)}
@@ -110,8 +116,8 @@ const Auth = () => {
                 <div className="space-y-1">
                   <div className="flex justify-between items-center ml-1">
                     <label className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Senha</label>
-                    {/*
-                    <button type="button" onClick={() => setView('recovery')} className="text-xs text-indigo-600 hover:text-indigo-800 dark:text-indigo-400 dark:hover:text-indigo-300 font-medium transition-colors">
+                    {/*}
+                    <button type="button" onClick={() => setView('recovery')} className="text-xs text-indigo-600 hover:text-indigo-800 dark:text-indigo-400 dark:hover:text-indigo-300 font-medium transition-colors hover:underline">
                         Esqueci a senha
                     </button>
                     */}
@@ -124,7 +130,7 @@ const Auth = () => {
                       id="password"
                       name="password"
                       type={showPassword ? "text" : "password"}
-                      autoComplete="new-password" // O "Pulo do Gato": Evita preenchimento automático da senha antiga
+                      autoComplete="current-password" // Ajuda gerenciadores de senha
                       placeholder="••••••••"
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
@@ -135,6 +141,7 @@ const Auth = () => {
                       type="button"
                       onClick={() => setShowPassword(!showPassword)}
                       className="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400 hover:text-indigo-600 cursor-pointer transition-colors"
+                      tabIndex="-1" // Evita foco via tab
                     >
                       {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
                     </button>
@@ -144,15 +151,16 @@ const Auth = () => {
                 <button
                   type="submit"
                   disabled={loading}
-                  className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 rounded-xl transition-all transform active:scale-95 shadow-lg shadow-indigo-200 dark:shadow-none flex items-center justify-center gap-2"
+                  className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 rounded-xl transition-all transform active:scale-95 shadow-lg shadow-indigo-200 dark:shadow-none flex items-center justify-center gap-2 disabled:opacity-70 disabled:cursor-not-allowed"
                 >
                   {loading ? <Loader2 size={20} className="animate-spin" /> : <><LogIn size={20} /> Entrar no Sistema</>}
                 </button>
               </form>
           ) : (
+              // FORMULÁRIO DE RECUPERAÇÃO
               <form onSubmit={handleRecovery} className="space-y-5" autoComplete="off">
                 <p className="text-sm text-gray-600 dark:text-gray-400 text-center mb-4">
-                    Digite seu e-mail para receber um link de redefinição de senha.
+                    Digite seu e-mail para receber um link mágico de redefinição de senha.
                 </p>
                 
                 <div className="space-y-1">
@@ -165,7 +173,7 @@ const Auth = () => {
                       id="email-recovery"
                       name="email-recovery"
                       type="email"
-                      autoComplete="off"
+                      autoComplete="email"
                       placeholder="seu@email.com"
                       value={email}
                       onChange={(e) => setEmail(e.target.value)}
@@ -178,7 +186,7 @@ const Auth = () => {
                 <button
                   type="submit"
                   disabled={loading}
-                  className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 rounded-xl transition-all transform active:scale-95 shadow-lg shadow-indigo-200 dark:shadow-none flex items-center justify-center gap-2"
+                  className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 rounded-xl transition-all transform active:scale-95 shadow-lg shadow-indigo-200 dark:shadow-none flex items-center justify-center gap-2 disabled:opacity-70"
                 >
                   {loading ? <Loader2 size={20} className="animate-spin" /> : 'Enviar Link de Recuperação'}
                 </button>
@@ -193,6 +201,7 @@ const Auth = () => {
               </form>
           )}
 
+          {/* Footer Informativo */}
           {view === 'login' && (
             <div className="mt-6 text-center border-t border-gray-100 dark:border-gray-700 pt-4">
                 <p className="text-xs text-gray-400 dark:text-gray-500">

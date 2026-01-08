@@ -1,30 +1,29 @@
 import React from 'react';
 import { X, Save, User, Phone, RotateCcw, Building } from 'lucide-react';
 
+// --- HELPER: Máscara de Telefone ---
+const maskPhone = (value) => {
+  if (!value) return "";
+  return value
+    .replace(/\D/g, "") // Remove não dígitos
+    .replace(/^(\d{2})(\d)/g, "($1) $2") // (11) 9...
+    .replace(/(\d)(\d{4})$/, "$1-$2") // ...-1234
+    .slice(0, 15); // Limite de caracteres
+};
+
 const ClientModal = ({ isOpen, onClose, onSave, formData, setFormData, isEditing }) => {
   if (!isOpen) return null;
 
-  // Função de Máscara de Telefone
-  const maskPhone = (value) => {
-    return value
-      .replace(/\D/g, "") // Remove tudo que não é dígito
-      .replace(/^(\d{2})(\d)/g, "($1) $2") // Coloca parênteses em volta dos dois primeiros dígitos
-      .replace(/(\d)(\d{4})$/, "$1-$2") // Coloca hífen entre o quarto e o quinto dígitos
-      .slice(0, 15); // Limita o tamanho
-  };
-
   const handleSubmit = (e) => {
     e.preventDefault();
-    onSave();
+    onSave(); // Chama a função do pai para persistir no Supabase
   };
 
   const handleChange = (field, value) => {
-    // Se for telefone, aplica a máscara antes de salvar no estado
     const finalValue = field === 'telefone' ? maskPhone(value) : value;
     setFormData(prev => ({ ...prev, [field]: finalValue }));
   };
 
-  // Cores dinâmicas (Header mantém cor vibrante, mas botões adaptam hover)
   const headerColor = isEditing ? 'bg-orange-500' : 'bg-indigo-600';
   const buttonColor = isEditing ? 'bg-orange-500 hover:bg-orange-600' : 'bg-indigo-600 hover:bg-indigo-700';
 
@@ -64,7 +63,7 @@ const ClientModal = ({ isOpen, onClose, onSave, formData, setFormData, isEditing
             />
           </div>
 
-          {/* Telefone (Com Máscara) */}
+          {/* Telefone Geral */}
           <div className="space-y-1">
             <label className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider flex items-center gap-1">
               <Phone size={14} /> Telefone Geral
@@ -78,7 +77,7 @@ const ClientModal = ({ isOpen, onClose, onSave, formData, setFormData, isEditing
             />
           </div>
 
-          {/* Checkbox Ativo */}
+          {/* Status Ativo/Inativo */}
           <div className="flex items-center gap-2 pt-2 bg-gray-50 dark:bg-gray-900/50 p-3 rounded-lg border border-gray-100 dark:border-gray-700">
             <input
               type="checkbox"
@@ -92,15 +91,15 @@ const ClientModal = ({ isOpen, onClose, onSave, formData, setFormData, isEditing
             </label>
           </div>
 
-          {/* Aviso sobre Solicitantes */}
+          {/* Dica de UX */}
           {!isEditing && (
               <div className="text-xs text-blue-600 dark:text-blue-300 bg-blue-50 dark:bg-blue-900/20 p-3 rounded-lg flex items-start gap-2 border border-blue-100 dark:border-blue-900/30">
                   <span className="font-bold">Nota:</span> 
-                  Após salvar a empresa, você será redirecionado para cadastrar os Solicitantes (pessoas) e seus e-mails.
+                  Após salvar a empresa, você poderá cadastrar os Solicitantes (pessoas de contato) na tela principal.
               </div>
           )}
 
-          {/* Botões de Ação */}
+          {/* Footer de Ações */}
           <div className="pt-4 flex gap-3 border-t border-gray-100 dark:border-gray-700 mt-4">
             <button
               type="button"

@@ -41,7 +41,7 @@ const ChannelsManagement = ({ userId, showToast }) => {
 
   // --- 2. CARREGAR CANAIS (Pela Consultoria) ---
   const carregarCanais = useCallback(async () => {
-    // Só carrega se já tivermos o ID da consultoria
+    // Só carrega se já tivermos o ID da consultoria para garantir filtro correto
     if (!consultoriaId) return; 
 
     setLoading(true);
@@ -49,7 +49,6 @@ const ChannelsManagement = ({ userId, showToast }) => {
         let query = supabase
           .from('canais')
           .select('*')
-          // AGORA FILTRA PELA CONSULTORIA (Para todos da empresa verem)
           .eq('consultoria_id', consultoriaId) 
           .order('nome', { ascending: true });
 
@@ -68,7 +67,7 @@ const ChannelsManagement = ({ userId, showToast }) => {
     } finally {
         setLoading(false);
     }
-  }, [mostrarInativos, consultoriaId, showToast]); // Depende do consultoriaId agora
+  }, [mostrarInativos, consultoriaId, showToast]);
 
   useEffect(() => {
     carregarCanais();
@@ -84,6 +83,7 @@ const ChannelsManagement = ({ userId, showToast }) => {
     setEditingId(canal.id);
     setNome(canal.nome);
     setAtivo(canal.ativo);
+    // Rola para o topo (mobile friendly)
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
@@ -91,16 +91,18 @@ const ChannelsManagement = ({ userId, showToast }) => {
   const handleSalvar = async (e) => {
     e.preventDefault();
     if (!nome.trim()) return;
+    
+    // Validação de segurança: Nunca salvar sem vincular à consultoria
     if (!userId || !consultoriaId) {
-        if(showToast) showToast('Erro: Consultoria não identificada.', 'erro');
+        if(showToast) showToast('Erro crítico: Consultoria não identificada.', 'erro');
         return;
     }
 
     const payload = {
       nome: nome,
       ativo: ativo,
-      user_id: userId, // Quem criou (Log)
-      consultoria_id: consultoriaId // A qual empresa pertence (Importante!)
+      user_id: userId, // Log de quem criou/editou
+      consultoria_id: consultoriaId // Vínculo obrigatório
     };
 
     let error;
@@ -123,7 +125,7 @@ const ChannelsManagement = ({ userId, showToast }) => {
     }
   };
 
-  // Lógica de Inativação
+  // --- INATIVAÇÃO ---
   const solicitarInativacao = (canal) => {
     setCanalAlvo(canal);
     setShowConfirm(true);
@@ -156,6 +158,7 @@ const ChannelsManagement = ({ userId, showToast }) => {
       }
   };
 
+  // Filtro de busca local
   const canaisFiltrados = canais.filter(c => 
     c.nome.toLowerCase().includes(busca.toLowerCase())
   );
@@ -237,7 +240,7 @@ const ChannelsManagement = ({ userId, showToast }) => {
               </div>
           </div>
 
-          {/* COLUNA 2: LISTA */}
+          {/* COLUNA 2: LISTA DE CANAIS */}
           <div className="lg:col-span-2">
               <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-200 dark:border-gray-700 flex flex-col h-full min-h-[400px]">
                   
@@ -265,10 +268,10 @@ const ChannelsManagement = ({ userId, showToast }) => {
                       </button>
                   </div>
 
-                  {/* Lista */}
+                  {/* Lista Renderizada */}
                   <div className="flex-1 p-2 space-y-2">
                       {loading ? (
-                          <div className="text-center py-10 text-gray-400">Carregando canais...</div>
+                          <div className="text-center py-10 text-gray-400 animate-pulse">Carregando canais...</div>
                       ) : canaisFiltrados.length === 0 ? (
                           <div className="flex flex-col items-center justify-center py-10 text-gray-400">
                               <AlertCircle size={32} className="mb-2 opacity-50" />

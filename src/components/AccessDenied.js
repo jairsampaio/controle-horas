@@ -1,5 +1,5 @@
 import React from 'react';
-import { Lock, LogOut, ShieldAlert, MessageCircle, Building2, UserX } from 'lucide-react';
+import { LogOut, ShieldAlert, MessageCircle, Building2, UserX } from 'lucide-react';
 
 const AccessDenied = ({ type, onLogout }) => {
   
@@ -12,7 +12,9 @@ const AccessDenied = ({ type, onLogout }) => {
       icon: Building2,
       actionText: "Falar com Suporte",
       actionColor: "bg-green-600 hover:bg-green-700",
-      actionIcon: MessageCircle
+      actionIcon: MessageCircle,
+      // MANUTENÇÃO: Coloque aqui o link do seu WhatsApp de Suporte
+      actionLink: "https://wa.me/5500000000000?text=Olá, minha consultoria está bloqueada no sistema." 
     },
     usuario_bloqueado: {
       title: "Acesso Revogado",
@@ -23,11 +25,12 @@ const AccessDenied = ({ type, onLogout }) => {
     }
   };
 
+  // Seleciona a config ou usa 'usuario_bloqueado' como padrão seguro
   const currentConfig = config[type] || config.usuario_bloqueado;
   const Icon = currentConfig.icon;
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-950 flex flex-col items-center justify-center p-4 animate-fade-in">
+    <div className="min-h-screen bg-gray-50 dark:bg-gray-950 flex flex-col items-center justify-center p-4 animate-fade-in transition-colors duration-500">
       
       {/* Card Principal */}
       <div className="bg-white dark:bg-gray-900 w-full max-w-lg rounded-3xl shadow-2xl overflow-hidden border border-gray-100 dark:border-gray-800 text-center">
@@ -61,10 +64,10 @@ const AccessDenied = ({ type, onLogout }) => {
                 {/* Botão de Ação Principal (ex: Suporte) - Só aparece se configurado */}
                 {currentConfig.actionText && (
                     <button 
-                        onClick={() => window.open('https://wa.me/5500000000000', '_blank')} // Link do seu WhatsApp aqui
+                        onClick={() => window.open(currentConfig.actionLink, '_blank')} 
                         className={`w-full py-3.5 rounded-xl text-white font-bold shadow-lg shadow-green-200 dark:shadow-none transition-all hover:scale-[1.02] active:scale-95 flex items-center justify-center gap-2 ${currentConfig.actionColor}`}
                     >
-                        <currentConfig.actionIcon size={20} />
+                        {currentConfig.actionIcon && <currentConfig.actionIcon size={20} />}
                         {currentConfig.actionText}
                     </button>
                 )}

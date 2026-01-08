@@ -10,36 +10,54 @@ const ServiceModal = ({ isOpen, onClose, onSave, formData, setFormData, clientes
   const [valorVisual, setValorVisual] = useState('');
   const [erroValidacao, setErroValidacao] = useState(''); 
 
-  // --- CORREÇÃO DEFINITIVA AQUI ---
-  // Assim que o modal abre, se o canal estiver vazio "", forçamos virar NULL
+  // --- EFEITO: INICIALIZAÇÃO AO ABRIR ---
   useEffect(() => {
     if (isOpen) {
-      // Ajusta valor visual
       if (formData.valor_hora) {
         setValorVisual(formData.valor_hora.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
       } else {
         setValorVisual('');
       }
+      
       setErroValidacao(''); 
 
-      // A VACINA: Se canal_id for string vazia, transforma em null imediatamente
       if (formData.canal_id === "") {
         setFormData(prev => ({ ...prev, canal_id: null }));
       }
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isOpen]); 
+  }, [isOpen]); // Removi dependências desnecessárias para evitar loops
 
-  // Busca Canais
+  // --- CORREÇÃO DE SEGURANÇA: CARREGAR CANAIS DA CONSULTORIA ---
   useEffect(() => {
     const carregarCanais = async () => {
-      const { data, error } = await supabase.from('canais').select('*').eq('ativo', true).order('nome', { ascending: true });
-      if (!error) setListaCanais(data || []);
+      // 1. Pega usuário logado
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      // 2. Descobre a consultoria dele
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('consultoria_id')
+        .eq('id', user.id)
+        .single();
+
+      if (profile && profile.consultoria_id) {
+        // 3. Busca APENAS canais dessa consultoria
+        const { data, error } = await supabase
+          .from('canais')
+          .select('*')
+          .eq('consultoria_id', profile.consultoria_id) // <--- O FILTRO CRUCIAL
+          .eq('ativo', true)
+          .order('nome', { ascending: true });
+          
+        if (!error) setListaCanais(data || []);
+      }
     };
+
     if (isOpen) carregarCanais();
   }, [isOpen]);
 
-  // Busca Solicitantes (Filtrando apenas ATIVOS)
+  // --- EFEITO: CARREGAR SOLICITANTES (CASCATA) ---
   useEffect(() => {
     const carregarSolicitantesDoCliente = async () => {
       setListaSolicitantes([]); 
@@ -50,61 +68,70 @@ const ServiceModal = ({ isOpen, onClose, onSave, formData, setFormData, clientes
       if (!clienteObj) return;
 
       setLoadingSolicitantes(true);
+      
       const { data, error } = await supabase
         .from('solicitantes')
         .select('nome')
         .eq('cliente_id', clienteObj.id)
-        .eq('ativo', true) 
+        .eq('ativo', true)
         .order('nome', { ascending: true });
       
       if (!error) setListaSolicitantes(data || []);
       setLoadingSolicitantes(false);
     };
-    carregarSolicitantesDoCliente();
-  }, [formData.cliente, clientes]);
+    
+    if (isOpen) {
+        carregarSolicitantesDoCliente();
+    }
+  }, [formData.cliente, clientes, isOpen]);
 
   if (!isOpen) return null;
 
-  // Lógica Bancária
+  // --- HANDLERS ---
+
   const handleValorChange = (e) => {
     const apenasNumeros = e.target.value.replace(/\D/g, "");
+    
     if (apenasNumeros === "") {
       setValorVisual("");
       setFormData(prev => ({ ...prev, valor_hora: 0 }));
       return;
     }
+    
     const valorFloat = parseFloat(apenasNumeros) / 100;
     const valorFormatado = valorFloat.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
     setValorVisual(valorFormatado);
     setFormData(prev => ({ ...prev, valor_hora: valorFloat }));
   };
 
-  // Validação e Envio
+  const handleChange = (field, value) => {
+    let valorTratado = value;
+
+    if (field === 'canal_id' && value === '') {
+        valorTratado = null;
+    }
+
+    setFormData(prev => ({ ...prev, [field]: valorTratado }));
+    
+    if (field === 'solicitante' || field === 'cliente') setErroValidacao(''); 
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     setErroValidacao('');
 
-    // Validação de Obrigatoriedade
+    if (!formData.cliente) {
+        setErroValidacao('Selecione um Cliente.');
+        return;
+    }
     if (!formData.solicitante || formData.solicitante.trim() === '') {
-      setErroValidacao('É obrigatório selecionar um solicitante.');
+      setErroValidacao('É obrigatório selecionar quem solicitou o serviço.');
       return;
     }
 
     setLoading(true);
     await onSave(); 
     setLoading(false);
-  };
-
-  const handleChange = (field, value) => {
-    let valorTratado = value;
-
-    // Garante que se o usuário selecionar a opção "vazia", vire null também
-    if (field === 'canal_id' && value === '') {
-        valorTratado = null;
-    }
-
-    setFormData(prev => ({ ...prev, [field]: valorTratado }));
-    if (field === 'solicitante') setErroValidacao(''); 
   };
 
   const headerColor = isEditing ? 'bg-orange-500' : 'bg-indigo-600';
@@ -114,24 +141,25 @@ const ServiceModal = ({ isOpen, onClose, onSave, formData, setFormData, clientes
     <div className="fixed inset-0 bg-black bg-opacity-50 dark:bg-opacity-80 flex items-center justify-center p-4 z-50 animate-fade-in backdrop-blur-sm">
       <div className="bg-white dark:bg-gray-800 rounded-xl shadow-xl w-full max-w-2xl overflow-hidden flex flex-col max-h-[90vh] border dark:border-gray-700">
         
+        {/* Header */}
         <div className={`${headerColor} p-6 flex justify-between items-center text-white transition-colors duration-300 shadow-md`}>
           <div>
             <h2 className="text-xl font-bold">{isEditing ? 'Editar Serviço' : 'Novo Serviço'}</h2>
-            <p className="text-sm opacity-90">{isEditing ? 'Alterando dados existentes' : 'Preencha os dados'}</p>
+            <p className="text-sm opacity-90">{isEditing ? 'Alterando dados existentes' : 'Preencha os dados do atendimento'}</p>
           </div>
-          <button onClick={onClose} className="hover:bg-white/20 p-2 rounded-full"><X size={24} /></button>
+          <button onClick={onClose} className="hover:bg-white/20 p-2 rounded-full transition-colors"><X size={24} /></button>
         </div>
 
-        <div className="p-6 overflow-y-auto flex-1">
+        <div className="p-6 overflow-y-auto flex-1 custom-scrollbar">
           <form onSubmit={handleSubmit} className="space-y-6">
             
-            {/* Aviso de Erro de Validação */}
             {erroValidacao && (
                 <div className="bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 p-3 rounded-lg text-sm flex items-center gap-2 animate-pulse border border-red-100 dark:border-red-900/50">
                     <AlertCircle size={16} /> {erroValidacao}
                 </div>
             )}
 
+            {/* Linha 1: Datas */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div className="space-y-1">
                 <label className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider flex items-center gap-1"><Calendar size={12} /> Data</label>
@@ -165,6 +193,7 @@ const ServiceModal = ({ isOpen, onClose, onSave, formData, setFormData, clientes
               </div>
             </div>
 
+            {/* Linha 2: Vínculos */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               
               <div className="space-y-1">
@@ -172,7 +201,7 @@ const ServiceModal = ({ isOpen, onClose, onSave, formData, setFormData, clientes
                 <select 
                     value={formData.canal_id || ''} 
                     onChange={(e) => handleChange('canal_id', e.target.value)} 
-                    className="w-full border rounded px-3 py-2 outline-none focus:ring-2 focus:ring-indigo-500 bg-white dark:bg-gray-900 border-gray-300 dark:border-gray-600 text-gray-900 dark:text-white"
+                    className="w-full border rounded px-3 py-2 outline-none focus:ring-2 focus:ring-indigo-500 bg-white dark:bg-gray-900 border-gray-300 dark:border-gray-600 text-gray-900 dark:text-white cursor-pointer"
                 >
                     <option value="">-- Direto (Sem Canal) --</option>
                     {listaCanais.map(canal => (<option key={canal.id} value={canal.id}>{canal.nome}</option>))}
@@ -183,8 +212,10 @@ const ServiceModal = ({ isOpen, onClose, onSave, formData, setFormData, clientes
                   <label className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider flex items-center gap-1"><User size={12} /> Cliente</label>
                   <select 
                     value={formData.cliente} 
-                    onChange={(e) => setFormData(prev => ({ ...prev, cliente: e.target.value, solicitante: '' }))} 
-                    className="w-full border rounded px-3 py-2 outline-none focus:ring-2 focus:ring-indigo-500 bg-white dark:bg-gray-900 border-gray-300 dark:border-gray-600 text-gray-900 dark:text-white" 
+                    onChange={(e) => {
+                        setFormData(prev => ({ ...prev, cliente: e.target.value, solicitante: '' }));
+                    }} 
+                    className="w-full border rounded px-3 py-2 outline-none focus:ring-2 focus:ring-indigo-500 bg-white dark:bg-gray-900 border-gray-300 dark:border-gray-600 text-gray-900 dark:text-white cursor-pointer" 
                     required
                   >
                     <option value="">Selecione...</option>
@@ -199,7 +230,7 @@ const ServiceModal = ({ isOpen, onClose, onSave, formData, setFormData, clientes
                   <select 
                     value={formData.solicitante} 
                     onChange={(e) => handleChange('solicitante', e.target.value)} 
-                    className={`w-full border rounded px-3 py-2 outline-none focus:ring-2 focus:ring-indigo-500 
+                    className={`w-full border rounded px-3 py-2 outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer 
                         ${!formData.cliente 
                             ? 'bg-gray-100 dark:bg-gray-800 text-gray-400 dark:text-gray-600 cursor-not-allowed border-gray-200 dark:border-gray-700' 
                             : 'bg-white dark:bg-gray-900 border-gray-300 dark:border-gray-600 text-gray-900 dark:text-white'}`} 
@@ -224,6 +255,7 @@ const ServiceModal = ({ isOpen, onClose, onSave, formData, setFormData, clientes
               </div>
             </div>
 
+            {/* Linha 3: Atividade */}
             <div className="space-y-1">
                 <label className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider flex items-center gap-1"><Activity size={12} /> Atividade</label>
                 <input 
@@ -232,9 +264,11 @@ const ServiceModal = ({ isOpen, onClose, onSave, formData, setFormData, clientes
                     onChange={(e) => handleChange('atividade', e.target.value)} 
                     className="w-full border rounded px-3 py-2 outline-none focus:ring-2 focus:ring-indigo-500 bg-white dark:bg-gray-900 border-gray-300 dark:border-gray-600 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-600" 
                     required 
+                    placeholder="Descrição breve do serviço"
                 />
             </div>
 
+            {/* Linha 4: Financeiro e Status */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div className="space-y-1">
                 <label className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider flex items-center gap-1"><DollarSign size={12} /> Valor Hora (R$)</label>
@@ -255,6 +289,7 @@ const ServiceModal = ({ isOpen, onClose, onSave, formData, setFormData, clientes
                     value={formData.numero_nfs} 
                     onChange={(e) => handleChange('numero_nfs', e.target.value)} 
                     className="w-full border rounded px-3 py-2 outline-none focus:ring-2 focus:ring-indigo-500 bg-white dark:bg-gray-900 border-gray-300 dark:border-gray-600 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-600" 
+                    placeholder="Opcional"
                 />
               </div>
               <div className="space-y-1">
@@ -262,7 +297,7 @@ const ServiceModal = ({ isOpen, onClose, onSave, formData, setFormData, clientes
                 <select 
                     value={formData.status} 
                     onChange={(e) => handleChange('status', e.target.value)} 
-                    className="w-full border rounded px-3 py-2 outline-none focus:ring-2 focus:ring-indigo-500 bg-white dark:bg-gray-900 border-gray-300 dark:border-gray-600 text-gray-900 dark:text-white"
+                    className="w-full border rounded px-3 py-2 outline-none focus:ring-2 focus:ring-indigo-500 bg-white dark:bg-gray-900 border-gray-300 dark:border-gray-600 text-gray-900 dark:text-white cursor-pointer"
                 >
                     <option value="Pendente">Pendente</option>
                     <option value="Em aprovação">Em aprovação</option>
@@ -273,6 +308,7 @@ const ServiceModal = ({ isOpen, onClose, onSave, formData, setFormData, clientes
               </div>
             </div>
 
+            {/* Linha 5: Obs */}
             <div className="space-y-1">
                 <label className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Observações</label>
                 <textarea 
@@ -280,9 +316,11 @@ const ServiceModal = ({ isOpen, onClose, onSave, formData, setFormData, clientes
                     value={formData.observacoes} 
                     onChange={(e) => handleChange('observacoes', e.target.value)} 
                     className="w-full border rounded px-3 py-2 outline-none focus:ring-2 focus:ring-indigo-500 resize-none bg-white dark:bg-gray-900 border-gray-300 dark:border-gray-600 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-600"
+                    placeholder="Detalhes adicionais..."
                 ></textarea>
             </div>
 
+            {/* Footer de Ações */}
             <div className="pt-4 border-t border-gray-100 dark:border-gray-700 flex justify-end gap-2">
               <button 
                 type="button" 

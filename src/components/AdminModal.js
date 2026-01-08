@@ -47,24 +47,26 @@ const AdminModal = ({ isOpen, onClose, tenantId }) => {
         .from('profiles')
         .select('*')
         .eq('consultoria_id', tenantId)
-        .order('cargo', { ascending: true }); // Admin primeiro (alphabetical sort trick)
+        .order('cargo', { ascending: true }); // Tenta ordenar (admin vem antes alfabeticamente se for 'admin' vs 'colaborador')
 
       setTeam(teamData || []);
 
       // 3. Busca Métricas (Contagens)
-      // Clientes
+      
+      // Contagem de Clientes
       const { count: clientCount } = await supabase
         .from('clientes')
         .select('*', { count: 'exact', head: true })
         .eq('consultoria_id', tenantId);
 
       // Serviços (Para estimar receita e atividade)
+      // CORREÇÃO: Nome da tabela é 'servicos_prestados', não 'servicos'
       const { data: services } = await supabase
-        .from('servicos')
-        .select('valor')
+        .from('servicos_prestados')
+        .select('valor_total') // Campo correto é valor_total
         .eq('consultoria_id', tenantId);
 
-      const totalRevenue = (services || []).reduce((acc, curr) => acc + (Number(curr.valor) || 0), 0);
+      const totalRevenue = (services || []).reduce((acc, curr) => acc + (Number(curr.valor_total) || 0), 0);
 
       setStats({
         totalUsers: teamData?.length || 0,
@@ -81,23 +83,28 @@ const AdminModal = ({ isOpen, onClose, tenantId }) => {
   };
 
   // Função para Resetar Senha (Super Admin Power)
+  // NOTA: Isso requer que a trigger ou função RPC 'resetar_senha_via_dono' suporte super_admin
+  // ou uso de Service Role no backend.
   const handleResetPassword = async (userId, userName) => {
     const novaSenha = prompt(`Digite a nova senha para ${userName}:`);
     if (!novaSenha || novaSenha.length < 6) return alert("Senha inválida (mín 6 caracteres).");
 
     setResetLoading(userId);
     try {
-        // Usa a função do banco para atualizar senha direto no Auth
-        const { error } = await supabase.auth.admin.updateUserById(
-            userId,
-            { password: novaSenha }
-        );
+        // Tenta usar a RPC que já criamos para o Dono, pois ela deve permitir mudar senha
+        // Se o seu usuário logado for Super Admin, ele deve passar na política da RPC
+        const { data, error } = await supabase.rpc('resetar_senha_via_dono', {
+            user_id_alvo: userId,
+            nova_senha: novaSenha
+        });
 
         if (error) throw error;
+        if (data && data.status === 'erro') throw new Error(data.msg);
+
         alert("Senha alterada com sucesso!");
     } catch (error) {
         console.error(error);
-        alert("Erro: Você precisa de permissões de Super Admin no Supabase ou configurar a função RPC.");
+        alert("Erro ao alterar senha: " + error.message);
     } finally {
         setResetLoading(null);
     }
@@ -107,7 +114,7 @@ const AdminModal = ({ isOpen, onClose, tenantId }) => {
 
   return (
     <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 z-[9999] animate-fade-in">
-      <div className="bg-white dark:bg-gray-900 w-full max-w-5xl h-[85vh] rounded-2xl shadow-2xl flex flex-col overflow-hidden border border-gray-200 dark:border-gray-800">
+      <div className="bg-white dark:bg-gray-900 w-full max-w-5xl h-[85vh] rounded-2xl shadow-2xl flex flex-col overflow-hidden border border-gray-200 dark:border-gray-800 animate-scale-in">
         
         {loading || !tenant ? (
             <div className="flex-1 flex items-center justify-center flex-col gap-4">
@@ -165,7 +172,7 @@ const AdminModal = ({ isOpen, onClose, tenantId }) => {
                 </div>
 
                 {/* --- CONTENT AREA --- */}
-                <div className="flex-1 overflow-y-auto p-6 bg-gray-50 dark:bg-gray-900">
+                <div className="flex-1 overflow-y-auto p-6 bg-gray-50 dark:bg-gray-900 custom-scrollbar">
                     
                     {/* TAB: VISÃO GERAL */}
                     {activeTab === 'overview' && (
@@ -212,7 +219,7 @@ const AdminModal = ({ isOpen, onClose, tenantId }) => {
 
                     {/* TAB: EQUIPE */}
                     {activeTab === 'team' && (
-                         <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden">
+                          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden">
                             <table className="w-full text-sm text-left">
                                 <thead className="bg-gray-50 dark:bg-gray-950 text-gray-500 dark:text-gray-400">
                                     <tr>
@@ -249,7 +256,7 @@ const AdminModal = ({ isOpen, onClose, tenantId }) => {
                                     ))}
                                 </tbody>
                             </table>
-                         </div>
+                          </div>
                     )}
 
                     {/* TAB: FINANCEIRO */}

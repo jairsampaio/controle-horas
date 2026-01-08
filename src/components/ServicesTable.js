@@ -10,11 +10,9 @@ const ServicesTable = ({ servicos, onStatusChange, onEdit, onDelete, onSort, sor
   const [filtrosConsultores, setFiltrosConsultores] = useState([]);
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [isAdmin, setIsAdmin] = useState(false);
-  
-  // Novo estado para a busca textual
   const [searchTerm, setSearchTerm] = useState('');
 
-  // Ref para detectar clique fora
+  // Ref para detectar clique fora do filtro
   const dropdownRef = useRef(null);
 
   // --- EFEITO: FECHAR AO CLICAR FORA ---
@@ -22,7 +20,7 @@ const ServicesTable = ({ servicos, onStatusChange, onEdit, onDelete, onSort, sor
     function handleClickOutside(event) {
       if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
         setIsDropdownOpen(false);
-        setSearchTerm('');
+        setSearchTerm(''); // Limpa a busca ao fechar
       }
     }
     document.addEventListener("mousedown", handleClickOutside);
@@ -31,28 +29,32 @@ const ServicesTable = ({ servicos, onStatusChange, onEdit, onDelete, onSort, sor
     };
   }, [dropdownRef]);
 
-  // --- EFEITO: CARREGAR DADOS DO ADMIN ---
+  // --- EFEITO: CARREGAR DADOS DO ADMIN (FILTRO) ---
   useEffect(() => {
     const carregarDadosAdmin = async () => {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
 
+      // 1. Verifica permissão do usuário logado
       const { data: profile } = await supabase
         .from('profiles')
         .select('role, consultoria_id')
         .eq('id', user.id)
         .single();
 
-      const cargosDeChefia = ['admin', 'dono', 'super_admin', 'admin_consultoria'];
+      // MANUTENÇÃO: Lista de roles que podem filtrar (Chefia)
+      const cargosDeChefia = ['admin', 'dono', 'super_admin', 'admin_consultoria', 'gestor'];
 
       if (profile && cargosDeChefia.includes(profile.role)) {
         setIsAdmin(true);
+        
+        // 2. Busca lista de consultores DA MESMA CONSULTORIA para o filtro
         const { data: listaConsultores } = await supabase
           .from('profiles')
-          .select('id, nome_completo, email')
+          .select('id, nome, nome_completo, email') // Tenta pegar nome ou nome_completo
           .eq('consultoria_id', profile.consultoria_id)
           .eq('ativo', true)
-          .order('nome_completo');
+          .order('nome', { ascending: true }); // Ordena pelo nome curto
           
         setConsultores(listaConsultores || []);
       }
@@ -62,15 +64,16 @@ const ServicesTable = ({ servicos, onStatusChange, onEdit, onDelete, onSort, sor
 
   // --- LÓGICA DE FILTRAGEM ---
   
-  // 1. Filtra os serviços baseado nos IDs selecionados
+  // 1. Filtra a LISTA PRINCIPAL de serviços
   const servicosFiltrados = filtrosConsultores.length > 0
     ? servicos.filter(s => filtrosConsultores.includes(s.consultor_id))
     : servicos;
 
-  // 2. Filtra a LISTA de consultores baseado no que foi digitado na busca
-  const consultoresVisiveis = consultores.filter(c => 
-     (c.nome_completo || c.email).toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  // 2. Filtra a LISTA DO DROPDOWN (Busca textual de consultores)
+  const consultoresVisiveis = consultores.filter(c => {
+     const nomeBusca = c.nome || c.nome_completo || c.email || '';
+     return nomeBusca.toLowerCase().includes(searchTerm.toLowerCase());
+  });
 
   const toggleConsultor = (id) => {
     setFiltrosConsultores(prev => 
@@ -79,12 +82,13 @@ const ServicesTable = ({ servicos, onStatusChange, onEdit, onDelete, onSort, sor
   };
 
   const limparFiltros = (e) => {
-    e.stopPropagation(); // Impede que abra/feche o menu ao clicar no X
+    e.stopPropagation(); 
     setFiltrosConsultores([]);
   };
 
-  // --- AUXILIARES ---
+  // --- HELPER FUNCTIONS ---
   const formatData = (dataStr) => {
+    // Corrige fuso horário ao criar data (adiciona T00:00:00 para forçar local time)
     return new Date(dataStr + 'T00:00:00').toLocaleDateString('pt-BR');
   };
 
@@ -107,11 +111,13 @@ const ServicesTable = ({ servicos, onStatusChange, onEdit, onDelete, onSort, sor
   };
 
   const getCanalNome = (servico) => {
+      // Prioridade: Objeto canal populado > ID direto > Placeholder
       if (servico.canais && servico.canais.nome) return servico.canais.nome;
       if (servico.canal_id) return 'Parceiro'; 
       return '-'; 
   };
 
+  // --- EMPTY STATE (Lista Vazia) ---
   if (servicos.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center py-16 text-center bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 shadow-sm">
@@ -139,10 +145,9 @@ const ServicesTable = ({ servicos, onStatusChange, onEdit, onDelete, onSort, sor
               Filtrar por Consultor
             </label>
             
-            {/* CONTAINER DO DROPDOWN COM REF */}
+            {/* CONTAINER DO DROPDOWN */}
             <div className="relative" ref={dropdownRef}>
               
-              {/* BOTÃO PRINCIPAL */}
               <button
                 onClick={() => setIsDropdownOpen(!isDropdownOpen)}
                 className="w-full md:w-72 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 text-gray-900 dark:text-gray-100 text-sm rounded-lg focus:ring-indigo-500 focus:border-indigo-500 p-2.5 text-left flex justify-between items-center group"
@@ -153,7 +158,6 @@ const ServicesTable = ({ servicos, onStatusChange, onEdit, onDelete, onSort, sor
                     : `${filtrosConsultores.length} selecionado(s)`}
                 </span>
                 
-                {/* LÓGICA DO ÍCONE: SE TIVER SELEÇÃO MOSTRA X, SENÃO MOSTRA SETA */}
                 {filtrosConsultores.length > 0 ? (
                   <div 
                     onClick={limparFiltros}
@@ -167,11 +171,10 @@ const ServicesTable = ({ servicos, onStatusChange, onEdit, onDelete, onSort, sor
                 )}
               </button>
 
-              {/* CONTEÚDO DO DROPDOWN */}
               {isDropdownOpen && (
                 <div className="absolute z-20 w-full md:w-72 mt-1 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-xl overflow-hidden animate-in fade-in zoom-in-95 duration-100">
                   
-                  {/* CAMPO DE BUSCA */}
+                  {/* CAMPO DE BUSCA INTERNO */}
                   <div className="p-2 border-b border-gray-100 dark:border-gray-700 bg-gray-50 dark:bg-gray-900/50">
                     <div className="relative">
                       <Search size={14} className="absolute left-2.5 top-2.5 text-gray-400" />
@@ -214,7 +217,7 @@ const ServicesTable = ({ servicos, onStatusChange, onEdit, onDelete, onSort, sor
                             </div>
                             <div className="flex flex-col truncate">
                               <span className={`text-sm truncate ${isSelected ? 'font-semibold text-indigo-700 dark:text-indigo-300' : 'text-gray-700 dark:text-gray-200'}`}>
-                                {consultor.nome_completo || consultor.email}
+                                {consultor.nome || consultor.nome_completo || consultor.email}
                               </span>
                             </div>
                           </div>
@@ -223,7 +226,6 @@ const ServicesTable = ({ servicos, onStatusChange, onEdit, onDelete, onSort, sor
                     )}
                   </div>
                   
-                  {/* RODAPÉ DO DROPDOWN (INFO) */}
                   <div className="bg-gray-50 dark:bg-gray-900/50 p-2 text-xs text-center text-gray-400 border-t border-gray-100 dark:border-gray-700">
                     {filtrosConsultores.length} selecionado(s)
                   </div>
@@ -232,7 +234,6 @@ const ServicesTable = ({ servicos, onStatusChange, onEdit, onDelete, onSort, sor
             </div>
           </div>
           
-          {/* MENSAGEM DE RESUMO AO LADO (DESKTOP) */}
           {filtrosConsultores.length > 0 && (
              <div className="hidden md:block text-sm text-indigo-600 dark:text-indigo-400 font-medium animate-pulse">
                Exibindo resultados filtrados

@@ -1,48 +1,53 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend } from 'recharts';
 import { formatCurrency } from '../utils/formatters';
 
+// MANUTENÇÃO: Cores para os status (Devem bater com os textos do banco)
+const STATUS_COLORS = {
+  'Pendente': '#9CA3AF',      // Gray 400
+  'Em aprovação': '#F97316',  // Orange 500
+  'Aprovado': '#EAB308',      // Yellow 500
+  'NF Emitida': '#3B82F6',    // Blue 500
+  'Pago': '#22C55E',          // Green 500
+};
+
+const BAR_COLOR = '#6366f1'; // Indigo 500
+
 const DashboardCharts = ({ servicos }) => {
   
-  // 1. Processar dados para o Top 5 Clientes
-  const clientesMap = servicos.reduce((acc, curr) => {
-    const nome = curr.cliente || 'Sem Cliente';
-    acc[nome] = (acc[nome] || 0) + parseFloat(curr.valor_total || 0);
-    return acc;
-  }, {});
+  // 1. Processar dados para o Top 5 Clientes (Memoizado para performance)
+  const dataClientes = useMemo(() => {
+    const map = servicos.reduce((acc, curr) => {
+      const nome = curr.cliente || 'Sem Cliente';
+      const valor = typeof curr.valor_total === 'string' ? parseFloat(curr.valor_total) : curr.valor_total;
+      acc[nome] = (acc[nome] || 0) + (valor || 0);
+      return acc;
+    }, {});
 
-  const dataClientes = Object.entries(clientesMap)
-    .map(([name, value]) => ({ name, value }))
-    .sort((a, b) => b.value - a.value)
-    .slice(0, 5); // Pega só os top 5
+    return Object.entries(map)
+      .map(([name, value]) => ({ name, value }))
+      .sort((a, b) => b.value - a.value)
+      .slice(0, 5); // Top 5
+  }, [servicos]);
 
-  // 2. Processar dados para Faturamento por Status
-  const statusMap = servicos.reduce((acc, curr) => {
-    const status = curr.status || 'Outros';
-    acc[status] = (acc[status] || 0) + parseFloat(curr.valor_total || 0);
-    return acc;
-  }, {});
+  // 2. Processar dados para Faturamento por Status (Memoizado)
+  const dataStatus = useMemo(() => {
+    const map = servicos.reduce((acc, curr) => {
+      const status = curr.status || 'Outros';
+      const valor = typeof curr.valor_total === 'string' ? parseFloat(curr.valor_total) : curr.valor_total;
+      acc[status] = (acc[status] || 0) + (valor || 0);
+      return acc;
+    }, {});
 
-  const dataStatus = Object.entries(statusMap).map(([name, value]) => ({ name, value }));
+    return Object.entries(map).map(([name, value]) => ({ name, value }));
+  }, [servicos]);
 
-  // Cores personalizadas para o gráfico de Pizza (Status)
-  const COLORS = {
-    'Pendente': '#9CA3AF',      // Gray 400
-    'Em aprovação': '#F97316',  // Orange 500
-    'Aprovado': '#EAB308',      // Yellow 500
-    'NF Emitida': '#3B82F6',    // Blue 500
-    'Pago': '#22C55E',          // Green 500
-  };
-
-  // Cores personalizadas para o gráfico de Barras (Top Clientes)
-  const BAR_COLOR = '#6366f1'; 
-
-  // Customização do Tooltip para suportar Dark Mode
+  // Tooltip customizado (Renderiza ao passar o mouse)
   const CustomTooltip = ({ active, payload, label }) => {
     if (active && payload && payload.length) {
       return (
-        <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 p-3 rounded-lg shadow-lg">
-          <p className="font-bold text-gray-800 dark:text-white mb-1">{label}</p>
+        <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 p-3 rounded-lg shadow-lg z-50">
+          <p className="font-bold text-gray-800 dark:text-white mb-1">{label || payload[0].name}</p>
           <p className="text-indigo-600 dark:text-indigo-400 font-medium">
             {formatCurrency(payload[0].value)}
           </p>
@@ -53,13 +58,13 @@ const DashboardCharts = ({ servicos }) => {
   };
 
   if (servicos.length === 0) {
-    return null; // Não exibe gráficos se não tiver dados
+    return null; 
   }
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
       
-      {/* GRÁFICO 1: TOP 5 CLIENTES */}
+      {/* GRÁFICO 1: TOP 5 CLIENTES (BARRAS HORIZONTAIS) */}
       <div className="bg-white dark:bg-gray-800 p-6 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700">
         <h3 className="text-lg font-bold text-gray-800 dark:text-white mb-6">Top 5 Clientes (Faturamento)</h3>
         <div className="h-[300px] w-full text-xs">
@@ -96,7 +101,7 @@ const DashboardCharts = ({ servicos }) => {
         </div>
       </div>
 
-      {/* GRÁFICO 2: FATURAMENTO POR STATUS */}
+      {/* GRÁFICO 2: FATURAMENTO POR STATUS (PIZZA) */}
       <div className="bg-white dark:bg-gray-800 p-6 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700">
         <h3 className="text-lg font-bold text-gray-800 dark:text-white mb-6">Faturamento por Status</h3>
         <div className="h-[300px] w-full text-xs">
@@ -112,7 +117,7 @@ const DashboardCharts = ({ servicos }) => {
                 dataKey="value"
               >
                 {dataStatus.map((entry, index) => (
-                  <Cell key={`cell-${index}`} fill={COLORS[entry.name] || '#CBD5E1'} strokeWidth={0} />
+                  <Cell key={`cell-${index}`} fill={STATUS_COLORS[entry.name] || '#CBD5E1'} strokeWidth={0} />
                 ))}
               </Pie>
               <Tooltip content={<CustomTooltip />} />

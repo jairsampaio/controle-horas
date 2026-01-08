@@ -33,7 +33,7 @@ import { formatCurrency, formatHoursInt } from './utils/formatters';
 
 const App = () => {
   // --- ESTADOS ---
-  const [userRole, setUserRole] = useState(null); // <--- NOVO ESTADO PARA O CARGO
+  const [userRole, setUserRole] = useState(null); 
   const [accessDeniedType, setAccessDeniedType] = useState(null); 
   const [servicos, setServicos] = useState([]);
   const [clientes, setClientes] = useState([]);
@@ -54,6 +54,9 @@ const App = () => {
   const [session, setSession] = useState(null);
   const [showConfigModal, setShowConfigModal] = useState(false);
   
+  // Estado para armazenar perfil completo (importante para upload de foto)
+  const [profileData, setProfileData] = useState(null);
+
   const [confirmModalOpen, setConfirmModalOpen] = useState(false);
   const [clientToInactivate, setClientToInactivate] = useState(null);
   const [mostrarInativos, setMostrarInativos] = useState(false); 
@@ -159,16 +162,68 @@ const App = () => {
     }
   };
 
-  const salvarConfiguracao = async (novoValor, novoNome) => {
+  // --- CORREÇÃO: Função de Salvar Configuração (Agora com Upload de Foto) ---
+  const handleSaveConfig = async (dadosDoModal) => {
+    setLoading(true);
     try {
-      setLoading(true);
-      await supabase.from('configuracoes').upsert({ chave: 'valor_hora_padrao', valor: novoValor, user_id: session.user.id }, { onConflict: 'chave, user_id' });
-      await supabase.from('configuracoes').upsert({ chave: 'nome_consultor', valor: novoNome, user_id: session.user.id }, { onConflict: 'chave, user_id' });
-      setValorHoraPadrao(novoValor);
-      setNomeConsultor(novoNome);
-      setShowConfigModal(false);
-      showToast('Configurações salvas!', 'sucesso');
-    } catch (error) { console.error('Erro ao salvar config:', error); showToast('Erro ao salvar configuração.', 'erro'); } finally { setLoading(false); }
+        let avatarUrl = null;
+
+        // 1. Se tem arquivo de foto, faz o upload
+        if (dadosDoModal.fotoArquivo) {
+            const file = dadosDoModal.fotoArquivo;
+            const fileExt = file.name.split('.').pop();
+            const fileName = `${session.user.id}-${Math.random()}.${fileExt}`;
+            const filePath = `${fileName}`;
+
+            const { error: uploadError } = await supabase.storage
+                .from('avatars')
+                .upload(filePath, file);
+
+            if (uploadError) throw uploadError;
+
+            const { data: urlData } = supabase.storage
+                .from('avatars')
+                .getPublicUrl(filePath);
+
+            avatarUrl = urlData.publicUrl;
+        }
+
+        // 2. Prepara atualização do perfil
+        const updates = {
+            nome: dadosDoModal.nome,
+            whatsapp: dadosDoModal.whatsapp,
+            valor_hora: dadosDoModal.valor_hora, // Float
+            banco: dadosDoModal.banco,
+            agencia: dadosDoModal.agencia,
+            conta: dadosDoModal.conta,
+            chave_pix: dadosDoModal.chave_pix,
+            updated_at: new Date(),
+        };
+
+        if (avatarUrl) updates.avatar_url = avatarUrl;
+
+        // 3. Salva no banco
+        const { error } = await supabase
+            .from('profiles')
+            .update(updates)
+            .eq('id', session.user.id);
+
+        if (error) throw error;
+
+        // 4. Salva configurações extras (tabela separada)
+        await supabase.from('configuracoes').upsert({ chave: 'valor_hora_padrao', valor: dadosDoModal.valor_hora, user_id: session.user.id }, { onConflict: 'chave, user_id' });
+        
+        setValorHoraPadrao(dadosDoModal.valor_hora);
+        showToast('Perfil atualizado com sucesso!', 'sucesso');
+        setShowConfigModal(false);
+        carregarDados(); // Recarrega para atualizar a foto na sidebar
+
+    } catch (error) {
+        console.error("Erro ao salvar perfil:", error);
+        showToast("Erro ao salvar: " + error.message, 'erro');
+    } finally {
+        setLoading(false);
+    }
   };
 
   // --- CARREGAR DADOS E APLICAR BARREIRA DE SEGURANÇA ---
@@ -186,8 +241,8 @@ const App = () => {
         return;
       }
 
-      // --- GUARDA O CARGO CORRETO NO ESTADO ---
-      setUserRole(userProfile.cargo); // <--- AQUI ESTÁ A CORREÇÃO!
+      setProfileData(userProfile); // Guarda o perfil completo para uso posterior
+      setUserRole(userProfile.cargo); 
 
       // --- BARREIRA DE SEGURANÇA ---
       if (userProfile.ativo === false) {
@@ -264,7 +319,6 @@ const App = () => {
     }
   }, [session]);
 
-  // MOVI O HOOK PARA CIMA
   useEffect(() => {
     const algumModalAberto = showModal || showClienteModal || showSolicitantesModal || showConfigModal;
     if (algumModalAberto) {
@@ -285,15 +339,16 @@ const App = () => {
 
   const salvarServico = async () => {
     try {
-      const { data: profile } = await supabase.from('profiles').select('consultoria_id').eq('id', session.user.id).single();
-      const consultoriaId = profile?.consultoria_id;
+      if (!profileData?.consultoria_id) throw new Error("Consultoria não identificada.");
 
-      if (!consultoriaId) throw new Error("Erro: Consultoria não identificada.");
-
+      // CORREÇÃO: Tratamento de campos vazios e vínculos
       const dadosParaSalvar = {
           ...formData,
           user_id: session.user.id,
-          consultoria_id: consultoriaId 
+          consultoria_id: profileData.consultoria_id,
+          // Garante que campos opcionais vazios virem null
+          canal_id: formData.canal_id === '' ? null : formData.canal_id,
+          cliente: formData.cliente === '' ? null : formData.cliente
       };
 
       let error;
@@ -331,13 +386,13 @@ const App = () => {
     try {
       setLoading(true);
       
-      const { data: profile } = await supabase.from('profiles').select('consultoria_id').eq('id', session.user.id).single();
-      const consultoriaId = profile?.consultoria_id;
+      // CORREÇÃO: Vínculo com consultoria
+      if (!profileData?.consultoria_id) throw new Error("Consultoria não identificada.");
 
       const dadosCliente = {
           ...clienteFormData,
           user_id: session.user.id,
-          consultoria_id: consultoriaId
+          consultoria_id: profileData.consultoria_id
       };
 
       let clienteSalvo = null; 
@@ -583,6 +638,7 @@ const App = () => {
         onOpenConfig={() => setShowConfigModal(true)}
         onOpenChannels={() => setActiveTab('channels')} 
         userEmail={session?.user?.email}
+        userProfile={profileData} // Passando o perfil completo para a Sidebar
       />
 
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden relative">
@@ -661,80 +717,38 @@ const App = () => {
                                         <Filter size={20} className="text-indigo-600 dark:text-indigo-400" /> Filtros Avançados
                                     </div>
                                     
-                                    {/* --- TOGGLE KANBAN / LISTA (Só aparece no Desktop) --- */}
                                     <div className="hidden md:flex bg-gray-100 dark:bg-gray-700 p-1 rounded-lg border border-gray-200 dark:border-gray-600">
-                                        <button 
-                                            onClick={() => setViewMode('list')}
-                                            className={`p-2 rounded-md transition-colors ${viewMode === 'list' ? 'bg-white dark:bg-gray-600 text-indigo-600 dark:text-indigo-400 shadow-sm' : 'text-gray-400 hover:text-gray-600 dark:hover:text-gray-300'}`}
-                                            title="Ver como Lista"
-                                        >
-                                            <LayoutList size={20} />
-                                        </button>
-                                        <button 
-                                            onClick={() => setViewMode('kanban')}
-                                            className={`p-2 rounded-md transition-colors ${viewMode === 'kanban' ? 'bg-white dark:bg-gray-600 text-indigo-600 dark:text-indigo-400 shadow-sm' : 'text-gray-400 hover:text-gray-600 dark:hover:text-gray-300'}`}
-                                            title="Ver como Kanban"
-                                        >
-                                            <Kanban size={20} />
-                                        </button>
+                                        <button onClick={() => setViewMode('list')} className={`p-2 rounded-md transition-colors ${viewMode === 'list' ? 'bg-white dark:bg-gray-600 text-indigo-600 dark:text-indigo-400 shadow-sm' : 'text-gray-400 hover:text-gray-600 dark:hover:text-gray-300'}`}><LayoutList size={20} /></button>
+                                        <button onClick={() => setViewMode('kanban')} className={`p-2 rounded-md transition-colors ${viewMode === 'kanban' ? 'bg-white dark:bg-gray-600 text-indigo-600 dark:text-indigo-400 shadow-sm' : 'text-gray-400 hover:text-gray-600 dark:hover:text-gray-300'}`}><Kanban size={20} /></button>
                                     </div>
                                 </div>
 
                                 <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
-                                
-                                <div className="col-span-full md:col-span-3 lg:col-span-3 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                                    <MultiSelect options={opcoesCanais} selected={filtros.canal} onChange={(novos) => setFiltros({...filtros, canal: novos})} placeholder="Canais..." />
-                                    <MultiSelect options={opcoesClientes} selected={filtros.cliente} onChange={(novos) => setFiltros({...filtros, cliente: novos})} placeholder="Clientes..." />
-                                    <MultiSelect options={todosSolicitantesDoCliente} selected={filtros.solicitantes} onChange={(novos) => setFiltros({...filtros, solicitantes: novos})} placeholder={filtros.cliente.length === 1 ? "Solicitantes..." : (filtros.cliente.length > 1 ? "Selecione 1 Cliente" : "Selecione Cliente")} />
-                                    <MultiSelect options={opcoesStatus} selected={filtros.status} onChange={(novos) => setFiltros({...filtros, status: novos})} placeholder="Status..." />
-                                </div>
-
-                                <div className="col-span-full md:col-span-2 lg:col-span-2 grid grid-cols-2 gap-4">
-                                    <div className="relative">
-                                        <label className="text-[10px] uppercase font-bold text-gray-400 dark:text-gray-500 absolute top-1 left-3">Data Inicial</label>
-                                        <input type="date" value={filtros.dataInicio} onChange={(e) => setFiltros({...filtros, dataInicio: e.target.value})} className="border border-gray-200 dark:border-gray-700 dark:bg-gray-900 dark:text-white rounded-lg px-3 pb-2 pt-5 text-sm focus:ring-2 focus:ring-indigo-500 outline-none w-full h-[46px]" />
+                                    <div className="col-span-full md:col-span-3 lg:col-span-3 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                                        <MultiSelect options={opcoesCanais} selected={filtros.canal} onChange={(novos) => setFiltros({...filtros, canal: novos})} placeholder="Canais..." />
+                                        <MultiSelect options={opcoesClientes} selected={filtros.cliente} onChange={(novos) => setFiltros({...filtros, cliente: novos})} placeholder="Clientes..." />
+                                        <MultiSelect options={todosSolicitantesDoCliente} selected={filtros.solicitantes} onChange={(novos) => setFiltros({...filtros, solicitantes: novos})} placeholder={filtros.cliente.length === 1 ? "Solicitantes..." : (filtros.cliente.length > 1 ? "Selecione 1 Cliente" : "Selecione Cliente")} />
+                                        <MultiSelect options={opcoesStatus} selected={filtros.status} onChange={(novos) => setFiltros({...filtros, status: novos})} placeholder="Status..." />
                                     </div>
-                                    <div className="relative">
-                                        <label className="text-[10px] uppercase font-bold text-gray-400 dark:text-gray-500 absolute top-1 left-3">Data Final</label>
+                                    <div className="col-span-full md:col-span-2 lg:col-span-2 grid grid-cols-2 gap-4">
+                                        <input type="date" value={filtros.dataInicio} onChange={(e) => setFiltros({...filtros, dataInicio: e.target.value})} className="border border-gray-200 dark:border-gray-700 dark:bg-gray-900 dark:text-white rounded-lg px-3 pb-2 pt-5 text-sm focus:ring-2 focus:ring-indigo-500 outline-none w-full h-[46px]" />
                                         <input type="date" value={filtros.dataFim} onChange={(e) => setFiltros({...filtros, dataFim: e.target.value})} className="border border-gray-200 dark:border-gray-700 dark:bg-gray-900 dark:text-white rounded-lg px-3 pb-2 pt-5 text-sm focus:ring-2 focus:ring-indigo-500 outline-none w-full h-[46px]" />
                                     </div>
                                 </div>
+                                <div className="flex justify-end gap-3 pt-2">
+                                    <button onClick={handleExportarExcel} className="flex items-center gap-2 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700 px-4 py-2 rounded-lg text-sm font-medium transition-colors" title="Exportar Excel"><FileText size={18} className="text-green-600 dark:text-green-400" /> Excel</button>
+                                    <button onClick={handleGerarPDF} className="flex items-center gap-2 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700 px-4 py-2 rounded-lg text-sm font-medium transition-colors" title="Gerar PDF"><FileText size={18} className="text-red-600 dark:text-red-400" /> PDF</button>
                                 </div>
                             </div>
                             
-                            <div className="flex flex-wrap justify-end gap-3">
-                                <button onClick={handleExportarExcel} className="flex items-center gap-2 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700 px-4 py-2 rounded-lg text-sm font-medium transition-colors" title="Exportar Excel"><FileText size={18} className="text-green-600 dark:text-green-400" /> Excel</button>
-                                <button onClick={handleGerarPDF} className="flex items-center gap-2 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700 px-4 py-2 rounded-lg text-sm font-medium transition-colors" title="Gerar PDF"><FileText size={18} className="text-red-600 dark:text-red-400" /> PDF</button>
-                            </div>
-
                             <div className="md:hidden">
-                                <ServicesTable 
-                                    servicos={servicosFiltradosData} 
-                                    onStatusChange={alterarStatusRapido} 
-                                    onEdit={editarServico} 
-                                    onDelete={deletarServico} 
-                                    onSort={handleSort} 
-                                    sortConfig={sortConfig} 
-                                />
+                                <ServicesTable servicos={servicosFiltradosData} onStatusChange={alterarStatusRapido} onEdit={editarServico} onDelete={deletarServico} onSort={handleSort} sortConfig={sortConfig} />
                             </div>
                             <div className="hidden md:block">
                                 {viewMode === 'list' ? (
-                                    <ServicesTable 
-                                        servicos={servicosFiltradosData} 
-                                        onStatusChange={alterarStatusRapido} 
-                                        onEdit={editarServico} 
-                                        onDelete={deletarServico} 
-                                        onSort={handleSort} 
-                                        sortConfig={sortConfig} 
-                                    />
+                                    <ServicesTable servicos={servicosFiltradosData} onStatusChange={alterarStatusRapido} onEdit={editarServico} onDelete={deletarServico} onSort={handleSort} sortConfig={sortConfig} />
                                 ) : (
-                                    <div className="h-[600px]"> 
-                                        <ServicesKanban 
-                                            servicos={servicosFiltradosData} 
-                                            onEditService={editarServico} 
-                                            onStatusChange={alterarStatusRapido}
-                                        />
-                                    </div>
+                                    <div className="h-[600px]"><ServicesKanban servicos={servicosFiltradosData} onEditService={editarServico} onStatusChange={alterarStatusRapido} /></div>
                                 )}
                             </div>
                         </div>
@@ -763,7 +777,7 @@ const App = () => {
                     {activeTab === 'demandas' && (
                         <DemandsBoard 
                             userId={session?.user?.id} 
-                            userRole={userRole} // <--- AQUI ESTÁ A CORREÇÃO: USANDO O STATE
+                            userRole={userRole} 
                             showToast={showToast} 
                         />
                     )}
@@ -810,20 +824,13 @@ const App = () => {
       
       <ClientModal isOpen={showClienteModal} onClose={() => { setShowClienteModal(false); setEditingCliente(null); resetClienteForm(); }} onSave={salvarCliente} formData={clienteFormData} setFormData={setClienteFormData} isEditing={!!editingCliente} />
       
-      <SolicitantesModal 
-        isOpen={showSolicitantesModal} 
-        onClose={() => { setShowSolicitantesModal(false); setClienteParaSolicitantes(null); }} 
-        cliente={clienteParaSolicitantes} 
-        userId={session?.user?.id} 
-        showToast={showToast} 
-      />
+      <SolicitantesModal isOpen={showSolicitantesModal} onClose={() => { setShowSolicitantesModal(false); setClienteParaSolicitantes(null); }} cliente={clienteParaSolicitantes} userId={session?.user?.id} showToast={showToast} />
       
       <ConfigModal 
         isOpen={showConfigModal} 
         onClose={() => setShowConfigModal(false)} 
-        onSave={salvarConfiguracao} 
-        valorAtual={valorHoraPadrao} 
-        nomeAtual={nomeConsultor}
+        onSave={handleSaveConfig} 
+        profileData={profileData} 
         userEmail={session?.user?.email} 
       />
       

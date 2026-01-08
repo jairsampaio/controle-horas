@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { 
   DollarSign, Calendar, CheckCircle, XCircle, AlertCircle, 
-  Search, Plus, Wallet, TrendingUp, Filter, X, 
+  Search, Plus, Wallet, TrendingUp, X, 
   Clock, Send, PieChart, BarChart2, ArrowDownRight
 } from 'lucide-react';
 import supabase from '../services/supabase';
@@ -32,23 +32,31 @@ const AdminFinance = () => {
   const carregarFinanceiro = async () => {
     setLoading(true);
     try {
+      // 1. Busca Faturas (Corrigido para usar a relação correta se existir, ou join manual)
+      // Nota: O select abaixo assume que existe uma FK 'consultoria_id' em 'saas_faturas' apontando para 'consultorias'
       const { data: dataFaturas, error: erroFaturas } = await supabase
         .from('saas_faturas')
-        .select('*, tenants(nome_empresa)')
+        .select(`
+            *, 
+            consultoria:consultoria_id (nome)
+        `)
         .order('data_vencimento', { ascending: false });
 
       if (erroFaturas) throw erroFaturas;
       setFaturas(dataFaturas);
 
+      // 2. Busca Consultorias Ativas para o Dropdown
       const { data: dataTenants } = await supabase
-        .from('tenants')
-        .select('id, nome_empresa')
-        .eq('status_financeiro', 'ativo')
-        .order('nome_empresa');
+        .from('consultorias') // CORREÇÃO: Nome da tabela
+        .select('id, nome')
+        .eq('status', 'ativa') // CORREÇÃO: Campo de status
+        .order('nome');
       
       setTenants(dataTenants || []);
 
+      // 3. Cálculos de KPI
       const hoje = new Date().toISOString().split('T')[0];
+      
       const calculo = dataFaturas.reduce((acc, fatura) => {
         const valor = parseFloat(fatura.valor || 0);
         
@@ -64,7 +72,7 @@ const AdminFinance = () => {
         return acc;
       }, { recebido: 0, pendente: 0, vencido: 0 });
 
-      calculo.projecao = calculo.recebido + calculo.pendente;
+      calculo.projecao = calculo.recebido + calculo.pendente + calculo.vencido;
       setMetrics(calculo);
 
     } catch (error) {
@@ -79,15 +87,27 @@ const AdminFinance = () => {
     if (!novaFatura.tenant_id) return alert('Selecione uma consultoria!');
 
     try {
-      const { error } = await supabase.from('saas_faturas').insert([{ ...novaFatura, status: 'pendente' }]);
+      // CORREÇÃO: Mapeia tenant_id do form para consultoria_id do banco
+      const payload = {
+          consultoria_id: novaFatura.tenant_id,
+          valor: novaFatura.valor,
+          data_vencimento: novaFatura.data_vencimento,
+          referencia: novaFatura.referencia,
+          obs: novaFatura.obs,
+          status: 'pendente'
+      };
+
+      const { error } = await supabase.from('saas_faturas').insert([payload]);
+      
       if (error) throw error;
+      
       alert('Cobrança lançada com sucesso!');
       setModalOpen(false);
       setNovaFatura({ ...novaFatura, referencia: '', obs: '' });
       carregarFinanceiro();
     } catch (error) {
       console.error(error);
-      alert('Erro ao lançar cobrança.');
+      alert('Erro ao lançar cobrança: ' + error.message);
     }
   };
 
@@ -107,12 +127,15 @@ const AdminFinance = () => {
     }
   };
 
-  const faturasFiltradas = faturas.filter(f => 
-    f.tenants?.nome_empresa?.toLowerCase().includes(filtro.toLowerCase()) ||
-    f.referencia?.toLowerCase().includes(filtro.toLowerCase())
-  );
+  // Filtro inteligente (Nome da empresa ou Descrição da fatura)
+  const faturasFiltradas = faturas.filter(f => {
+    const termo = filtro.toLowerCase();
+    const nomeEmpresa = f.consultoria?.nome?.toLowerCase() || '';
+    const ref = f.referencia?.toLowerCase() || '';
+    return nomeEmpresa.includes(termo) || ref.includes(termo);
+  });
 
-  // Helper para renderizar os botões de ação (reuso)
+  // Helper para renderizar os botões de ação
   const renderActions = (fatura) => (
     <div className="flex gap-2 justify-end md:justify-center">
         {fatura.status === 'pendente' && (
@@ -125,7 +148,7 @@ const AdminFinance = () => {
                     <CheckCircle size={18} />
                 </button>
                 <button 
-                    onClick={() => alert(`Lembrete enviado para ${fatura.tenants?.nome_empresa}!`)}
+                    onClick={() => alert(`Lembrete enviado para ${fatura.consultoria?.nome}!`)}
                     className="p-2 bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-100 transition-colors"
                     title="Enviar Lembrete"
                 >
@@ -228,7 +251,7 @@ const AdminFinance = () => {
            </div>
         </div>
 
-        {/* --- MODO RESPONSIVO HÍBRIDO --- */}
+        {/* --- CONTEÚDO --- */}
         <div className="bg-gray-50 dark:bg-gray-900 p-4 md:p-0">
             {loading ? (
                 <div className="p-12 text-center text-gray-400">Carregando dados...</div>
@@ -236,7 +259,7 @@ const AdminFinance = () => {
                 <div className="p-12 text-center text-gray-400">Nenhum registro encontrado.</div>
             ) : (
                 <>
-                    {/* VISÃO MOBILE: CARDS (Só aparece em telas pequenas `md:hidden`) */}
+                    {/* VISÃO MOBILE */}
                     <div className="space-y-4 md:hidden">
                         {faturasFiltradas.map((fatura) => {
                             const isAtrasado = fatura.status === 'pendente' && fatura.data_vencimento < new Date().toISOString().split('T')[0];
@@ -244,7 +267,7 @@ const AdminFinance = () => {
                                 <div key={fatura.id} className="bg-white dark:bg-gray-800 p-5 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 flex flex-col gap-3">
                                     <div className="flex justify-between items-start">
                                         <div>
-                                            <h4 className="font-bold text-gray-800 dark:text-white">{fatura.tenants?.nome_empresa || 'Cliente Removido'}</h4>
+                                            <h4 className="font-bold text-gray-800 dark:text-white">{fatura.consultoria?.nome || 'Cliente Removido'}</h4>
                                             <p className="text-xs text-gray-500">{fatura.referencia || '-'}</p>
                                         </div>
                                         <div className="text-right">
@@ -267,7 +290,6 @@ const AdminFinance = () => {
                                                 <span className="text-xs font-bold text-yellow-600 bg-yellow-50 px-2 py-1 rounded-full">Aberto</span>
                                             )}
                                         </div>
-                                        {/* Ações Mobile */}
                                         {renderActions(fatura)}
                                     </div>
                                 </div>
@@ -275,7 +297,7 @@ const AdminFinance = () => {
                         })}
                     </div>
 
-                    {/* VISÃO DESKTOP: TABELA (Só aparece em telas médias pra cima `hidden md:block`) */}
+                    {/* VISÃO DESKTOP */}
                     <div className="hidden md:block overflow-x-auto bg-white dark:bg-gray-900">
                         <table className="w-full text-sm text-left">
                             <thead className="bg-gray-50 dark:bg-gray-900/50 text-gray-500 dark:text-gray-400 font-bold border-b border-gray-100 dark:border-gray-700">
@@ -312,7 +334,7 @@ const AdminFinance = () => {
                                                     </span>
                                                 )}
                                             </td>
-                                            <td className="px-6 py-4 font-bold text-gray-800 dark:text-white">{fatura.tenants?.nome_empresa}</td>
+                                            <td className="px-6 py-4 font-bold text-gray-800 dark:text-white">{fatura.consultoria?.nome}</td>
                                             <td className="px-6 py-4 text-gray-600 dark:text-gray-400 font-mono text-xs">{new Date(fatura.data_vencimento).toLocaleDateString()}</td>
                                             <td className="px-6 py-4 text-gray-500 dark:text-gray-400">{fatura.referencia || '-'}</td>
                                             <td className="px-6 py-4 text-right font-bold text-gray-800 dark:text-white font-mono">{formatCurrency(fatura.valor)}</td>
@@ -332,11 +354,8 @@ const AdminFinance = () => {
 
       {/* MODAL NOVA COBRANÇA */}
       {modalOpen && createPortal(
-        <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in">
-          <div 
-            className="bg-white dark:bg-gray-900 w-full max-w-md rounded-3xl shadow-2xl p-8 border border-gray-100 dark:border-gray-800 animate-scale-in"
-            onClick={(e) => e.stopPropagation()}
-          >
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in" onClick={() => setModalOpen(false)}>
+          <div className="bg-white dark:bg-gray-900 w-full max-w-md rounded-3xl shadow-2xl p-8 border border-gray-100 dark:border-gray-800 animate-scale-in" onClick={(e) => e.stopPropagation()}>
             <div className="flex justify-between items-center mb-8">
               <div>
                   <h3 className="text-xl font-bold text-gray-800 dark:text-white">Nova Cobrança</h3>
@@ -359,7 +378,7 @@ const AdminFinance = () => {
                     >
                       <option value="">Selecione a empresa...</option>
                       {tenants.map(t => (
-                        <option key={t.id} value={t.id}>{t.nome_empresa}</option>
+                        <option key={t.id} value={t.id}>{t.nome}</option>
                       ))}
                     </select>
                     <div className="absolute right-3 top-3.5 pointer-events-none text-gray-400"><ArrowDownRight size={16}/></div>

@@ -1,43 +1,74 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { 
   X, Save, User, DollarSign, Settings, Bell, 
-  Layout, Mail, Camera, Upload
+  Layout, Mail, Camera, Upload, Phone, Landmark
 } from 'lucide-react';
 
-const ConfigModal = ({ isOpen, onClose, onSave, valorAtual, nomeAtual, userEmail, fotoAtual }) => { 
+// --- HELPERS (Reutilizados para consistência) ---
+const maskPhone = (value) => {
+  if (!value) return "";
+  return value
+    .replace(/\D/g, "")
+    .replace(/(\d{2})(\d)/, "($1) $2")
+    .replace(/(\d{5})(\d)/, "$1-$2")
+    .replace(/(-\d{4})\d+?$/, "$1");
+};
+
+const ConfigModal = ({ 
+  isOpen, 
+  onClose, 
+  onSave, 
+  profileData, 
+  userEmail 
+}) => { 
   const [activeTab, setActiveTab] = useState('geral');
   const fileInputRef = useRef(null);
   
-  // --- ESTADOS ---
-  const [valor, setValor] = useState(''); // Armazena número puro
-  const [valorDisplay, setValorDisplay] = useState(''); // Armazena string formatada (R$)
+  // --- ESTADOS DO FORMULÁRIO ---
   const [nome, setNome] = useState('');
-  const [fotoPreview, setFotoPreview] = useState(null);
+  const [whatsapp, setWhatsapp] = useState('');
   
-  const [cargo, setCargo] = useState('Consultor Especialista');
+  // Financeiro
+  const [valor, setValor] = useState(0); // Float para o banco
+  const [valorDisplay, setValorDisplay] = useState(''); // String R$ para a tela
+  const [banco, setBanco] = useState('');
+  const [agencia, setAgencia] = useState('');
+  const [conta, setConta] = useState('');
+  const [chavePix, setChavePix] = useState('');
+
+  // Imagem
+  const [fotoPreview, setFotoPreview] = useState(null); // Preview visual
+  const [fotoFile, setFotoFile] = useState(null); // Arquivo real para upload
+
+  // Configurações do App
   const [notificacoesEmail, setNotificacoesEmail] = useState(true);
-  
-  // Detecta se o sistema já está em dark mode ao abrir
   const [temaEscuro, setTemaEscuro] = useState(
     document.documentElement.classList.contains('dark')
   );
 
+  // --- EFEITO: CARREGAR DADOS AO ABRIR ---
   useEffect(() => {
-    if (isOpen) {
-      // Configura Nome
-      setNome(nomeAtual || '');
+    if (isOpen && profileData) {
+      // 1. Dados Pessoais
+      setNome(profileData.nome || profileData.nome_completo || '');
+      setWhatsapp(maskPhone(profileData.whatsapp || ''));
       
-      // Configura Foto (se vier do banco)
-      if (fotoAtual) {
-        setFotoPreview(fotoAtual);
-      }
-      
-      // Configura Valor com Máscara
-      const val = valorAtual || 0;
+      // 2. Foto (Se tiver URL salva no banco, mostra)
+      setFotoPreview(profileData.avatar_url || null);
+      setFotoFile(null); // Reseta o arquivo novo
+
+      // 3. Financeiro
+      const val = profileData.valor_hora || 0;
       setValor(val);
-      setValorDisplay(formatCurrency(val));
+      setValorDisplay(new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(val));
+      
+      // 4. Dados Bancários
+      setBanco(profileData.banco || '');
+      setAgencia(profileData.agencia || '');
+      setConta(profileData.conta || '');
+      setChavePix(profileData.chave_pix || '');
     }
-  }, [isOpen, valorAtual, nomeAtual, fotoAtual]);
+  }, [isOpen, profileData]);
 
   // --- LÓGICA DE TEMA ESCURO ---
   useEffect(() => {
@@ -48,23 +79,19 @@ const ConfigModal = ({ isOpen, onClose, onSave, valorAtual, nomeAtual, userEmail
     }
   }, [temaEscuro]);
 
-  // --- MÁSCARA DE MOEDA ---
-  const formatCurrency = (value) => {
-    const number = Number(value);
-    return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(number);
-  };
-
+  // --- HANDLERS ---
   const handleValorChange = (e) => {
-    // Remove tudo que não é dígito
     let value = e.target.value.replace(/\D/g, '');
-    // Converte para decimal (divide por 100)
     const numberValue = Number(value) / 100;
-    
-    setValor(numberValue); // Salva o número puro (ex: 150.50)
-    setValorDisplay(formatCurrency(numberValue)); // Mostra formatado (ex: R$ 150,50)
+    setValor(numberValue);
+    setValorDisplay(new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(numberValue));
   };
 
-  // --- UPLOAD DE FOTO (PREVIEW) ---
+  const handleWhatsappChange = (e) => {
+    setWhatsapp(maskPhone(e.target.value));
+  };
+
+  // --- LÓGICA DA FOTO ---
   const handlePhotoClick = () => {
     fileInputRef.current.click();
   };
@@ -72,18 +99,36 @@ const ConfigModal = ({ isOpen, onClose, onSave, valorAtual, nomeAtual, userEmail
   const handleFileChange = (e) => {
     const file = e.target.files[0];
     if (file) {
+      // MANUTENÇÃO: Armazena o arquivo real para enviar ao Supabase Storage no onSave
+      setFotoFile(file); 
+      
+      // Gera preview local imediato
       const reader = new FileReader();
       reader.onloadend = () => {
-        setFotoPreview(reader.result); // Converte para Base64
+        setFotoPreview(reader.result); 
       };
       reader.readAsDataURL(file);
     }
   };
 
+  // --- SALVAR ---
   const handleSubmit = (e) => {
     e.preventDefault();
-    // Agora envia a foto também! O App.js precisa estar pronto para receber (valor, nome, foto)
-    onSave(valor, nome, fotoPreview);
+    
+    // Prepara o objeto para o App.js processar
+    const dadosParaSalvar = {
+        nome,
+        whatsapp,
+        valor_hora: valor,
+        banco,
+        agencia,
+        conta,
+        chave_pix: chavePix,
+        // IMPORTANTE: Envia o arquivo se existir, senão envia null
+        fotoArquivo: fotoFile 
+    };
+
+    onSave(dadosParaSalvar);
   };
 
   if (!isOpen) return null;
@@ -97,22 +142,16 @@ const ConfigModal = ({ isOpen, onClose, onSave, valorAtual, nomeAtual, userEmail
 
   return (
     <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-0 md:p-4 z-[9999] animate-fade-in">
-      {/* CORREÇÃO DE LAYOUT RESPONSIVO:
-          - h-full md:h-[600px]: No celular ocupa tela toda, no PC tem altura fixa.
-          - flex-col md:flex-row: No celular empilha (menu em cima), no PC lado a lado.
-      */}
-      <div className="bg-white dark:bg-gray-900 w-full md:max-w-2xl h-full md:h-[600px] md:rounded-2xl shadow-2xl flex flex-col md:flex-row overflow-hidden border border-gray-100 dark:border-gray-800">
+      <div className="bg-white dark:bg-gray-900 w-full md:max-w-2xl h-full md:h-[650px] md:rounded-2xl shadow-2xl flex flex-col md:flex-row overflow-hidden border border-gray-100 dark:border-gray-800">
         
         {/* SIDEBAR DE NAVEGAÇÃO */}
         <div className="w-full md:w-1/3 bg-gray-50 dark:bg-gray-950 border-b md:border-b-0 md:border-r border-gray-200 dark:border-gray-800 p-4 flex flex-col justify-between shrink-0">
           <div>
             <div className="flex justify-between items-center md:block mb-4">
                 <h2 className="text-xs font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wider px-2">Ajustes</h2>
-                {/* Botão fechar mobile */}
                 <button onClick={onClose} className="md:hidden text-gray-400 p-1"><X size={24}/></button>
             </div>
             
-            {/* Menu Horizontal no Mobile / Vertical no Desktop */}
             <nav className="flex md:flex-col gap-2 overflow-x-auto md:overflow-visible pb-2 md:pb-0 hide-scrollbar">
               {tabs.map(tab => (
                 <button
@@ -131,7 +170,6 @@ const ConfigModal = ({ isOpen, onClose, onSave, valorAtual, nomeAtual, userEmail
             </nav>
           </div>
           
-          {/* Card do Usuário (Escondido em telas muito pequenas para dar espaço) */}
           <div className="hidden md:block px-2">
             <div className="p-3 bg-indigo-50 dark:bg-indigo-900/20 rounded-xl border border-indigo-100 dark:border-indigo-900/50">
                 <div className="flex items-center gap-3 mb-2">
@@ -154,7 +192,7 @@ const ConfigModal = ({ isOpen, onClose, onSave, valorAtual, nomeAtual, userEmail
         {/* ÁREA DE CONTEÚDO */}
         <div className="flex-1 flex flex-col bg-white dark:bg-gray-900 overflow-hidden">
             
-            {/* Header Desktop (Escondido no Mobile para ganhar espaço) */}
+            {/* Header Desktop */}
             <div className="hidden md:flex h-16 border-b border-gray-100 dark:border-gray-800 items-center justify-between px-6 shrink-0">
                 <h3 className="text-lg font-bold text-gray-800 dark:text-white">
                     {tabs.find(t => t.id === activeTab)?.label}
@@ -168,10 +206,10 @@ const ConfigModal = ({ isOpen, onClose, onSave, valorAtual, nomeAtual, userEmail
             <div className="flex-1 overflow-y-auto p-6 custom-scrollbar">
                 <form id="configForm" onSubmit={handleSubmit} className="space-y-6">
                     
-                    {/* TAB: GERAL */}
+                    {/* TAB: GERAL (Perfil) */}
                     {activeTab === 'geral' && (
                         <div className="space-y-6 animate-fade-in">
-                            {/* Avatar Upload Real */}
+                            {/* Avatar Upload */}
                             <div className="flex items-center gap-4">
                                 <div 
                                     className="relative group cursor-pointer w-20 h-20 shrink-0"
@@ -189,7 +227,6 @@ const ConfigModal = ({ isOpen, onClose, onSave, valorAtual, nomeAtual, userEmail
                                         <Upload size={20} className="text-white" />
                                     </div>
                                     
-                                    {/* Input File Invisível */}
                                     <input 
                                         type="file" 
                                         ref={fileInputRef} 
@@ -200,7 +237,7 @@ const ConfigModal = ({ isOpen, onClose, onSave, valorAtual, nomeAtual, userEmail
                                 </div>
                                 <div>
                                     <h4 className="text-sm font-bold text-gray-900 dark:text-white">Sua Foto</h4>
-                                    <p className="text-xs text-gray-500 max-w-[200px] mb-2">Toque na imagem para alterar. Será exibida nos relatórios.</p>
+                                    <p className="text-xs text-gray-500 max-w-[200px] mb-2">Toque na imagem para alterar.</p>
                                     <button type="button" onClick={handlePhotoClick} className="text-xs font-bold text-indigo-600 hover:underline">Escolher arquivo...</button>
                                 </div>
                             </div>
@@ -217,14 +254,17 @@ const ConfigModal = ({ isOpen, onClose, onSave, valorAtual, nomeAtual, userEmail
                                     />
                                 </div>
                                 <div>
-                                    <label className="block text-xs font-bold text-gray-500 dark:text-gray-400 uppercase mb-1">Cargo / Título</label>
-                                    <input 
-                                        type="text" 
-                                        value={cargo}
-                                        onChange={(e) => setCargo(e.target.value)}
-                                        className="w-full border rounded-lg px-3 py-2.5 outline-none focus:ring-2 focus:ring-indigo-500 bg-gray-50 dark:bg-gray-800 border-gray-200 dark:border-gray-700 text-gray-900 dark:text-white transition-all"
-                                        placeholder="Ex: Consultor Sênior"
-                                    />
+                                    <label className="block text-xs font-bold text-gray-500 dark:text-gray-400 uppercase mb-1">Whatsapp</label>
+                                    <div className="relative">
+                                      <Phone size={16} className="absolute left-3 top-3 text-gray-400"/>
+                                      <input 
+                                          type="text" 
+                                          value={whatsapp}
+                                          onChange={handleWhatsappChange}
+                                          className="w-full border rounded-lg pl-10 pr-3 py-2.5 outline-none focus:ring-2 focus:ring-indigo-500 bg-gray-50 dark:bg-gray-800 border-gray-200 dark:border-gray-700 text-gray-900 dark:text-white transition-all"
+                                          placeholder="(00) 00000-0000"
+                                      />
+                                    </div>
                                 </div>
                             </div>
                         </div>
@@ -234,9 +274,9 @@ const ConfigModal = ({ isOpen, onClose, onSave, valorAtual, nomeAtual, userEmail
                     {activeTab === 'financeiro' && (
                         <div className="space-y-6 animate-fade-in">
                             <div className="bg-green-50 dark:bg-green-900/20 p-4 rounded-xl border border-green-100 dark:border-green-800">
-                                <h4 className="text-green-800 dark:text-green-300 font-bold text-sm mb-1">Cálculo de Receita</h4>
+                                <h4 className="text-green-800 dark:text-green-300 font-bold text-sm mb-1">Dados de Pagamento</h4>
                                 <p className="text-xs text-green-700 dark:text-green-400">
-                                    Defina seu valor hora base para cálculos automáticos.
+                                    Essas informações são usadas para gerar seus recibos e cálculos.
                                 </p>
                             </div>
 
@@ -249,6 +289,20 @@ const ConfigModal = ({ isOpen, onClose, onSave, valorAtual, nomeAtual, userEmail
                                     className="w-full border rounded-lg px-4 py-3 outline-none focus:ring-2 focus:ring-green-500 bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700 text-gray-900 dark:text-white font-bold text-xl"
                                     placeholder="R$ 0,00"
                                 />
+                            </div>
+
+                            <div className="space-y-3 pt-2">
+                                <div className="text-xs font-bold text-gray-500 uppercase tracking-wider flex items-center gap-2">
+                                  <Landmark size={14}/> Dados Bancários
+                                </div>
+                                <div className="grid grid-cols-2 gap-4">
+                                    <input type="text" value={banco} onChange={e => setBanco(e.target.value)} className="w-full border rounded-lg p-2.5 bg-gray-50 dark:bg-gray-800 dark:border-gray-700 dark:text-white text-sm" placeholder="Banco (Ex: Nubank)" />
+                                    <input type="text" value={agencia} onChange={e => setAgencia(e.target.value)} className="w-full border rounded-lg p-2.5 bg-gray-50 dark:bg-gray-800 dark:border-gray-700 dark:text-white text-sm" placeholder="Agência" />
+                                </div>
+                                <div className="grid grid-cols-2 gap-4">
+                                    <input type="text" value={conta} onChange={e => setConta(e.target.value)} className="w-full border rounded-lg p-2.5 bg-gray-50 dark:bg-gray-800 dark:border-gray-700 dark:text-white text-sm" placeholder="Conta Corrente" />
+                                    <input type="text" value={chavePix} onChange={e => setChavePix(e.target.value)} className="w-full border rounded-lg p-2.5 bg-gray-50 dark:bg-gray-800 dark:border-gray-700 dark:text-white text-sm" placeholder="Chave PIX" />
+                                </div>
                             </div>
                         </div>
                     )}
@@ -266,7 +320,6 @@ const ConfigModal = ({ isOpen, onClose, onSave, valorAtual, nomeAtual, userEmail
                                         <p className="text-xs text-gray-500">Altera a aparência de todo o sistema</p>
                                     </div>
                                 </div>
-                                {/* Toggle Visual e Funcional */}
                                 <div className={`w-12 h-6 rounded-full p-1 transition-colors duration-300 ${temaEscuro ? 'bg-indigo-600' : 'bg-gray-300'}`}>
                                     <div className={`w-4 h-4 bg-white rounded-full shadow-sm transform transition-transform duration-300 ${temaEscuro ? 'translate-x-6' : 'translate-x-0'}`}></div>
                                 </div>

@@ -29,13 +29,15 @@ const DemandsBoard = ({ userId, userRole, showToast }) => {
     carregarTudo();
   }, []);
 
+  // --- CARREGAMENTO DE DADOS ---
   const carregarTudo = async () => {
     setLoading(true);
     try {
+        // 1. Busca perfil para ter certeza da consultoria
         const { data: profile } = await supabase.from('profiles').select('consultoria_id').eq('id', userId).single();
         if (!profile) return;
 
-        // 1. Busca Demandas (com dados do vencedor e do cliente)
+        // 2. Busca Demandas (com joins para trazer nomes)
         const { data: demandsData, error: demandsError } = await supabase
             .from('demandas')
             .select(`
@@ -49,17 +51,19 @@ const DemandsBoard = ({ userId, userRole, showToast }) => {
         if (demandsError) throw demandsError;
         setDemandas(demandsData);
 
-        // 2. Busca Clientes (para o select do modal)
-        const { data: clientsData } = await supabase
-            .from('clientes')
-            .select('id, nome')
-            .eq('consultoria_id', profile.consultoria_id)
-            .eq('ativo', true)
-            .order('nome');
-        
-        setClientes(clientsData || []);
+        // 3. Busca Clientes (apenas se for admin, para popular o select)
+        if (['admin', 'dono', 'super_admin'].includes(userRole)) {
+            const { data: clientsData } = await supabase
+                .from('clientes')
+                .select('id, nome')
+                .eq('consultoria_id', profile.consultoria_id)
+                .eq('ativo', true)
+                .order('nome');
+            
+            setClientes(clientsData || []);
+        }
 
-        // 3. Busca Candidaturas
+        // 4. Busca Candidaturas (para saber quem aplicou onde)
         const demandasIds = demandsData.map(d => d.id);
         if (demandasIds.length > 0) {
             const { data: candData } = await supabase
@@ -80,6 +84,7 @@ const DemandsBoard = ({ userId, userRole, showToast }) => {
     }
   };
 
+  // --- MODAIS ---
   const abrirModalCriacao = () => {
       setEditingId(null);
       setFormData({ 
@@ -101,25 +106,28 @@ const DemandsBoard = ({ userId, userRole, showToast }) => {
       setShowModal(true);
   };
 
+  // --- AÇÕES CRUD ---
   const handleSalvar = async (e) => {
     e.preventDefault();
     try {
         const { data: profile } = await supabase.from('profiles').select('consultoria_id').eq('id', userId).single();
         
+        // CORREÇÃO: Tratamento de strings vazias para campos opcionais
         const payload = {
             ...formData,
+            // Se for string vazia, manda null. Se tiver valor, manda o valor.
+            cliente_id: formData.cliente_id === '' ? null : formData.cliente_id, 
+            data_expiracao: formData.data_expiracao === '' ? null : formData.data_expiracao,
+            
             consultoria_id: profile.consultoria_id,
-            // Se for criação, adiciona criado_por e status inicial
             ...(editingId ? {} : { criado_por: userId, status: 'aberta' })
         };
 
         if (editingId) {
-            // Update
             const { error } = await supabase.from('demandas').update(payload).eq('id', editingId);
             if (error) throw error;
             if(showToast) showToast('Demanda atualizada!', 'sucesso');
         } else {
-            // Insert
             const { error } = await supabase.from('demandas').insert([payload]);
             if (error) throw error;
             if(showToast) showToast('Demanda publicada no mural!', 'sucesso');
@@ -134,8 +142,12 @@ const DemandsBoard = ({ userId, userRole, showToast }) => {
     }
   };
 
+  // --- AÇÃO: CANDIDATAR-SE ---
   const handleCandidatar = async (demandaId) => {
     try {
+        // Validação simples para evitar duplo clique
+        if (jaMeCandidatei(demandaId)) return;
+
         const { error } = await supabase.from('candidaturas').insert([{
             demanda_id: demandaId,
             consultor_id: userId
@@ -150,10 +162,12 @@ const DemandsBoard = ({ userId, userRole, showToast }) => {
     }
   };
 
+  // --- AÇÃO: APROVAR CONSULTOR (ADMIN) ---
   const handleAprovar = async (demandaId, consultorId) => {
       if(!window.confirm("Confirmar este consultor e encerrar a demanda?")) return;
 
       try {
+          // Atualiza a demanda com o vencedor e fecha ela
           const { error: demError } = await supabase
             .from('demandas')
             .update({ vencedor_id: consultorId, status: 'atribuida' })
@@ -170,32 +184,36 @@ const DemandsBoard = ({ userId, userRole, showToast }) => {
       }
   };
 
+  // --- HELPERS DE UI ---
   const isExpired = (dateString) => {
       if (!dateString) return false;
-      const hoje = new Date().toISOString().split('T')[0];
+      const hoje = new Date().toISOString().split('T')[0]; // Comparação simples YYYY-MM-DD
       return dateString < hoje;
   };
 
-  // Helpers de UI
   const jaMeCandidatei = (demandaId) => candidaturas.some(c => c.demanda_id === demandaId && c.consultor_id === userId);
+  
   const getCandidatosDaDemanda = (demandaId) => candidaturas.filter(c => c.demanda_id === demandaId);
+
+  // Permissões
+  const isOwner = ['admin', 'dono', 'super_admin'].includes(userRole);
 
   return (
     <div className="space-y-6 animate-fade-in pb-10">
         
-        {/* Header */}
+        {/* Header da Página */}
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-white dark:bg-gray-800 p-6 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700">
             <div>
                 <h1 className="text-xl font-bold text-gray-800 dark:text-white flex items-center gap-2">
                     <Target className="text-indigo-600" /> Mural de Oportunidades
                 </h1>
                 <p className="text-gray-500 dark:text-gray-400 text-sm">
-                    {userRole === 'admin' || userRole === 'super_admin' 
+                    {isOwner
                         ? 'Gerencie demandas e distribua tarefas.' 
                         : 'Candidate-se a novas oportunidades.'}
                 </p>
             </div>
-            {(userRole === 'admin' || userRole === 'super_admin') && (
+            {isOwner && (
                 <button 
                     onClick={abrirModalCriacao}
                     className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2.5 rounded-xl font-bold flex items-center gap-2 shadow-lg shadow-indigo-200 dark:shadow-none transition-all active:scale-95"
@@ -205,7 +223,7 @@ const DemandsBoard = ({ userId, userRole, showToast }) => {
             )}
         </div>
 
-        {/* Grid de Demandas */}
+        {/* Grid de Cards */}
         {loading ? (
             <div className="text-center py-10 text-gray-400">Carregando oportunidades...</div>
         ) : demandas.length === 0 ? (
@@ -218,11 +236,10 @@ const DemandsBoard = ({ userId, userRole, showToast }) => {
                 {demandas.map(demanda => {
                     const candidatos = getCandidatosDaDemanda(demanda.id);
                     const souCandidato = jaMeCandidatei(demanda.id);
-                    const isOwner = (userRole === 'admin' || userRole === 'super_admin');
                     const isFinalizada = demanda.status !== 'aberta';
                     const expirada = isExpired(demanda.data_expiracao);
                     
-                    // Lógica de "Perdi a vaga"
+                    // Lógica visual: "Perdi a vaga" (Estava concorrendo, fechou e não fui eu)
                     const perdiVaga = souCandidato && isFinalizada && demanda.vencedor_id && demanda.vencedor_id !== userId;
 
                     return (
@@ -241,7 +258,7 @@ const DemandsBoard = ({ userId, userRole, showToast }) => {
                             )}
 
                             <div className="p-6 flex-1">
-                                {/* Badges Superiores */}
+                                {/* Badges de Status */}
                                 <div className="flex flex-wrap gap-2 mb-3">
                                     <span className={`px-2.5 py-1 rounded-lg text-xs font-bold uppercase tracking-wide flex items-center gap-1
                                         ${isFinalizada 
@@ -254,7 +271,6 @@ const DemandsBoard = ({ userId, userRole, showToast }) => {
                                         {isFinalizada ? 'Concluída' : expirada ? 'Expirada' : 'Em Aberto'}
                                     </span>
                                     
-                                    {/* Data de Expiração */}
                                     {demanda.data_expiracao && !isFinalizada && (
                                         <span className={`flex items-center gap-1 text-xs font-bold px-2 py-1 rounded-lg
                                             ${expirada ? 'text-red-500 bg-red-50' : 'text-gray-500 bg-gray-100 dark:bg-gray-700'}
@@ -279,7 +295,7 @@ const DemandsBoard = ({ userId, userRole, showToast }) => {
                                     {demanda.descricao}
                                 </p>
 
-                                {/* Estimativa */}
+                                {/* Estimativa de Valor/Horas */}
                                 <div className="flex items-center gap-2">
                                     {demanda.tipo_pagamento === 'horas' ? (
                                         <span className="flex items-center gap-1 text-xs font-bold text-gray-600 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 px-2 py-1 rounded">
@@ -315,7 +331,7 @@ const DemandsBoard = ({ userId, userRole, showToast }) => {
                             {/* Footer do Card */}
                             <div className="p-4 border-t border-gray-100 dark:border-gray-700 bg-gray-50 dark:bg-gray-900/50 rounded-b-2xl">
                                 
-                                {/* VISÃO DO ADMIN */}
+                                {/* AÇÕES DO ADMIN: Ver Candidatos e Aprovar */}
                                 {isOwner && !isFinalizada && (
                                     <div className="space-y-3">
                                         <p className="text-xs font-bold text-gray-400 uppercase flex items-center gap-1">
@@ -343,7 +359,7 @@ const DemandsBoard = ({ userId, userRole, showToast }) => {
                                     </div>
                                 )}
 
-                                {/* VISÃO DO CONSULTOR */}
+                                {/* AÇÕES DO CONSULTOR: Candidatar-se */}
                                 {!isOwner && !isFinalizada && !expirada && (
                                     <>
                                         {souCandidato ? (
@@ -361,7 +377,7 @@ const DemandsBoard = ({ userId, userRole, showToast }) => {
                                     </>
                                 )}
 
-                                {/* Mensagens de Status Finais */}
+                                {/* Feedbacks Finais */}
                                 {perdiVaga && (
                                     <div className="text-center text-xs text-red-500 font-bold flex items-center justify-center gap-1">
                                         <UserX size={14}/> Não selecionado desta vez
@@ -379,7 +395,7 @@ const DemandsBoard = ({ userId, userRole, showToast }) => {
             </div>
         )}
 
-        {/* MODAL NOVA/EDITAR DEMANDA */}
+        {/* MODAL CRIAR/EDITAR DEMANDA */}
         {showModal && createPortal(
             <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in" onClick={(e) => e.stopPropagation()}>
                 <div className="bg-white dark:bg-gray-900 w-full max-w-lg rounded-2xl p-6 shadow-2xl animate-scale-in border border-gray-200 dark:border-gray-800" onClick={(e) => e.stopPropagation()}>

@@ -2,20 +2,23 @@ import React, { useEffect, useState } from 'react';
 import { Lightbulb } from 'lucide-react';
 
 const ThemeToggle = () => {
-  // Estado inicial verifica o localStorage ou a preferência do sistema
+  // Inicializa o estado verificando Storage ou Preferência do SO.
+  // Usa uma função de callback para rodar essa verificação apenas uma vez (Lazy Initialization).
   const [theme, setTheme] = useState(() => {
+    // Verificação de segurança para evitar erros em Server-Side Rendering (Next.js)
     if (typeof window !== 'undefined') {
       const savedTheme = localStorage.getItem('theme');
       if (savedTheme) {
         return savedTheme;
       }
+      // Se não houver salvo, respeita a preferência do sistema operacional
       return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
     }
-    return 'light';
+    return 'light'; // Fallback padrão
   });
 
+  // Sincroniza a classe CSS 'dark' no HTML e salva no LocalStorage sempre que o tema muda
   useEffect(() => {
-    // A mágica do Tailwind: adiciona ou remove a classe 'dark' no HTML
     const root = window.document.documentElement;
     
     if (theme === 'dark') {
@@ -34,6 +37,7 @@ const ThemeToggle = () => {
   return (
     <button
       onClick={toggleTheme}
+      aria-label="Alternar tema entre claro e escuro"
       className={`
         relative p-2 rounded-xl transition-all duration-300 ease-in-out group
         ${theme === 'dark' 
@@ -47,7 +51,7 @@ const ThemeToggle = () => {
         className={`transition-transform duration-500 ${theme === 'dark' ? 'fill-yellow-400 scale-110' : 'scale-100'}`} 
       />
       
-      {/* Efeito de brilho extra "Neon" quando ativo */}
+      {/* Efeito visual de brilho (Glow) ativo apenas no modo Dark */}
       {theme === 'dark' && (
         <span className="absolute inset-0 rounded-xl bg-yellow-400 opacity-20 blur-md animate-pulse"></span>
       )}

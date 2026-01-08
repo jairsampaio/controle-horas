@@ -16,17 +16,20 @@ const Sidebar = ({ activeTab, setActiveTab, isOpen, onClose, onLogout, onOpenCon
   const [newPassword, setNewPassword] = useState('');
   const [loadingProfile, setLoadingProfile] = useState(false);
 
+  // --- CARREGAR DADOS DO USUÁRIO ---
   useEffect(() => {
     const fetchRoleAndName = async () => {
       const { data: { user } } = await supabase.auth.getUser();
       if (user) {
+        // MANUTENÇÃO: Busca 'role' (cargo correto no banco) e 'nome'
         const { data } = await supabase
           .from('profiles')
-          .select('cargo, nome') 
+          .select('role, nome') 
           .eq('id', user.id)
           .single();
         
-        setUserRole(data?.cargo);
+        // Se não achar 'role', assume 'colaborador' por segurança
+        setUserRole(data?.role || 'colaborador');
         setUserName(data?.nome || '');
         setEditName(data?.nome || ''); 
       }
@@ -38,6 +41,7 @@ const Sidebar = ({ activeTab, setActiveTab, isOpen, onClose, onLogout, onOpenCon
     document.documentElement.classList.toggle('dark');
   };
 
+  // --- ATUALIZAR PERFIL ---
   const handleUpdateProfile = async (e) => {
     e.preventDefault();
     setLoadingProfile(true);
@@ -45,6 +49,7 @@ const Sidebar = ({ activeTab, setActiveTab, isOpen, onClose, onLogout, onOpenCon
     try {
       const updates = {};
       
+      // 1. Atualizar Senha (Auth)
       if (newPassword) {
         if (newPassword.length < 6) throw new Error("A nova senha deve ter no mínimo 6 caracteres.");
         const { error } = await supabase.auth.updateUser({ password: newPassword });
@@ -52,14 +57,18 @@ const Sidebar = ({ activeTab, setActiveTab, isOpen, onClose, onLogout, onOpenCon
         updates.passwordUpdated = true;
       }
 
+      // 2. Atualizar Nome (Banco + Auth Metadata)
       if (editName !== userName) {
         const { data: { user } } = await supabase.auth.getUser();
+        
+        // Atualiza na tabela pública
         const { error: dbError } = await supabase
             .from('profiles')
             .update({ nome: editName })
             .eq('id', user.id);
         if (dbError) throw dbError;
 
+        // Atualiza nos metadados do Auth (opcional, mas bom para consistência)
         await supabase.auth.updateUser({ data: { nome_completo: editName } });
         
         setUserName(editName);
@@ -80,14 +89,21 @@ const Sidebar = ({ activeTab, setActiveTab, isOpen, onClose, onLogout, onOpenCon
     }
   };
 
+  // --- COMPONENTE INTERNO DE MENU ---
   const MenuButton = ({ id, icon: Icon, label, requiredRole }) => {
+    // Lógica de Permissão:
+    // 1. Super Admin vê tudo.
+    // 2. Se o botão exige role X e o usuário não tem X (e não é super), esconde.
     if (requiredRole && requiredRole !== userRole && userRole !== 'super_admin') return null;
+    
+    // 3. Se o botão é EXCLUSIVO de super_admin, ninguém mais vê.
     if (requiredRole === 'super_admin' && userRole !== 'super_admin') return null;
 
     return (
       <button
         onClick={() => {
           setActiveTab(id);
+          // Fecha o menu no mobile ao clicar
           if (window.innerWidth < 768) onClose();
         }}
         className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 font-medium text-sm
@@ -105,12 +121,14 @@ const Sidebar = ({ activeTab, setActiveTab, isOpen, onClose, onLogout, onOpenCon
 
   return (
     <>
+      {/* Overlay Escuro (Mobile) */}
       {isOpen && (
         <div className="fixed inset-0 bg-black/50 z-40 md:hidden backdrop-blur-sm" onClick={onClose} />
       )}
 
       <aside className={`fixed md:static inset-y-0 left-0 z-50 w-72 bg-white dark:bg-gray-900 border-r border-gray-200 dark:border-gray-800 transform transition-transform duration-300 ease-in-out flex flex-col ${isOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}`}>
         
+        {/* Logo */}
         <div className="h-16 flex items-center justify-between px-6 border-b border-gray-100 dark:border-gray-800">
           <div className="flex items-center gap-2 font-black text-xl text-indigo-600 tracking-tight">
             <Briefcase className="fill-indigo-600 text-white" size={24} />
@@ -119,6 +137,7 @@ const Sidebar = ({ activeTab, setActiveTab, isOpen, onClose, onLogout, onOpenCon
           <button onClick={onClose} className="md:hidden text-gray-400 hover:text-gray-600"><X size={24} /></button>
         </div>
 
+        {/* Menu Principal */}
         <nav className="flex-1 overflow-y-auto p-4 space-y-1 custom-scrollbar">
           
           <div className="pb-2 mb-2 border-b border-gray-100 dark:border-gray-800">
@@ -128,14 +147,16 @@ const Sidebar = ({ activeTab, setActiveTab, isOpen, onClose, onLogout, onOpenCon
             <MenuButton id="servicos" icon={Briefcase} label="Meus Serviços" />
             <MenuButton id="demandas" icon={Target} label="Mural de Demandas" />
             
-            {/* CORRIGIDO: Agora usa MenuButton e aponta para a aba 'channels' */}
+            {/* Menu Canais: Acessível a todos */}
             <MenuButton id="channels" icon={Building2} label="Canais / Parceiros" />
 
             <MenuButton id="clientes" icon={Users} label="Clientes" />
             
+            {/* Menu Equipe: Apenas para Admin/Dono */}
             <MenuButton id="team" icon={Users} label="Minha Equipe" requiredRole="admin" />
           </div>
 
+          {/* Área Super Admin (SaaS) */}
           {userRole === 'super_admin' && (
             <div className="pt-2 pb-2 mb-2 border-b border-gray-100 dark:border-gray-800">
               <p className="px-4 text-[10px] font-bold text-yellow-600 dark:text-yellow-500 uppercase tracking-wider mb-2">Administração SaaS</p>
@@ -147,6 +168,7 @@ const Sidebar = ({ activeTab, setActiveTab, isOpen, onClose, onLogout, onOpenCon
 
         </nav>
 
+        {/* Rodapé da Sidebar */}
         <div className="p-4 border-t border-gray-100 dark:border-gray-800 bg-gray-50 dark:bg-gray-900/50">
           <button onClick={() => { onOpenConfig(); if(window.innerWidth < 768) onClose(); }} className="w-full flex items-center gap-3 px-4 py-2 text-sm text-gray-600 dark:text-gray-400 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors rounded-lg hover:bg-white dark:hover:bg-gray-800 mb-1">
             <Settings size={18} /> Configurações
@@ -157,17 +179,18 @@ const Sidebar = ({ activeTab, setActiveTab, isOpen, onClose, onLogout, onOpenCon
           </button>
 
           <div className="mt-3 pt-3 border-t border-gray-200 dark:border-gray-700">
+            {/* Perfil Resumido */}
             <div 
               className="px-4 mb-2 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg py-2 transition-colors group"
               onClick={() => setShowProfileModal(true)}
               title="Clique para editar seu perfil"
             >
               <p className="text-xs font-bold text-gray-900 dark:text-white truncate group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors">
-                {userName || 'Usuário'}
+                {userName || 'Carregando...'}
               </p>
               <div className="flex justify-between items-center">
                 <p className="text-[10px] text-gray-500 dark:text-gray-500 truncate max-w-[120px]">{userEmail}</p>
-                <span className="text-[10px] uppercase font-bold text-indigo-500">{userRole || '...'}</span>
+                <span className="text-[10px] uppercase font-bold text-indigo-500">{userRole ? userRole.replace('_', ' ') : '...'}</span>
               </div>
             </div>
             
@@ -178,6 +201,7 @@ const Sidebar = ({ activeTab, setActiveTab, isOpen, onClose, onLogout, onOpenCon
         </div>
       </aside>
 
+      {/* MODAL DE PERFIL */}
       {showProfileModal && createPortal(
         <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in" onClick={(e) => e.stopPropagation()}>
            <div className="bg-white dark:bg-gray-900 w-full max-w-sm rounded-2xl shadow-2xl p-6 border border-gray-200 dark:border-gray-800 animate-scale-in" onClick={(e) => e.stopPropagation()}>
@@ -230,7 +254,7 @@ const Sidebar = ({ activeTab, setActiveTab, isOpen, onClose, onLogout, onOpenCon
                     <button 
                       type="submit" 
                       disabled={loadingProfile}
-                      className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2.5 rounded-lg flex items-center justify-center gap-2 transition-all shadow-md"
+                      className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2.5 rounded-lg flex items-center justify-center gap-2 transition-all shadow-md disabled:opacity-50"
                     >
                        {loadingProfile ? 'Salvando...' : <><Save size={18} /> Salvar Alterações</>}
                     </button>
