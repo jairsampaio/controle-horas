@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom'; 
 import { 
   LayoutDashboard, Briefcase, Users, Settings, LogOut, X, 
-  ShieldCheck, Wallet, FileText, Building2, Lightbulb, User, Lock, Save, Target
+  ShieldCheck, Wallet, FileText, Building2, Lightbulb, User, Lock, Save, Target, Calendar
 } from 'lucide-react';
 import supabase from '../services/supabase';
 
@@ -154,7 +154,21 @@ const Sidebar = ({ activeTab, setActiveTab, isOpen, onClose, onLogout, onOpenCon
             
             {/* Menu Equipe: Apenas para Admin/Dono */}
             <MenuButton id="team" icon={Users} label="Minha Equipe" requiredRole="admin" />
-          </div>
+
+            {/* --- AQUI ESTÁ O BOTÃO DA AGENDA QUE FALTA --- */}
+            <button 
+                onClick={() => { setActiveTab('agenda'); if (window.innerWidth < 768 && onClose) onClose(); }}
+                className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 font-medium text-sm
+                    ${activeTab === 'agenda' 
+                    ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-200 dark:shadow-none' 
+                    : 'text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 hover:text-indigo-600 dark:hover:text-indigo-400'
+                    }
+                `}
+            >
+                <Calendar size={20} className={activeTab === 'agenda' ? 'text-white' : ''} />
+                <span>Agenda da Equipe</span>
+            </button>
+          </div>    
 
           {/* Área Super Admin (SaaS) */}
           {userRole === 'super_admin' && (

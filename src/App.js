@@ -4,7 +4,7 @@ import React, { useState, useEffect } from 'react';
 import { 
   Clock, DollarSign, User, FileText, Plus, Filter, Settings, Mail, Users, 
   LayoutDashboard, Briefcase, Hourglass, Timer, CheckCircle, FileCheck, 
-  Building2, Menu, Eye, EyeOff, ShieldCheck, Wallet, LayoutList, Kanban, Target 
+  Building2, Menu, Eye, EyeOff, ShieldCheck, Wallet, LayoutList, Kanban, Target, Calendar 
 } from 'lucide-react'; 
 import supabase from './services/supabase'; 
 import StatusCard from './components/StatusCard';
@@ -29,6 +29,7 @@ import AdminPlans from './components/AdminPlans';
 import TeamManagement from './components/TeamManagement';
 import AccessDenied from './components/AccessDenied'; 
 import DemandsBoard from './components/DemandsBoard'; 
+import TeamCalendar from './components/TeamCalendar';
 import { formatCurrency, formatHoursInt } from './utils/formatters'; 
 
 const App = () => {
@@ -653,7 +654,7 @@ const App = () => {
               {activeTab === 'servicos' && <><Briefcase className="text-indigo-600 dark:text-indigo-400" /> Meus Serviços</>}
               {activeTab === 'clientes' && <><Users className="text-indigo-600 dark:text-indigo-400" /> Clientes</>}
               {activeTab === 'demandas' && <><Target className="text-indigo-600 dark:text-indigo-400" /> Mural de Oportunidades</>}
-              
+              {activeTab === 'agenda' && <><Calendar className="text-indigo-600 dark:text-indigo-400" /> Agenda da Equipe</>}              
               {activeTab === 'admin-tenants' && <><ShieldCheck className="text-yellow-600 dark:text-yellow-400" /> Gestão de Assinantes</>}
               {activeTab === 'admin-finance' && <><Wallet className="text-yellow-600 dark:text-yellow-400" /> Financeiro</>}
               {activeTab === 'team' && <><Users className="text-indigo-600 dark:text-indigo-400" /> Gestão de Equipe</>}
@@ -779,6 +780,14 @@ const App = () => {
                             userId={session?.user?.id} 
                             userRole={userRole} 
                             showToast={showToast} 
+                        />
+                    )}
+
+                    {activeTab === 'agenda' && (
+                        <TeamCalendar 
+                            userId={session?.user?.id}
+                            userRole={userRole}
+                            showToast={showToast}
                         />
                     )}
 
