@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Calendar, dateFnsLocalizer } from 'react-big-calendar';
 import format from 'date-fns/format';
 import parse from 'date-fns/parse';
@@ -7,27 +7,141 @@ import getDay from 'date-fns/getDay';
 import ptBR from 'date-fns/locale/pt-BR';
 import withDragAndDrop from 'react-big-calendar/lib/addons/dragAndDrop';
 import 'react-big-calendar/lib/css/react-big-calendar.css';
-import 'react-big-calendar/lib/addons/dragAndDrop/styles.css'; // Estilo do Drag & Drop
+import 'react-big-calendar/lib/addons/dragAndDrop/styles.css';
 
 import { 
   X, Save, Trash2, User, Calendar as CalendarIcon, 
-  Clock, Filter, Plus, GripVertical
+  Clock, Filter, Plus, ChevronDown, Check, Square, CheckSquare
 } from 'lucide-react';
 import supabase from '../services/supabase';
 
 // --- CONFIGURAÇÃO ---
 const locales = { 'pt-BR': ptBR };
 const localizer = dateFnsLocalizer({ format, parse, startOfWeek, getDay, locales });
-const DnDCalendar = withDragAndDrop(Calendar); // Versão com Drag & Drop
+const DnDCalendar = withDragAndDrop(Calendar);
 
+// --- NOVO COMPONENTE: MULTISELECT COM CHECKBOX ---
+const ConsultantMultiSelect = ({ options, selected, onChange }) => {
+  const [isOpen, setIsOpen] = useState(false);
+  const containerRef = useRef(null);
+
+  // Fecha o menu se clicar fora dele
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (containerRef.current && !containerRef.current.contains(event.target)) {
+        setIsOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  const toggleOption = (id) => {
+    let newSelected = [...selected];
+
+    if (id === 'todos') {
+        // Se clicou em "Todos", limpa o resto e deixa só "todos"
+        if (!selected.includes('todos')) {
+            onChange(['todos']);
+        }
+        return;
+    }
+
+    // Se "Todos" estava selecionado, remove ele, pois agora vamos selecionar específicos
+    if (newSelected.includes('todos')) {
+        newSelected = [];
+    }
+
+    // Lógica de Toggle (Adicionar/Remover ID)
+    if (newSelected.includes(id)) {
+        newSelected = newSelected.filter(item => item !== id);
+    } else {
+        newSelected.push(id);
+    }
+
+    // Se desmarcou tudo, volta para o padrão 'todos'
+    if (newSelected.length === 0) {
+        newSelected = ['todos'];
+    }
+
+    onChange(newSelected);
+  };
+
+  // Texto do botão (Resumo)
+  const getLabel = () => {
+    if (selected.includes('todos')) return 'Toda a Equipe';
+    if (selected.length === 1) {
+        const found = options.find(o => o.id === selected[0]);
+        return found ? (found.nome || found.email) : '1 Selecionado';
+    }
+    return `${selected.length} Consultores`;
+  };
+
+  return (
+    <div className="relative" ref={containerRef}>
+      <button 
+        onClick={() => setIsOpen(!isOpen)}
+        className="flex items-center gap-2 bg-white dark:bg-gray-800 px-3 py-2 rounded-lg border border-gray-200 dark:border-gray-600 text-sm font-bold text-gray-700 dark:text-gray-300 hover:border-indigo-500 transition-colors shadow-sm min-w-[200px] justify-between"
+      >
+        <div className="flex items-center gap-2">
+            <Filter size={16} className="text-indigo-600" />
+            <span className="truncate max-w-[140px]">{getLabel()}</span>
+        </div>
+        <ChevronDown size={16} className={`text-gray-400 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
+      </button>
+
+      {isOpen && (
+        <div className="absolute top-full right-0 mt-2 w-64 bg-white dark:bg-gray-900 rounded-xl shadow-xl border border-gray-200 dark:border-gray-700 z-50 overflow-hidden animate-fade-in">
+            <div className="p-1 max-h-60 overflow-y-auto custom-scrollbar">
+                
+                {/* Opção TODOS */}
+                <button
+                    onClick={() => toggleOption('todos')}
+                    className="w-full flex items-center gap-3 px-3 py-2.5 text-sm hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors text-left"
+                >
+                    <div className={`w-5 h-5 rounded border flex items-center justify-center transition-colors ${selected.includes('todos') ? 'bg-indigo-600 border-indigo-600' : 'border-gray-300 dark:border-gray-600'}`}>
+                        {selected.includes('todos') && <Check size={14} className="text-white" />}
+                    </div>
+                    <span className="text-gray-700 dark:text-gray-200 font-medium">Toda a Equipe</span>
+                </button>
+
+                <div className="h-px bg-gray-100 dark:bg-gray-800 my-1 mx-2" />
+
+                {/* Lista de Consultores */}
+                {options.map(opt => {
+                    const isSelected = selected.includes(opt.id);
+                    return (
+                        <button
+                            key={opt.id}
+                            onClick={() => toggleOption(opt.id)}
+                            className="w-full flex items-center gap-3 px-3 py-2 text-sm hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors text-left group"
+                        >
+                            <div className={`w-5 h-5 rounded border flex items-center justify-center transition-colors ${isSelected ? 'bg-indigo-600 border-indigo-600' : 'border-gray-300 dark:border-gray-600 group-hover:border-indigo-400'}`}>
+                                {isSelected && <Check size={14} className="text-white" />}
+                            </div>
+                            <span className={`truncate ${isSelected ? 'text-indigo-700 dark:text-indigo-400 font-bold' : 'text-gray-600 dark:text-gray-400'}`}>
+                                {opt.nome || opt.email}
+                            </span>
+                        </button>
+                    );
+                })}
+            </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+// --- COMPONENTE PRINCIPAL ---
 const TeamCalendar = ({ userId, userRole, showToast }) => {
   const [events, setEvents] = useState([]);
   const [team, setTeam] = useState([]);
   const [loading, setLoading] = useState(true);
   const [modalOpen, setModalOpen] = useState(false);
-  const [filterConsultant, setFilterConsultant] = useState('todos');
+  
+  // MUDANÇA: Agora é um array, começando com 'todos'
+  const [filterConsultant, setFilterConsultant] = useState(['todos']);
 
-  // Estado do Formulário (Separando Data e Hora para UX melhor)
   const [formData, setFormData] = useState({
     id: null,
     titulo: '',
@@ -55,15 +169,25 @@ const TeamCalendar = ({ userId, userRole, showToast }) => {
     setLoading(true);
     try {
       let query = supabase.from('agenda_eventos').select('*');
-      if (isAdmin && filterConsultant !== 'todos') query = query.eq('consultor_id', filterConsultant);
-      else if (!isAdmin) query = query.eq('consultor_id', userId);
+
+      // LÓGICA DE FILTRO ATUALIZADA
+      if (isAdmin) {
+          if (!filterConsultant.includes('todos')) {
+              // Busca apenas os IDs que estão no array selecionado
+              query = query.in('consultor_id', filterConsultant);
+          }
+          // Se for 'todos', traz tudo (respeitando o RLS do banco)
+      } else {
+          // Se não é admin, só vê o seu
+          query = query.eq('consultor_id', userId);
+      }
 
       const { data, error } = await query;
       if (error) throw error;
 
       const formattedEvents = (data || []).map(evt => ({
         ...evt,
-        title: evt.titulo, // O calendário espera 'title'
+        title: evt.titulo,
         start: new Date(evt.inicio),
         end: new Date(evt.fim),
         resourceId: evt.consultor_id
@@ -79,10 +203,15 @@ const TeamCalendar = ({ userId, userRole, showToast }) => {
 
   useEffect(() => { fetchTeam(); fetchEvents(); }, [fetchTeam, fetchEvents]);
 
-  // --- AÇÕES DO CALENDÁRIO ---
-  
-  // 1. Clicar em horário vazio
+  // --- AÇÕES ---
   const handleSelectSlot = ({ start, end }) => {
+    // Se o filtro tiver apenas UMA pessoa selecionada (e não for 'todos'),
+    // assume que o admin quer agendar para essa pessoa.
+    let preSelectedConsultant = userId;
+    if (isAdmin && filterConsultant.length === 1 && filterConsultant[0] !== 'todos') {
+        preSelectedConsultant = filterConsultant[0];
+    }
+
     setFormData({
       id: null,
       titulo: '',
@@ -92,12 +221,11 @@ const TeamCalendar = ({ userId, userRole, showToast }) => {
       data_fim: format(end, 'yyyy-MM-dd'),
       hora_fim: format(end, 'HH:mm'),
       tipo: 'execucao',
-      consultor_id: isAdmin && filterConsultant !== 'todos' ? filterConsultant : userId
+      consultor_id: preSelectedConsultant
     });
     setModalOpen(true);
   };
 
-  // 2. Clicar em evento existente
   const handleSelectEvent = (event) => {
     setFormData({
       id: event.id,
@@ -113,7 +241,6 @@ const TeamCalendar = ({ userId, userRole, showToast }) => {
     setModalOpen(true);
   };
 
-  // 3. Arrastar e Soltar (Mudar horário rápido)
   const handleEventDrop = async ({ event, start, end }) => {
     try {
       const { error } = await supabase.from('agenda_eventos').update({
@@ -122,23 +249,18 @@ const TeamCalendar = ({ userId, userRole, showToast }) => {
       }).eq('id', event.id);
 
       if (error) throw error;
-      
-      // Atualiza localmente para parecer instantâneo
       setEvents(prev => prev.map(ev => ev.id === event.id ? { ...ev, start, end } : ev));
       if (showToast) showToast('Horário atualizado!', 'sucesso');
     } catch (error) {
       console.error(error);
-      if (showToast) showToast('Erro ao mover evento.', 'erro');
+      if (showToast) showToast('Erro ao mover.', 'erro');
     }
   };
 
-  // --- SALVAR ---
   const handleSave = async (e) => {
     e.preventDefault();
     try {
       const { data: profile } = await supabase.from('profiles').select('consultoria_id').eq('id', userId).single();
-      
-      // Reconstrói as datas completas
       const inicioISO = new Date(`${formData.data_inicio}T${formData.hora_inicio}`).toISOString();
       const fimISO = new Date(`${formData.data_fim}T${formData.hora_fim}`).toISOString();
 
@@ -161,7 +283,7 @@ const TeamCalendar = ({ userId, userRole, showToast }) => {
 
       setModalOpen(false);
       fetchEvents();
-      if (showToast) showToast('Agendamento salvo!', 'sucesso');
+      if (showToast) showToast('Salvo com sucesso!', 'sucesso');
     } catch (error) {
       console.error(error);
       if (showToast) showToast('Erro ao salvar.', 'erro');
@@ -169,7 +291,7 @@ const TeamCalendar = ({ userId, userRole, showToast }) => {
   };
 
   const handleDelete = async () => {
-    if (!window.confirm('Excluir este item?')) return;
+    if (!window.confirm('Excluir?')) return;
     try {
       await supabase.from('agenda_eventos').delete().eq('id', formData.id);
       setModalOpen(false);
@@ -179,9 +301,7 @@ const TeamCalendar = ({ userId, userRole, showToast }) => {
   };
 
   const eventStyleGetter = (event) => {
-    const colors = { 
-      execucao: '#3b82f6', reuniao: '#8b5cf6', bloqueio: '#ef4444', pessoal: '#10b981' 
-    };
+    const colors = { execucao: '#3b82f6', reuniao: '#8b5cf6', bloqueio: '#ef4444', pessoal: '#10b981' };
     return {
       style: {
         backgroundColor: colors[event.tipo] || '#3b82f6',
@@ -200,17 +320,16 @@ const TeamCalendar = ({ userId, userRole, showToast }) => {
           <p className="text-sm text-gray-500">Arraste para mover • Clique para editar</p>
         </div>
         
-        <div className="flex gap-3">
+        <div className="flex gap-3 items-center">
             {isAdmin && (
-            <div className="flex items-center gap-2 bg-gray-50 dark:bg-gray-700 p-2 rounded-lg border border-gray-200 dark:border-gray-600">
-                <Filter size={16} className="text-gray-500" />
-                <select value={filterConsultant} onChange={(e) => setFilterConsultant(e.target.value)} className="bg-transparent text-sm font-bold outline-none text-indigo-600 dark:text-indigo-400">
-                <option value="todos">Todos</option>
-                {team.map(m => <option key={m.id} value={m.id}>{m.nome || m.email}</option>)}
-                </select>
-            </div>
+                // AQUI ENTRA O NOVO COMPONENTE DE MULTISELECT
+                <ConsultantMultiSelect 
+                    options={team} 
+                    selected={filterConsultant} 
+                    onChange={setFilterConsultant} 
+                />
             )}
-            <button onClick={() => handleSelectSlot({ start: new Date(), end: new Date() })} className="bg-indigo-600 text-white px-4 py-2 rounded-lg font-bold text-sm hover:bg-indigo-700 transition-colors flex items-center gap-2">
+            <button onClick={() => handleSelectSlot({ start: new Date(), end: new Date() })} className="bg-indigo-600 text-white px-4 py-2 rounded-lg font-bold text-sm hover:bg-indigo-700 transition-colors flex items-center gap-2 h-[38px]">
                 <Plus size={18} /> Novo
             </button>
         </div>
