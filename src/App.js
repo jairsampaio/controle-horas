@@ -367,7 +367,7 @@ const App = () => {
   };
 
   const deletarServico = async (id) => {
-    if (!confirm('Tem certeza que deseja excluir este serviço?')) return;
+   
     try {
       const { error } = await supabase.from('servicos_prestados').delete().eq('id', id);
       if (error) throw error;
@@ -626,6 +626,7 @@ const App = () => {
       );
   }
 
+
   // --- RENDERIZAÇÃO PRINCIPAL DO APP ---
   return (
     <div className="flex h-screen bg-gray-50 dark:bg-gray-950 overflow-hidden">
@@ -664,7 +665,7 @@ const App = () => {
             </h1>
           </div>
           
-          {['dashboard', 'servicos', 'clientes'].includes(activeTab) && (
+          {['servicos'].includes(activeTab) && (
             <button onClick={() => { resetForm(); setShowModal(true); }} className="bg-indigo-600 dark:bg-indigo-600 text-white px-4 py-2 rounded-xl flex items-center gap-2 hover:bg-indigo-700 dark:hover:bg-indigo-500 transition-all duration-200 hover:scale-105 active:scale-95 text-sm font-bold shadow-md shadow-indigo-200 dark:shadow-none">
                 <Plus size={18} /><span className="hidden sm:inline">Novo Serviço</span>
             </button>
@@ -829,6 +830,7 @@ const App = () => {
         setFormData={setFormData} 
         clientes={clientesAtivos} 
         isEditing={!!editingService} 
+        onDelete={deletarServico}
       />
       
       <ClientModal isOpen={showClienteModal} onClose={() => { setShowClienteModal(false); setEditingCliente(null); resetClienteForm(); }} onSave={salvarCliente} formData={clienteFormData} setFormData={setClienteFormData} isEditing={!!editingCliente} />
