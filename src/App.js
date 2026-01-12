@@ -371,8 +371,14 @@ const App = () => {
     try {
       const { error } = await supabase.from('servicos_prestados').delete().eq('id', id);
       if (error) throw error;
-      showToast('Serviço excluído!', 'sucesso'); carregarDados();
-    } catch (error) { console.error('Erro deletar:', error); showToast('Erro ao excluir serviço!', 'erro'); }
+      showToast('Serviço excluído!', 'sucesso'); 
+      carregarDados();
+      return true; // Retornamos true para o modal saber que deu certo e fechar
+    } catch (error) { 
+      console.error('Erro deletar:', error); 
+      showToast('Erro ao excluir serviço!', 'erro'); 
+      return false;
+    }
   };
 
   const alterarStatusRapido = async (id, novoStatus) => {
@@ -824,8 +830,9 @@ const App = () => {
 
       <ServiceModal 
         isOpen={showModal} 
-        onClose={() => { setShowModal(false); setEditingService(null); resetForm(); }} 
+        onClose={() => { setShowModal(false); setEditingService(null); resetForm(); }}
         onSave={salvarServico} 
+        onDelete={deletarServico}
         formData={formData} 
         setFormData={setFormData} 
         clientes={clientesAtivos} 
