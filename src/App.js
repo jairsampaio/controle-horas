@@ -367,7 +367,7 @@ const App = () => {
   };
 
   const deletarServico = async (id) => {
-   
+    if (!confirm('Tem certeza que deseja excluir este serviço?')) return;
     try {
       const { error } = await supabase.from('servicos_prestados').delete().eq('id', id);
       if (error) throw error;
@@ -830,7 +830,6 @@ const App = () => {
         setFormData={setFormData} 
         clientes={clientesAtivos} 
         isEditing={!!editingService} 
-        onDelete={deletarServico}
       />
       
       <ClientModal isOpen={showClienteModal} onClose={() => { setShowClienteModal(false); setEditingCliente(null); resetClienteForm(); }} onSave={salvarCliente} formData={clienteFormData} setFormData={setClienteFormData} isEditing={!!editingCliente} />
