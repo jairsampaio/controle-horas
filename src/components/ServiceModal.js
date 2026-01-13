@@ -1,10 +1,10 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react'; // <--- Adicionei useRef
 import { 
   X, Save, Clock, DollarSign, User, FileText, Calendar, 
-  Activity, List, RotateCcw, Building2, AlertCircle, Info, Trash2
+  Activity, List, RotateCcw, Building2, AlertCircle, Info, Trash2, AlertTriangle
 } from 'lucide-react'; 
 import supabase from '../services/supabase';
-import ConfirmModal from './ConfirmModal'; // <--- Importando seu modal bonito
+import ConfirmModal from './ConfirmModal'; 
 
 const ServiceModal = ({ isOpen, onClose, onSave, onDelete, formData, setFormData, clientes, isEditing }) => {
   const [loading, setLoading] = useState(false);
@@ -20,6 +20,9 @@ const ServiceModal = ({ isOpen, onClose, onSave, onDelete, formData, setFormData
   const [modoLancamento, setModoLancamento] = useState('detalhado'); 
   const [horasTotais, setHorasTotais] = useState('');
   const [previsaoDistribuicao, setPrevisaoDistribuicao] = useState(null); 
+
+  // --- REF PARA EVITAR PISCA-PISCA ---
+  const lastClientRef = useRef(null);
 
   // --- EFEITO: INICIALIZAÇÃO ---
   useEffect(() => {
@@ -37,6 +40,9 @@ const ServiceModal = ({ isOpen, onClose, onSave, onDelete, formData, setFormData
       setPrevisaoDistribuicao(null);
       setHorasTotais('');
       setShowConfirmModal(false);
+      
+      // Reseta a ref ao abrir o modal
+      lastClientRef.current = null;
 
       if (formData.canal_id === "") {
         setFormData(prev => ({ ...prev, canal_id: null }));
@@ -66,11 +72,27 @@ const ServiceModal = ({ isOpen, onClose, onSave, onDelete, formData, setFormData
     if (isOpen) carregarCanais();
   }, [isOpen]);
 
-  // Carregar Solicitantes
+  // --- CORREÇÃO DO PISCA-PISCA AQUI ---
   useEffect(() => {
+    if (!isOpen) return;
+
+    // Se o cliente não mudou desde a última vez e já temos lista, NÃO FAZ NADA.
+    // Isso impede que digitar na observação (que muda formData) dispare isso aqui.
+    if (formData.cliente === lastClientRef.current && listaSolicitantes.length > 0) {
+        return;
+    }
+
+    // Atualiza a referência do último cliente
+    lastClientRef.current = formData.cliente;
+
     const carregarSolicitantesDoCliente = async () => {
-      setListaSolicitantes([]); 
-      if (!formData.cliente) return;
+      // Se não tem cliente, limpa a lista e sai
+      if (!formData.cliente) {
+          setListaSolicitantes([]);
+          return;
+      }
+      
+      // NÃO limpe a lista aqui com setListaSolicitantes([]), isso causa o pisca!
       
       const clienteObj = clientes.find(c => c.nome === formData.cliente);
       if (!clienteObj) return;
@@ -86,8 +108,9 @@ const ServiceModal = ({ isOpen, onClose, onSave, onDelete, formData, setFormData
       if (!error) setListaSolicitantes(data || []);
       setLoadingSolicitantes(false);
     };
-    if (isOpen) carregarSolicitantesDoCliente();
-  }, [formData.cliente, clientes, isOpen]);
+    
+    carregarSolicitantesDoCliente();
+  }, [formData.cliente, clientes, isOpen]); // Removi listaSolicitantes das deps para não criar loop
 
   if (!isOpen) return null;
 

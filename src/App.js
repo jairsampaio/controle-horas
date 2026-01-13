@@ -227,72 +227,85 @@ const App = () => {
     }
   };
 
-  // --- CARREGAR DADOS E APLICAR BARREIRA DE SEGURANÇA ---
-  const carregarDados = async () => {
-    try {
-      // 1. Busca o perfil completo do usuário logado (com dados da consultoria)
-      const { data: userProfile, error: profileError } = await supabase
-        .from('profiles')
-        .select('*, consultorias(id, status)') 
-        .eq('id', session.user.id)
-        .single();
+// --- CARREGAR DADOS E APLICAR BARREIRA DE SEGURANÇA ---
+  const carregarDados = async () => {
+    try {
+      // 1. Busca o perfil completo do usuário logado
+      const { data: userProfile, error: profileError } = await supabase
+        .from('profiles')
+        .select('*, consultorias(id, status)') 
+        .eq('id', session.user.id)
+        .single();
 
-      if (profileError || !userProfile) {
-        console.error("Usuário sem perfil.", profileError);
-        return;
-      }
+      if (profileError || !userProfile) {
+        console.error("Usuário sem perfil.", profileError);
+        return;
+      }
 
-      setProfileData(userProfile); // Guarda o perfil completo para uso posterior
-      setUserRole(userProfile.cargo); 
+      setProfileData(userProfile);
+      setUserRole(userProfile.role || userProfile.cargo); // Garante pegar o campo certo (role ou cargo)
 
-      // --- BARREIRA DE SEGURANÇA ---
-      if (userProfile.ativo === false) {
-          setAccessDeniedType('usuario_bloqueado');
-          return; 
-      }
+      // --- BARREIRA DE SEGURANÇA ---
+      if (userProfile.ativo === false) {
+          setAccessDeniedType('usuario_bloqueado');
+          return; 
+      }
 
-      if (userProfile.consultorias?.status === 'bloqueada') {
-          setAccessDeniedType('consultoria_bloqueada');
-          return; 
-      }
-      setAccessDeniedType(null);
-      // --- FIM DA BARREIRA ---
+      if (userProfile.consultorias?.status === 'bloqueada') {
+          setAccessDeniedType('consultoria_bloqueada');
+          return; 
+      }
+      setAccessDeniedType(null);
+      // --- FIM DA BARREIRA ---
 
-      const meuId = userProfile.consultoria_id;
+      const meuId = userProfile.consultoria_id;
+      if (!meuId) return;
 
-      if (!meuId) return;
-
-      const { data: dataServicos, error: errorServicos } = await supabase
+      // --- CORREÇÃO DA BUSCA DE SERVIÇOS ---
+      // 1. Monta a query base (filtrando pela empresa)
+      let query = supabase
         .from('servicos_prestados')
-        .select('*, canais(nome)') 
-        .eq('consultoria_id', meuId) 
-        .order('data', { ascending: false });
-      
-      if (errorServicos) throw errorServicos;
-      setServicos(dataServicos);
+        .select('*, canais(nome)')
+        .eq('consultoria_id', meuId);
 
-      const { data: dataClientes, error: errorClientes } = await supabase
-        .from('clientes')
-        .select('*') 
-        .eq('consultoria_id', meuId) 
-        .order('nome', { ascending: true });
+      // 2. SE NÃO FOR CHEFE, APLICA FILTRO DE USUÁRIO
+      const isChefe = userProfile.role === 'admin' || userProfile.role === 'dono' || userProfile.cargo === 'admin' || userProfile.cargo === 'dono';
       
-      if (errorClientes) throw errorClientes;
-      setClientes(dataClientes);
+      if (!isChefe) {
+          // Consultor vê apenas os seus
+          query = query.eq('user_id', session.user.id);
+      }
 
-      const { data: dataCanais, error: errorCanais } = await supabase
-        .from('canais')
-        .select('*')
-        .eq('ativo', true)
-        .eq('consultoria_id', meuId)
-        .order('nome', { ascending: true });
-      
-      if (!errorCanais) setCanais(dataCanais);
+      // 3. Executa a query final
+      const { data: dataServicos, error: errorServicos } = await query.order('data', { ascending: false });
+      
+      if (errorServicos) throw errorServicos;
+      setServicos(dataServicos);
 
-    } catch (error) { 
-      console.error('Erro ao carregar dados:', error); 
-    }
-  };
+      // --- CARREGA CLIENTES ---
+      const { data: dataClientes, error: errorClientes } = await supabase
+        .from('clientes')
+        .select('*') 
+        .eq('consultoria_id', meuId) 
+        .order('nome', { ascending: true });
+      
+      if (errorClientes) throw errorClientes;
+      setClientes(dataClientes);
+
+      // --- CARREGA CANAIS ---
+      const { data: dataCanais, error: errorCanais } = await supabase
+        .from('canais')
+        .select('*')
+        .eq('ativo', true)
+        .eq('consultoria_id', meuId)
+        .order('nome', { ascending: true });
+      
+      if (!errorCanais) setCanais(dataCanais);
+
+    } catch (error) { 
+      console.error('Erro ao carregar dados:', error); 
+    }
+  };
 
   useEffect(() => {
     getSession();
