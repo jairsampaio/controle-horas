@@ -24,3 +24,29 @@
 .animate-fade-in-up {
   animation: slideUpFade 0.4s ease-out both;
 }
+
+/* FORÇA BRUTA PARA OS BOTÕES DO CALENDÁRIO FUNCIONAREM */
+.rbc-toolbar button {
+  background-color: #f3f4f6 !important; /* Cinza claro */
+  color: #374151 !important; /* Texto escuro */
+  border: 1px solid #d1d5db !important; /* Borda visível */
+  cursor: pointer !important;
+  z-index: 50 !important; /* Garante que fique acima de tudo */
+  position: relative !important;
+  pointer-events: auto !important; /* Garante que receba o clique */
+}
+
+.rbc-toolbar button:hover {
+  background-color: #e5e7eb !important;
+}
+
+.rbc-toolbar button.rbc-active {
+  background-color: #4f46e5 !important; /* Roxo ativo */
+  color: white !important;
+  border-color: #4f46e5 !important;
+}
+
+/* Garante que o texto dos dias/meses apareça */
+.rbc-button-link {
+  pointer-events: auto !important;
+}

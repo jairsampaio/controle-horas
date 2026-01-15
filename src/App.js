@@ -277,35 +277,35 @@ const App = () => {
       }
 
       // 3. Executa a query final
-      const { data: dataServicos, error: errorServicos } = await query.order('data', { ascending: false });
-      
-      if (errorServicos) throw errorServicos;
-      setServicos(dataServicos);
+      const { data: dataServicos, error: errorServicos } = await query.order('data', { ascending: false });
+ 
+      if (errorServicos) throw errorServicos;
+      setServicos(dataServicos);
 
       // --- CARREGA CLIENTES ---
-      const { data: dataClientes, error: errorClientes } = await supabase
-        .from('clientes')
-        .select('*') 
-        .eq('consultoria_id', meuId) 
-        .order('nome', { ascending: true });
-      
-      if (errorClientes) throw errorClientes;
-      setClientes(dataClientes);
+      const { data: dataClientes, error: errorClientes } = await supabase
+        .from('clientes')
+        .select('*') 
+        .eq('consultoria_id', meuId) 
+        .order('nome', { ascending: true });
+ 
+      if (errorClientes) throw errorClientes;
+      setClientes(dataClientes);
 
       // --- CARREGA CANAIS ---
-      const { data: dataCanais, error: errorCanais } = await supabase
-        .from('canais')
-        .select('*')
-        .eq('ativo', true)
-        .eq('consultoria_id', meuId)
-        .order('nome', { ascending: true });
-      
-      if (!errorCanais) setCanais(dataCanais);
+      const { data: dataCanais, error: errorCanais } = await supabase
+        .from('canais')
+        .select('*')
+        .eq('ativo', true)
+        .eq('consultoria_id', meuId)
+        .order('nome', { ascending: true });
+  
+      if (!errorCanais) setCanais(dataCanais);
 
-    } catch (error) { 
-      console.error('Erro ao carregar dados:', error); 
-    }
-  };
+    } catch (error) { 
+      console.error('Erro ao carregar dados:', error); 
+    }
+  };
 
   useEffect(() => {
     getSession();
