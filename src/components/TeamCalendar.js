@@ -20,101 +20,84 @@ const locales = { 'pt-BR': ptBR };
 const localizer = dateFnsLocalizer({ format, parse, startOfWeek, getDay, locales });
 const DnDCalendar = withDragAndDrop(Calendar);
 
-// --- ESTILOS PREMIUM E CORREÇÃO DE BOTÕES ---
-const calendarStyles = `
-  /* === MODO CLARO (PADRÃO) === */
-  /* Força cor e fundo nos botões para garantir visibilidade */
-  .rbc-toolbar button {
-    color: #374151 !important;        /* Cinza Escuro */
-    background-color: #f9fafb !important; /* Fundo Claro */
-    border: 1px solid #d1d5db !important; /* Borda Visível */
+// --- ESTILOS PREMIUM BLINDADOS ---
+const customStyles = `
+  /* --- BOTÕES DA TOOLBAR (MODO CLARO) --- */
+  .rbc-calendar .rbc-toolbar button {
+    color: #374151 !important;
+    background-color: #f9fafb !important;
+    border: 1px solid #d1d5db !important;
     cursor: pointer !important;
+    transition: all 0.2s ease-in-out;
     font-weight: 600 !important;
     padding: 6px 12px !important;
     border-radius: 6px !important;
-    margin: 0 2px !important;
-    transition: all 0.2s ease-in-out !important;
+    margin-right: 4px;
   }
-  
-  .rbc-toolbar button:hover {
-    background-color: #e5e7eb !important; /* Hover */
+  .rbc-calendar .rbc-toolbar button:hover {
+    background-color: #e5e7eb !important;
     color: #111827 !important;
+    z-index: 10;
   }
-
-  .rbc-toolbar button.rbc-active {
-    background-color: #4f46e5 !important; /* Indigo Ativo */
+  .rbc-calendar .rbc-toolbar button.rbc-active {
+    background-color: #4f46e5 !important;
     border-color: #4f46e5 !important;
     color: white !important;
-    box-shadow: 0 2px 4px rgba(79, 70, 229, 0.3) !important;
+    box-shadow: 0 4px 6px -1px rgba(79, 70, 229, 0.3) !important;
+  }
+  .rbc-calendar .rbc-toolbar button:focus {
+    outline: none !important;
+    box-shadow: 0 0 0 2px #c7d2fe !important;
   }
 
-  /* === MODO DARK (PREMIUM) === */
-  .dark .rbc-calendar {
+  /* --- BOTÕES DA TOOLBAR (MODO DARK) --- */
+  .dark .rbc-calendar .rbc-toolbar button {
     color: #e5e7eb !important;
-    background-color: #111827 !important; /* Fundo Geral Escuro */
+    background-color: #1f2937 !important;
+    border: 1px solid #374151 !important;
   }
-
-  .dark .rbc-toolbar button {
-    color: #e5e7eb !important; /* Texto Claro */
-    background-color: #1f2937 !important; /* Fundo Cinza Escuro */
-    border: 1px solid #374151 !important; /* Borda Sutil */
-  }
-
-  .dark .rbc-toolbar button:hover {
-    background-color: #374151 !important; /* Hover Dark */
+  .dark .rbc-calendar .rbc-toolbar button:hover {
+    background-color: #374151 !important;
     border-color: #6b7280 !important;
   }
-
-  .dark .rbc-toolbar button.rbc-active {
-    background-color: #4f46e5 !important; /* Indigo Ativo */
+  .dark .rbc-calendar .rbc-toolbar button.rbc-active {
+    background-color: #4f46e5 !important;
     border-color: #4f46e5 !important;
     color: white !important;
   }
+  .dark .rbc-calendar .rbc-toolbar button:focus {
+    box-shadow: 0 0 0 2px #312e81 !important;
+  }
 
-  /* Ajustes Visuais do Grid Dark */
+  /* --- VISUAL GERAL DARK MODE --- */
+  .dark .rbc-calendar { background-color: #111827; color: #e5e7eb; }
   .dark .rbc-header { 
-    border-bottom: 1px solid #374151 !important; 
-    color: #9ca3af !important; 
+    border-bottom: 1px solid #374151; 
+    color: #9ca3af; 
+    padding: 10px 0;
     text-transform: uppercase;
     font-size: 0.75rem;
-    padding: 10px 0;
   }
+  .dark .rbc-off-range-bg { background-color: #111827; opacity: 0.5; }
+  .dark .rbc-today { background-color: rgba(79, 70, 229, 0.1); }
   
-  .dark .rbc-month-view, 
-  .dark .rbc-time-view, 
-  .dark .rbc-agenda-view { 
-    border: 1px solid #374151 !important; 
-    background-color: #111827 !important;
-    border-radius: 0.75rem;
-    overflow: hidden;
+  .dark .rbc-month-view, .dark .rbc-time-view, .dark .rbc-agenda-view { 
+    border: 1px solid #374151; 
+    border-radius: 8px;
+    background-color: #111827;
   }
-
-  .dark .rbc-off-range-bg { background-color: #1f2937 !important; opacity: 0.5; }
-  .dark .rbc-today { background-color: rgba(79, 70, 229, 0.1) !important; }
+  .dark .rbc-day-bg + .rbc-day-bg { border-left: 1px solid #374151; }
+  .dark .rbc-month-row + .rbc-month-row { border-top: 1px solid #374151; }
+  .dark .rbc-time-content { border-top: 1px solid #374151; }
+  .dark .rbc-time-header-content { border-left: 1px solid #374151; }
+  .dark .rbc-timeslot-group { border-bottom: 1px solid #374151; }
+  .dark .rbc-day-slot .rbc-time-slot { border-top: 1px solid #374151; }
   
-  .dark .rbc-day-bg + .rbc-day-bg,
-  .dark .rbc-month-row + .rbc-month-row,
-  .dark .rbc-time-content,
-  .dark .rbc-time-header-content,
-  .dark .rbc-timeslot-group,
-  .dark .rbc-day-slot .rbc-time-slot {
-    border-color: #374151 !important;
-  }
-
-  /* Eventos mais bonitos */
-  .rbc-event { 
-    border-radius: 6px !important; 
-    border: none !important; 
-    padding: 2px 6px !important;
-    font-size: 0.85rem !important;
-    box-shadow: 0 1px 2px rgba(0,0,0,0.1) !important;
-  }
-  .dark .rbc-event { 
-    box-shadow: 0 2px 4px rgba(0,0,0,0.3) !important; 
-  }
+  .rbc-event { border-radius: 6px; border: none; padding: 2px 5px; }
+  .dark .rbc-event { box-shadow: 0 2px 4px rgba(0,0,0,0.4); }
 `;
 
-// --- MULTISELECT ---
+// --- COMPONENTE MULTISELECT (CORRIGIDO Z-INDEX) ---
 const ConsultantMultiSelect = ({ options, selected, onChange }) => {
   const [isOpen, setIsOpen] = useState(false);
   const containerRef = useRef(null);
@@ -165,9 +148,13 @@ const ConsultantMultiSelect = ({ options, selected, onChange }) => {
       </button>
 
       {isOpen && (
-        <div className="absolute top-full right-0 mt-2 w-64 bg-white dark:bg-gray-900 rounded-xl shadow-xl border border-gray-200 dark:border-gray-700 z-50 overflow-hidden animate-fade-in">
+        // AQUI ESTÁ A CORREÇÃO: mudei z-50 para z-[9999]
+        <div className="absolute top-full right-0 mt-2 w-64 bg-white dark:bg-gray-900 rounded-xl shadow-xl border border-gray-200 dark:border-gray-700 z-[9999] overflow-hidden animate-fade-in">
             <div className="p-1 max-h-60 overflow-y-auto custom-scrollbar">
-                <button onClick={() => toggleOption('todos')} className="w-full flex items-center gap-3 px-3 py-2.5 text-sm hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors text-left">
+                <button
+                    onClick={() => toggleOption('todos')}
+                    className="w-full flex items-center gap-3 px-3 py-2.5 text-sm hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors text-left"
+                >
                     <div className={`w-5 h-5 rounded border flex items-center justify-center transition-colors ${selected.includes('todos') ? 'bg-indigo-600 border-indigo-600' : 'border-gray-300 dark:border-gray-600'}`}>
                         {selected.includes('todos') && <Check size={14} className="text-white" />}
                     </div>
@@ -177,11 +164,17 @@ const ConsultantMultiSelect = ({ options, selected, onChange }) => {
                 {options.map(opt => {
                     const isSelected = selected.includes(opt.id);
                     return (
-                        <button key={opt.id} onClick={() => toggleOption(opt.id)} className="w-full flex items-center gap-3 px-3 py-2 text-sm hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors text-left group">
+                        <button
+                            key={opt.id}
+                            onClick={() => toggleOption(opt.id)}
+                            className="w-full flex items-center gap-3 px-3 py-2 text-sm hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors text-left group"
+                        >
                             <div className={`w-5 h-5 rounded border flex items-center justify-center transition-colors ${isSelected ? 'bg-indigo-600 border-indigo-600' : 'border-gray-300 dark:border-gray-600 group-hover:border-indigo-400'}`}>
                                 {isSelected && <Check size={14} className="text-white" />}
                             </div>
-                            <span className={`truncate ${isSelected ? 'text-indigo-700 dark:text-indigo-400 font-bold' : 'text-gray-600 dark:text-gray-400'}`}>{opt.nome || opt.email}</span>
+                            <span className={`truncate ${isSelected ? 'text-indigo-700 dark:text-indigo-400 font-bold' : 'text-gray-600 dark:text-gray-400'}`}>
+                                {opt.nome || opt.email}
+                            </span>
                         </button>
                     );
                 })}
@@ -192,14 +185,17 @@ const ConsultantMultiSelect = ({ options, selected, onChange }) => {
   );
 };
 
-// --- COMPONENTE PRINCIPAL ---
+// --- COMPONENTE PRINCIPAL (TeamCalendar) ---
 const TeamCalendar = ({ userId, userRole, showToast }) => {
   const [events, setEvents] = useState([]);
   const [team, setTeam] = useState([]);
   const [loading, setLoading] = useState(true);
   const [modalOpen, setModalOpen] = useState(false);
+  
+  // Filtro
   const [filterConsultant, setFilterConsultant] = useState(['todos']);
 
+  // Formulário
   const [formData, setFormData] = useState({
     id: null,
     titulo: '',
@@ -214,6 +210,7 @@ const TeamCalendar = ({ userId, userRole, showToast }) => {
 
   const isAdmin = ['admin', 'dono', 'super_admin'].includes(userRole);
 
+  // --- CARREGAMENTO DE EQUIPE ---
   const fetchTeam = useCallback(async () => {
     if (!isAdmin) return;
     const { data: profile } = await supabase.from('profiles').select('consultoria_id').eq('id', userId).single();
@@ -222,17 +219,23 @@ const TeamCalendar = ({ userId, userRole, showToast }) => {
     setTeam(data || []);
   }, [isAdmin, userId]);
 
+  // --- CARREGAMENTO DE EVENTOS ---
   const fetchEvents = useCallback(async () => {
     setLoading(true);
     try {
       let query = supabase.from('agenda_eventos').select('*');
+
       if (isAdmin) {
-          if (!filterConsultant.includes('todos')) query = query.in('consultor_id', filterConsultant);
+          if (!filterConsultant.includes('todos')) {
+              query = query.in('consultor_id', filterConsultant);
+          }
       } else {
           query = query.eq('consultor_id', userId);
       }
+
       const { data, error } = await query;
       if (error) throw error;
+
       const formattedEvents = (data || []).map(evt => ({
         ...evt,
         title: evt.titulo,
@@ -251,7 +254,7 @@ const TeamCalendar = ({ userId, userRole, showToast }) => {
 
   useEffect(() => { fetchTeam(); fetchEvents(); }, [fetchTeam, fetchEvents]);
 
-  // Lógica de "Novo" e seleção
+  // --- LÓGICA DE SELEÇÃO E DATA DE HOJE ---
   const handleSelectSlot = ({ start, end }) => {
     let preSelectedConsultant = userId;
     if (isAdmin && filterConsultant.length === 1 && filterConsultant[0] !== 'todos') {
@@ -259,7 +262,6 @@ const TeamCalendar = ({ userId, userRole, showToast }) => {
     }
 
     const now = new Date();
-    // Se start for null (botão Novo), usa agora. Se for clique no grid, usa o slot.
     const safeStart = start || now;
     const safeEnd = end || now;
 
@@ -268,9 +270,9 @@ const TeamCalendar = ({ userId, userRole, showToast }) => {
       titulo: '',
       descricao: '',
       data_inicio: format(safeStart, 'yyyy-MM-dd'),
-      hora_inicio: start ? format(safeStart, 'HH:mm') : '09:00', // Sugere 09h se for botão
+      hora_inicio: start ? format(safeStart, 'HH:mm') : '09:00',
       data_fim: format(safeEnd, 'yyyy-MM-dd'),
-      hora_fim: end ? format(safeEnd, 'HH:mm') : '10:00', // Sugere 10h se for botão
+      hora_fim: end ? format(safeEnd, 'HH:mm') : '10:00',
       tipo: 'execucao',
       consultor_id: preSelectedConsultant
     });
@@ -298,20 +300,28 @@ const TeamCalendar = ({ userId, userRole, showToast }) => {
         inicio: start.toISOString(),
         fim: end.toISOString()
       }).eq('id', event.id);
+
       if (error) throw error;
       setEvents(prev => prev.map(ev => ev.id === event.id ? { ...ev, start, end } : ev));
       if (showToast) showToast('Horário atualizado!', 'sucesso');
-    } catch (error) { console.error(error); if (showToast) showToast('Erro ao mover.', 'erro'); }
+    } catch (error) {
+      console.error(error);
+      if (showToast) showToast('Erro ao mover.', 'erro');
+    }
   };
 
-  const handleEventResize = ({ event, start, end }) => handleEventDrop({ event, start, end });
+  const handleEventResize = ({ event, start, end }) => {
+      handleEventDrop({ event, start, end });
+  };
 
+  // --- SALVAR E DELETAR ---
   const handleSave = async (e) => {
     e.preventDefault();
     try {
       const { data: profile } = await supabase.from('profiles').select('consultoria_id').eq('id', userId).single();
       const inicioISO = new Date(`${formData.data_inicio}T${formData.hora_inicio}`).toISOString();
       const fimISO = new Date(`${formData.data_fim}T${formData.hora_fim}`).toISOString();
+
       const payload = {
         consultoria_id: profile.consultoria_id,
         consultor_id: formData.consultor_id,
@@ -322,13 +332,20 @@ const TeamCalendar = ({ userId, userRole, showToast }) => {
         tipo: formData.tipo,
         criado_por: userId
       };
-      if (formData.id) await supabase.from('agenda_eventos').update(payload).eq('id', formData.id);
-      else await supabase.from('agenda_eventos').insert([payload]);
-      
+
+      if (formData.id) {
+        await supabase.from('agenda_eventos').update(payload).eq('id', formData.id);
+      } else {
+        await supabase.from('agenda_eventos').insert([payload]);
+      }
+
       setModalOpen(false);
       fetchEvents();
       if (showToast) showToast('Salvo com sucesso!', 'sucesso');
-    } catch (error) { console.error(error); if (showToast) showToast('Erro ao salvar.', 'erro'); }
+    } catch (error) {
+      console.error(error);
+      if (showToast) showToast('Erro ao salvar.', 'erro');
+    }
   };
 
   const handleDelete = async () => {
@@ -353,8 +370,8 @@ const TeamCalendar = ({ userId, userRole, showToast }) => {
 
   return (
     <div className="h-full flex flex-col space-y-4 animate-fade-in p-4 md:p-6">
-      {/* INJEÇÃO DE CSS CUSTOMIZADO (VENCE O CSS DA LIB) */}
-      <style>{calendarStyles}</style>
+      {/* CSS CUSTOMIZADO */}
+      <style>{customStyles}</style>
 
       <div className="flex flex-col md:flex-row justify-between items-center gap-4 bg-white dark:bg-gray-800 p-4 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700">
         <div>
@@ -365,7 +382,13 @@ const TeamCalendar = ({ userId, userRole, showToast }) => {
         </div>
         
         <div className="flex gap-3 items-center">
-            {isAdmin && <ConsultantMultiSelect options={team} selected={filterConsultant} onChange={setFilterConsultant} />}
+            {isAdmin && (
+                <ConsultantMultiSelect 
+                    options={team} 
+                    selected={filterConsultant} 
+                    onChange={setFilterConsultant} 
+                />
+            )}
             <button onClick={() => handleSelectSlot({ start: null, end: null })} className="bg-indigo-600 text-white px-4 py-2 rounded-lg font-bold text-sm hover:bg-indigo-700 transition-colors flex items-center gap-2 h-[38px]">
                 <Plus size={18} /> Novo
             </button>
@@ -382,7 +405,7 @@ const TeamCalendar = ({ userId, userRole, showToast }) => {
           culture='pt-BR'
           selectable
           resizable
-          views={['month', 'week', 'day', 'agenda']} // Garante as views
+          views={['month', 'week', 'day', 'agenda']}
           onSelectSlot={handleSelectSlot}
           onSelectEvent={handleSelectEvent}
           onEventDrop={handleEventDrop}
