@@ -28,7 +28,8 @@ import AdminFinance from './components/AdminFinance';
 import AdminPlans from './components/AdminPlans';
 import TeamManagement from './components/TeamManagement';
 import AccessDenied from './components/AccessDenied'; 
-import DemandsBoard from './components/DemandsBoard'; 
+//import DemandsBoard from './components/DemandsBoard'; 
+import DemandList from './components/DemandList';
 import TeamCalendar from './components/TeamCalendar';
 import { formatCurrency, formatHoursInt } from './utils/formatters'; 
 
@@ -796,9 +797,10 @@ const App = () => {
                     )}
 
                     {activeTab === 'demandas' && (
-                        <DemandsBoard 
+                        <DemandList 
                             userId={session?.user?.id} 
                             userRole={userRole} 
+                            consultoriaId={profileData?.consultoria_id} /* <--- OBRIGATÓRIO AGORA */
                             showToast={showToast} 
                         />
                     )}
