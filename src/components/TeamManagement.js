@@ -505,27 +505,64 @@ const TeamManagement = ({ showToast }) => {
                             </div>
                         </div>
 
+                        {/* Bank Grid (CORRIGIDO) */}
                         <div className="bg-gray-50 dark:bg-gray-900/50 p-5 rounded-xl border border-gray-200 dark:border-gray-700/50">
                             <h5 className="text-xs font-bold text-gray-400 uppercase mb-3 flex items-center gap-1"><Landmark size={12}/> Dados Bancários</h5>
                             <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                                 <div className="col-span-2 md:col-span-1 relative">
-                                    <Building size={14} className="absolute left-2.5 top-3 text-gray-400"/>
-                                    <input type="text" value={createModalOpen ? newMember.banco : editingMember?.banco} onChange={e => { const val = e.target.value; createModalOpen ? setNewMember({...newMember, banco: val}) : setEditingMember({...editingMember, banco: val}); }} className="w-full border dark:border-gray-700 rounded-lg pl-8 pr-2 py-2 text-sm bg-white dark:bg-gray-800 outline-none focus:ring-1 focus:ring-indigo-500" placeholder="Ex: Nubank" />
+                                    <label className="text-[10px] text-gray-500 dark:text-gray-400 uppercase font-bold ml-1 mb-1 block">Banco</label>
+                                    <div className="relative">
+                                        <Building size={14} className="absolute left-2.5 top-2.5 text-gray-400"/>
+                                        <input 
+                                            type="text" 
+                                            value={createModalOpen ? newMember.banco : editingMember?.banco} 
+                                            onChange={e => { const val = e.target.value; createModalOpen ? setNewMember({...newMember, banco: val}) : setEditingMember({...editingMember, banco: val}); }} 
+                                            className="w-full border dark:border-gray-700 rounded-lg pl-8 pr-2 py-2 text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-white outline-none focus:ring-1 focus:ring-indigo-500 placeholder-gray-400" 
+                                            placeholder="Ex: Nubank" 
+                                        />
+                                    </div>
                                 </div>
                                 <div className="col-span-2 md:col-span-1 relative">
-                                    <Hash size={14} className="absolute left-2.5 top-3 text-gray-400"/>
-                                    <input type="text" value={createModalOpen ? newMember.agencia : editingMember?.agencia} onChange={e => { const val = e.target.value; createModalOpen ? setNewMember({...newMember, agencia: val}) : setEditingMember({...editingMember, agencia: val}); }} className="w-full border dark:border-gray-700 rounded-lg pl-8 pr-2 py-2 text-sm bg-white dark:bg-gray-800 outline-none focus:ring-1 focus:ring-indigo-500" placeholder="0000" />
+                                    <label className="text-[10px] text-gray-500 dark:text-gray-400 uppercase font-bold ml-1 mb-1 block">Agência</label>
+                                    <div className="relative">
+                                        <Hash size={14} className="absolute left-2.5 top-2.5 text-gray-400"/>
+                                        <input 
+                                            type="text" 
+                                            value={createModalOpen ? newMember.agencia : editingMember?.agencia} 
+                                            onChange={e => { const val = e.target.value; createModalOpen ? setNewMember({...newMember, agencia: val}) : setEditingMember({...editingMember, agencia: val}); }} 
+                                            className="w-full border dark:border-gray-700 rounded-lg pl-8 pr-2 py-2 text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-white outline-none focus:ring-1 focus:ring-indigo-500 placeholder-gray-400" 
+                                            placeholder="0000" 
+                                        />
+                                    </div>
                                 </div>
                                 <div className="col-span-2 md:col-span-1 relative">
-                                    <CreditCard size={14} className="absolute left-2.5 top-3 text-gray-400"/>
-                                    <input type="text" value={createModalOpen ? newMember.conta : editingMember?.conta} onChange={e => { const val = e.target.value; createModalOpen ? setNewMember({...newMember, conta: val}) : setEditingMember({...editingMember, conta: val}); }} className="w-full border dark:border-gray-700 rounded-lg pl-8 pr-2 py-2 text-sm bg-white dark:bg-gray-800 outline-none focus:ring-1 focus:ring-indigo-500" placeholder="00000-0" />
+                                    <label className="text-[10px] text-gray-500 dark:text-gray-400 uppercase font-bold ml-1 mb-1 block">Conta</label>
+                                    <div className="relative">
+                                        <CreditCard size={14} className="absolute left-2.5 top-2.5 text-gray-400"/>
+                                        <input 
+                                            type="text" 
+                                            value={createModalOpen ? newMember.conta : editingMember?.conta} 
+                                            onChange={e => { const val = e.target.value; createModalOpen ? setNewMember({...newMember, conta: val}) : setEditingMember({...editingMember, conta: val}); }} 
+                                            className="w-full border dark:border-gray-700 rounded-lg pl-8 pr-2 py-2 text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-white outline-none focus:ring-1 focus:ring-indigo-500 placeholder-gray-400" 
+                                            placeholder="00000-0" 
+                                        />
+                                    </div>
                                 </div>
                                 <div className="col-span-2 md:col-span-1 relative">
-                                    <Key size={14} className="absolute left-2.5 top-3 text-gray-400"/>
-                                    <input type="text" value={createModalOpen ? newMember.chave_pix : editingMember?.chave_pix} onChange={e => { const val = e.target.value; createModalOpen ? setNewMember({...newMember, chave_pix: val}) : setEditingMember({...editingMember, chave_pix: val}); }} className="w-full border dark:border-gray-700 rounded-lg pl-8 pr-2 py-2 text-sm bg-white dark:bg-gray-800 outline-none focus:ring-1 focus:ring-indigo-500" placeholder="Chave" />
+                                    <label className="text-[10px] text-gray-500 dark:text-gray-400 uppercase font-bold ml-1 mb-1 block">PIX</label>
+                                    <div className="relative">
+                                        <Key size={14} className="absolute left-2.5 top-2.5 text-gray-400"/>
+                                        <input 
+                                            type="text" 
+                                            value={createModalOpen ? newMember.chave_pix : editingMember?.chave_pix} 
+                                            onChange={e => { const val = e.target.value; createModalOpen ? setNewMember({...newMember, chave_pix: val}) : setEditingMember({...editingMember, chave_pix: val}); }} 
+                                            className="w-full border dark:border-gray-700 rounded-lg pl-8 pr-2 py-2 text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-white outline-none focus:ring-1 focus:ring-indigo-500 placeholder-gray-400" 
+                                            placeholder="Chave" 
+                                        />
+                                    </div>
                                 </div>
                             </div>
-                        </div>
+                        </div>          
                     </div>
 
                 </form>
