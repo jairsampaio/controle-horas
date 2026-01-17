@@ -94,6 +94,7 @@ const App = () => {
     canal_id: '',
     status: 'Pendente',
     numero_nfs: '',
+    os_op_dpc: '',
     observacoes: ''
   });
 
@@ -164,13 +165,11 @@ const App = () => {
     }
   };
 
-  // --- CORREÇÃO: Função de Salvar Configuração (Agora com Upload de Foto) ---
   const handleSaveConfig = async (dadosDoModal) => {
     setLoading(true);
     try {
         let avatarUrl = null;
 
-        // 1. Se tem arquivo de foto, faz o upload
         if (dadosDoModal.fotoArquivo) {
             const file = dadosDoModal.fotoArquivo;
             const fileExt = file.name.split('.').pop();
@@ -190,11 +189,10 @@ const App = () => {
             avatarUrl = urlData.publicUrl;
         }
 
-        // 2. Prepara atualização do perfil
         const updates = {
             nome: dadosDoModal.nome,
             whatsapp: dadosDoModal.whatsapp,
-            valor_hora: dadosDoModal.valor_hora, // Float
+            valor_hora: dadosDoModal.valor_hora,
             banco: dadosDoModal.banco,
             agencia: dadosDoModal.agencia,
             conta: dadosDoModal.conta,
@@ -204,7 +202,6 @@ const App = () => {
 
         if (avatarUrl) updates.avatar_url = avatarUrl;
 
-        // 3. Salva no banco
         const { error } = await supabase
             .from('profiles')
             .update(updates)
@@ -212,13 +209,12 @@ const App = () => {
 
         if (error) throw error;
 
-        // 4. Salva configurações extras (tabela separada)
         await supabase.from('configuracoes').upsert({ chave: 'valor_hora_padrao', valor: dadosDoModal.valor_hora, user_id: session.user.id }, { onConflict: 'chave, user_id' });
         
         setValorHoraPadrao(dadosDoModal.valor_hora);
         showToast('Perfil atualizado com sucesso!', 'sucesso');
         setShowConfigModal(false);
-        carregarDados(); // Recarrega para atualizar a foto na sidebar
+        carregarDados();
 
     } catch (error) {
         console.error("Erro ao salvar perfil:", error);
@@ -228,62 +224,52 @@ const App = () => {
     }
   };
 
-// --- CARREGAR DADOS E APLICAR BARREIRA DE SEGURANÇA ---
-  const carregarDados = async () => {
-    try {
-      // 1. Busca o perfil completo do usuário logado
-      const { data: userProfile, error: profileError } = await supabase
-        .from('profiles')
-        .select('*, consultorias(id, status)') 
-        .eq('id', session.user.id)
-        .single();
+  const carregarDados = async () => {
+    try {
+      const { data: userProfile, error: profileError } = await supabase
+        .from('profiles')
+        .select('*, consultorias(id, status)') 
+        .eq('id', session.user.id)
+        .single();
 
-      if (profileError || !userProfile) {
-        console.error("Usuário sem perfil.", profileError);
-        return;
-      }
+      if (profileError || !userProfile) {
+        console.error("Usuário sem perfil.", profileError);
+        return;
+      }
 
-      setProfileData(userProfile);
-      setUserRole(userProfile.role || userProfile.cargo); // Garante pegar o campo certo (role ou cargo)
+      setProfileData(userProfile);
+      setUserRole(userProfile.role || userProfile.cargo);
 
-      // --- BARREIRA DE SEGURANÇA ---
-      if (userProfile.ativo === false) {
-          setAccessDeniedType('usuario_bloqueado');
-          return; 
-      }
+      if (userProfile.ativo === false) {
+          setAccessDeniedType('usuario_bloqueado');
+          return; 
+      }
 
-      if (userProfile.consultorias?.status === 'bloqueada') {
-          setAccessDeniedType('consultoria_bloqueada');
-          return; 
-      }
-      setAccessDeniedType(null);
-      // --- FIM DA BARREIRA ---
+      if (userProfile.consultorias?.status === 'bloqueada') {
+          setAccessDeniedType('consultoria_bloqueada');
+          return; 
+      }
+      setAccessDeniedType(null);
 
-      const meuId = userProfile.consultoria_id;
-      if (!meuId) return;
+      const meuId = userProfile.consultoria_id;
+      if (!meuId) return;
 
-      // --- CORREÇÃO DA BUSCA DE SERVIÇOS ---
-      // 1. Monta a query base (filtrando pela empresa)
       let query = supabase
         .from('servicos_prestados')
-        .select('*, canais(nome)')
+        .select('*, canais(nome), profiles(nome)')
         .eq('consultoria_id', meuId);
 
-      // 2. SE NÃO FOR CHEFE, APLICA FILTRO DE USUÁRIO
       const isChefe = userProfile.role === 'admin' || userProfile.role === 'dono' || userProfile.cargo === 'admin' || userProfile.cargo === 'dono';
       
       if (!isChefe) {
-          // Consultor vê apenas os seus
           query = query.eq('user_id', session.user.id);
       }
 
-      // 3. Executa a query final
       const { data: dataServicos, error: errorServicos } = await query.order('data', { ascending: false });
  
       if (errorServicos) throw errorServicos;
       setServicos(dataServicos);
 
-      // --- CARREGA CLIENTES ---
       const { data: dataClientes, error: errorClientes } = await supabase
         .from('clientes')
         .select('*') 
@@ -293,7 +279,6 @@ const App = () => {
       if (errorClientes) throw errorClientes;
       setClientes(dataClientes);
 
-      // --- CARREGA CANAIS ---
       const { data: dataCanais, error: errorCanais } = await supabase
         .from('canais')
         .select('*')
@@ -310,7 +295,6 @@ const App = () => {
 
   useEffect(() => {
     getSession();
-    
     const { data: authListener } = supabase.auth.onAuthStateChange((event, session) => { 
         setSession(session); 
         if (event === 'SIGNED_IN') {
@@ -318,7 +302,6 @@ const App = () => {
             setAccessDeniedType(null); 
         }
     });
-    
     return () => { authListener.subscription.unsubscribe(); };
   }, []);
 
@@ -356,12 +339,10 @@ const App = () => {
     try {
       if (!profileData?.consultoria_id) throw new Error("Consultoria não identificada.");
 
-      // CORREÇÃO: Tratamento de campos vazios e vínculos
       const dadosParaSalvar = {
           ...formData,
           user_id: session.user.id,
           consultoria_id: profileData.consultoria_id,
-          // Garante que campos opcionais vazios virem null
           canal_id: formData.canal_id === '' ? null : formData.canal_id,
           cliente: formData.cliente === '' ? null : formData.cliente
       };
@@ -387,7 +368,7 @@ const App = () => {
       if (error) throw error;
       showToast('Serviço excluído!', 'sucesso'); 
       carregarDados();
-      return true; // Retornamos true para o modal saber que deu certo e fechar
+      return true;
     } catch (error) { 
       console.error('Erro deletar:', error); 
       showToast('Erro ao excluir serviço!', 'erro'); 
@@ -406,8 +387,6 @@ const App = () => {
     if (!clienteFormData.nome.trim()) { showToast('Nome do cliente é obrigatório!', 'erro'); return; }
     try {
       setLoading(true);
-      
-      // CORREÇÃO: Vínculo com consultoria
       if (!profileData?.consultoria_id) throw new Error("Consultoria não identificada.");
 
       const dadosCliente = {
@@ -460,9 +439,11 @@ const App = () => {
   const blobToBase64 = (blob) => { return new Promise((resolve, reject) => { const reader = new FileReader(); reader.onloadend = () => resolve(reader.result); reader.onerror = reject; reader.readAsDataURL(blob); }); };
   const showToast = (mensagem, tipo = 'sucesso') => { setToast({ visivel: true, mensagem: mensagem, tipo: tipo }); setTimeout(() => { setToast(prev => ({ ...prev, visivel: false })); }, 3000); };
 
+  // --- FUNÇÃO GERAR PDF ATUALIZADA ---
   const handleGerarPDF = () => {
     const dadosParaRelatorio = servicosFiltrados(); 
-    const nomeParaRelatorio = nomeConsultor || session?.user?.email || 'Consultor';
+    // CORREÇÃO: Usa Config, depois Perfil, depois Email
+    const nomeParaRelatorio = nomeConsultor || profileData?.nome || session?.user?.email || 'Consultor';
     const pdfBlob = gerarRelatorioPDF(dadosParaRelatorio, filtros, nomeParaRelatorio);
     const url = URL.createObjectURL(pdfBlob);
     const a = document.createElement("a");
@@ -473,7 +454,19 @@ const App = () => {
   };
 
   const handleExportarExcel = () => {
-    const dados = servicosFiltradosData.map(s => ({ Data: new Date(s.data + 'T00:00:00').toLocaleDateString('pt-BR'), Canal: s.canais?.nome || 'Direto', Cliente: s.cliente, Atividade: s.atividade, 'Qtd Horas': parseFloat(s.qtd_horas).toFixed(2).replace('.', ','), 'Valor Total': parseFloat(s.valor_total).toFixed(2).replace('.', ','), Status: s.status, Solicitante: s.solicitante || '-', 'Nota Fiscal': s.numero_nfs || '-' }));
+    const dados = servicosFiltradosData.map(s => ({
+        Data: new Date(s.data + 'T00:00:00').toLocaleDateString('pt-BR'),
+        Canal: s.canais?.nome || 'Direto',
+        Cliente: s.cliente,
+        Consultor: s.profiles?.nome || 'N/A',
+        Atividade: s.atividade,
+        'OS/OP/DPC': s.os_op_dpc || '-',
+        'Qtd Horas': parseFloat(s.qtd_horas).toFixed(2).replace('.', ','),
+        'Valor Total': parseFloat(s.valor_total).toFixed(2).replace('.', ','),
+        Status: s.status,
+        Solicitante: s.solicitante || '-',
+        'Nota Fiscal': s.numero_nfs || '-'
+    }));
     const ws = XLSX.utils.json_to_sheet(dados); const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, "Serviços"); XLSX.writeFile(wb, `Relatorio_Servicos_${new Date().toISOString().split('T')[0]}.xlsx`); showToast('Planilha Excel gerada com sucesso!', 'sucesso');
   };
 
@@ -561,10 +554,12 @@ const App = () => {
       canal_id: '', 
       status: 'Pendente', 
       numero_nfs: '', 
+      os_op_dpc: '',
       observacoes: '' 
     }); 
   };
   const resetClienteForm = () => { setClienteFormData({ nome: '', email: '', telefone: '', ativo: true }); };
+  
   const editarServico = (servico) => { 
     setEditingService(servico); 
     setFormData({
@@ -578,6 +573,7 @@ const App = () => {
       canal_id: servico.canal_id || '', 
       status: servico.status,
       numero_nfs: servico.numero_nfs || '',
+      os_op_dpc: servico.os_op_dpc || '',
       observacoes: servico.observacoes || ''
     });
     setShowModal(true); 
@@ -632,7 +628,6 @@ const App = () => {
   const opcoesStatus = ['Pendente', 'Em aprovação', 'Aprovado', 'NF Emitida', 'Pago'];
   const clientesAtivos = clientes.filter(c => c.ativo !== false);
 
-  // --- SE O USUÁRIO ESTIVER BLOQUEADO, RETORNA A TELA DE BLOQUEIO ---
   if (accessDeniedType) {
       return (
           <AccessDenied 
@@ -646,8 +641,6 @@ const App = () => {
       );
   }
 
-
-  // --- RENDERIZAÇÃO PRINCIPAL DO APP ---
   return (
     <div className="flex h-screen bg-gray-50 dark:bg-gray-950 overflow-hidden">
       
@@ -660,7 +653,7 @@ const App = () => {
         onOpenConfig={() => setShowConfigModal(true)}
         onOpenChannels={() => setActiveTab('channels')} 
         userEmail={session?.user?.email}
-        userProfile={profileData} // Passando o perfil completo para a Sidebar
+        userProfile={profileData}
       />
 
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden relative">
@@ -800,7 +793,7 @@ const App = () => {
                         <DemandList 
                             userId={session?.user?.id} 
                             userRole={userRole} 
-                            consultoriaId={profileData?.consultoria_id} /* <--- OBRIGATÓRIO AGORA */
+                            consultoriaId={profileData?.consultoria_id} 
                             showToast={showToast} 
                         />
                     )}
