@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { 
-  DollarSign, Calendar, CheckCircle, XCircle, AlertCircle, 
+  DollarSign, CheckCircle, XCircle, AlertCircle, 
   Search, Plus, Wallet, TrendingUp, X, 
   Clock, Send, PieChart, BarChart2, ArrowDownRight
 } from 'lucide-react';

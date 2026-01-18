@@ -3,7 +3,7 @@ import ReactDOM from 'react-dom';
 import { 
   X, Save, Briefcase, User, Calendar, Clock, 
   DollarSign, Lock, FileText, Link as LinkIcon, TrendingUp, AlertCircle, Copy, Check,
-  Activity, Trash2, AlertTriangle
+  Activity, Trash2
 } from 'lucide-react';
 import supabase from '../services/supabase';
 import ConfirmModal from './ConfirmModal';

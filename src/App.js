@@ -1,8 +1,8 @@
 /* eslint-disable no-restricted-globals */
 import gerarRelatorioPDF from "./utils/gerarRelatorioPDF";
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { 
-  Clock, DollarSign, User, FileText, Plus, Filter, Mail, Users, 
+  Clock, DollarSign, FileText, Plus, Filter, Users, 
   LayoutDashboard, Briefcase, Hourglass, Timer, FileCheck, 
   Building2, Menu, Eye, EyeOff, ShieldCheck, Wallet, LayoutList, Kanban, Target, Calendar 
 } from 'lucide-react'; 
@@ -33,9 +33,7 @@ import TeamCalendar from './components/TeamCalendar';
 import { formatCurrency, formatHoursInt } from './utils/formatters'; 
 
 const App = () => {
-  // ... (o restante do código do App.js permanece exatamente igual ao que você colou por último, pois estava correto na lógica, apenas com imports sobrando)
-  // Vou replicar o conteúdo exato abaixo para você copiar tudo de uma vez.
-
+  // --- ESTADOS ---
   const [userRole, setUserRole] = useState(null); 
   const [accessDeniedType, setAccessDeniedType] = useState(null); 
   const [servicos, setServicos] = useState([]);
@@ -57,6 +55,7 @@ const App = () => {
   const [session, setSession] = useState(null);
   const [showConfigModal, setShowConfigModal] = useState(false);
   
+  // Estado para armazenar perfil completo (importante para upload de foto)
   const [profileData, setProfileData] = useState(null);
 
   const [confirmModalOpen, setConfirmModalOpen] = useState(false);
@@ -105,26 +104,14 @@ const App = () => {
     ativo: true
   });
 
-  // Nota: Eu removi CheckCircle do import lá em cima, então preciso remover daqui ou importar de novo se for usado.
-  // Vou re-adicionar CheckCircle no import porque ele É USADO aqui embaixo.
-  // Vou deixar o import correto no topo.
-
   const statusConfig = {
     'Pendente': { color: 'bg-gray-100 dark:bg-gray-700/50 text-gray-700 dark:text-gray-300 border-gray-200 dark:border-gray-600', icon: Hourglass, label: 'Pendente' },
     'Em aprovação': { color: 'bg-orange-100 dark:bg-orange-900/30 text-orange-800 dark:text-orange-300 border-orange-200 dark:border-orange-800', icon: Timer, label: 'Em Aprovação' },
-    // ATENÇÃO: CheckCircle precisa estar importado lá em cima
-    'Aprovado': { color: 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-800 dark:text-yellow-300 border-yellow-200 dark:border-yellow-800', icon: FileCheck, label: 'Aprovado' }, 
+    'Aprovado': { color: 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-800 dark:text-yellow-300 border-yellow-200 dark:border-yellow-800', icon: CheckCircle, label: 'Aprovado' },
     'NF Emitida': { color: 'bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-300 border-blue-200 dark:border-blue-800', icon: FileCheck, label: 'NF Emitida' },
     'Pago': { color: 'bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-300 border-green-200 dark:border-green-800', icon: DollarSign, label: 'Pago' }
   };
 
-  // ... Resto do código do App.js (useEffect, handlers, etc) ...
-  // Para economizar espaço e evitar erros de cópia, por favor use o código do App.js que você colou anteriormente, 
-  // APENAS REMOVENDO 'AlertCircle' da linha de import se ele não for usado no JSX. 
-  // Se CheckCircle for usado no statusConfig, MANTENHA ele no import.
-  
-  // Mas como você pediu para corrigir, vou colar o App.js COMPLETO corrigido abaixo para não ter erro.
-  
   useEffect(() => {
     const carregarSolicitantesFiltro = async () => {
       if (filtros.cliente.length === 0) {
@@ -236,7 +223,8 @@ const App = () => {
     }
   };
 
-  const carregarDados = async () => {
+  // --- CARREGAR DADOS (Agora com useCallback para evitar warnings) ---
+  const carregarDados = useCallback(async () => {
     try {
       const { data: userProfile, error: profileError } = await supabase
         .from('profiles')
@@ -303,7 +291,7 @@ const App = () => {
     } catch (error) { 
       console.error('Erro ao carregar dados:', error); 
     }
-  };
+  }, [session]);
 
   useEffect(() => {
     getSession();
@@ -327,7 +315,7 @@ const App = () => {
         setServicos([]); 
         setClientes([]); 
     }
-  }, [session]);
+  }, [session, carregarDados]); // Dependência adicionada
 
   useEffect(() => {
     const algumModalAberto = showModal || showClienteModal || showSolicitantesModal || showConfigModal;
@@ -480,6 +468,8 @@ const App = () => {
     const ws = XLSX.utils.json_to_sheet(dados); const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, "Serviços"); XLSX.writeFile(wb, `Relatorio_Servicos_${new Date().toISOString().split('T')[0]}.xlsx`); showToast('Planilha Excel gerada com sucesso!', 'sucesso');
   };
 
+  // OBS: Mantive a função mesmo que não usada no JSX direto, pois ela pode ser útil futuramente ou usada em componentes filhos. 
+  // Se o linter reclamar, basta comentar. Mas vou mantê-la para não perder a lógica de envio de email.
   const handleEnviarEmail = async () => {
     if (!filtros.cliente || filtros.cliente.length === 0) { showToast("Selecione um cliente no filtro.", "erro"); return; }
     const nomeClienteAlvo = filtros.cliente[0];
