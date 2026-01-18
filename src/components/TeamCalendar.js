@@ -148,7 +148,6 @@ const ConsultantMultiSelect = ({ options, selected, onChange }) => {
       </button>
 
       {isOpen && (
-        // AQUI ESTÁ A CORREÇÃO: mudei z-50 para z-[9999]
         <div className="absolute top-full right-0 mt-2 w-64 bg-white dark:bg-gray-900 rounded-xl shadow-xl border border-gray-200 dark:border-gray-700 z-[9999] overflow-hidden animate-fade-in">
             <div className="p-1 max-h-60 overflow-y-auto custom-scrollbar">
                 <button
@@ -189,7 +188,8 @@ const ConsultantMultiSelect = ({ options, selected, onChange }) => {
 const TeamCalendar = ({ userId, userRole, showToast }) => {
   const [events, setEvents] = useState([]);
   const [team, setTeam] = useState([]);
-  const [loading, setLoading] = useState(true);
+  // CORREÇÃO AQUI: removi 'loading' do destructuring pois não é usado
+  const [, setLoading] = useState(true); 
   const [modalOpen, setModalOpen] = useState(false);
   
   // Filtro

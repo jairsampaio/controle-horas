@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { 
-  Plus, Calendar, Clock, User, AlertCircle, CheckCircle, 
+  Plus, Calendar, Clock, User, 
   Briefcase, ChevronRight 
 } from 'lucide-react';
 import supabase from '../services/supabase';

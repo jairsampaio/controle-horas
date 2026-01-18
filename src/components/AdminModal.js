@@ -1,8 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { 
   X, Building2, Users, DollarSign, Calendar, 
-  Activity, CheckCircle, Ban, Mail, Phone, MapPin, 
-  Shield, Key, Lock, AlertTriangle 
+  Activity, Ban, MapPin, 
+  Key, AlertTriangle 
 } from 'lucide-react';
 import supabase from '../services/supabase';
 
@@ -23,13 +23,8 @@ const AdminModal = ({ isOpen, onClose, tenantId }) => {
   // Estado para Reset de Senha (dentro do modal de detalhes)
   const [resetLoading, setResetLoading] = useState(null);
 
-  useEffect(() => {
-    if (isOpen && tenantId) {
-      fetchTenantDetails();
-    }
-  }, [isOpen, tenantId]);
-
-  const fetchTenantDetails = async () => {
+  // Envolvido em useCallback para ser dependência segura do useEffect
+  const fetchTenantDetails = useCallback(async () => {
     setLoading(true);
     try {
       // 1. Busca Dados da Consultoria
@@ -60,10 +55,9 @@ const AdminModal = ({ isOpen, onClose, tenantId }) => {
         .eq('consultoria_id', tenantId);
 
       // Serviços (Para estimar receita e atividade)
-      // CORREÇÃO: Nome da tabela é 'servicos_prestados', não 'servicos'
       const { data: services } = await supabase
         .from('servicos_prestados')
-        .select('valor_total') // Campo correto é valor_total
+        .select('valor_total') 
         .eq('consultoria_id', tenantId);
 
       const totalRevenue = (services || []).reduce((acc, curr) => acc + (Number(curr.valor_total) || 0), 0);
@@ -80,19 +74,21 @@ const AdminModal = ({ isOpen, onClose, tenantId }) => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [tenantId]); // Dependência do useCallback
+
+  useEffect(() => {
+    if (isOpen && tenantId) {
+      fetchTenantDetails();
+    }
+  }, [isOpen, tenantId, fetchTenantDetails]); // Dependência do useEffect corrigida
 
   // Função para Resetar Senha (Super Admin Power)
-  // NOTA: Isso requer que a trigger ou função RPC 'resetar_senha_via_dono' suporte super_admin
-  // ou uso de Service Role no backend.
   const handleResetPassword = async (userId, userName) => {
     const novaSenha = prompt(`Digite a nova senha para ${userName}:`);
     if (!novaSenha || novaSenha.length < 6) return alert("Senha inválida (mín 6 caracteres).");
 
     setResetLoading(userId);
     try {
-        // Tenta usar a RPC que já criamos para o Dono, pois ela deve permitir mudar senha
-        // Se o seu usuário logado for Super Admin, ele deve passar na política da RPC
         const { data, error } = await supabase.rpc('resetar_senha_via_dono', {
             user_id_alvo: userId,
             nova_senha: novaSenha
