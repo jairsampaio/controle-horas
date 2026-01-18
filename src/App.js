@@ -46,7 +46,6 @@ const App = () => {
   const [selectedTenantId, setSelectedTenantId] = useState(null);
 
   const [showModal, setShowModal] = useState(false);
-  const [emailEnviando, setEmailEnviando] = useState(false);
   const [toast, setToast] = useState({ mensagem: "", tipo: "", visivel: false });
   const [aviso, setAviso] = useState({ mensagem: "", tipo: "" });
   const [showClienteModal, setShowClienteModal] = useState(false);
@@ -55,7 +54,6 @@ const App = () => {
   const [session, setSession] = useState(null);
   const [showConfigModal, setShowConfigModal] = useState(false);
   
-  // Estado para armazenar perfil completo (importante para upload de foto)
   const [profileData, setProfileData] = useState(null);
 
   const [confirmModalOpen, setConfirmModalOpen] = useState(false);
@@ -107,7 +105,7 @@ const App = () => {
   const statusConfig = {
     'Pendente': { color: 'bg-gray-100 dark:bg-gray-700/50 text-gray-700 dark:text-gray-300 border-gray-200 dark:border-gray-600', icon: Hourglass, label: 'Pendente' },
     'Em aprovação': { color: 'bg-orange-100 dark:bg-orange-900/30 text-orange-800 dark:text-orange-300 border-orange-200 dark:border-orange-800', icon: Timer, label: 'Em Aprovação' },
-    'Aprovado': { color: 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-800 dark:text-yellow-300 border-yellow-200 dark:border-yellow-800', icon: CheckCircle, label: 'Aprovado' },
+    'Aprovado': { color: 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-800 dark:text-yellow-300 border-yellow-200 dark:border-yellow-800', icon: CheckCircle, label: 'Aprovado' }, 
     'NF Emitida': { color: 'bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-300 border-blue-200 dark:border-blue-800', icon: FileCheck, label: 'NF Emitida' },
     'Pago': { color: 'bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-300 border-green-200 dark:border-green-800', icon: DollarSign, label: 'Pago' }
   };
@@ -142,7 +140,9 @@ const App = () => {
     setLoading(false);
   };
 
-  const carregarConfiguracao = async () => {
+  // Envolvido em useCallback para ser dependência segura
+  const carregarConfiguracao = useCallback(async () => {
+    if (!session?.user?.id) return;
     try {
       const { data, error } = await supabase
         .from('configuracoes')
@@ -162,7 +162,7 @@ const App = () => {
     } catch (error) {
       console.error('Erro config:', error);
     }
-  };
+  }, [session]);
 
   const handleSaveConfig = async (dadosDoModal) => {
     setLoading(true);
@@ -223,8 +223,9 @@ const App = () => {
     }
   };
 
-  // --- CARREGAR DADOS (Agora com useCallback para evitar warnings) ---
+  // Envolvido em useCallback
   const carregarDados = useCallback(async () => {
+    if (!session?.user?.id) return;
     try {
       const { data: userProfile, error: profileError } = await supabase
         .from('profiles')
@@ -315,7 +316,7 @@ const App = () => {
         setServicos([]); 
         setClientes([]); 
     }
-  }, [session, carregarDados]); // Dependência adicionada
+  }, [session, carregarDados, carregarConfiguracao]); // Dependências completas
 
   useEffect(() => {
     const algumModalAberto = showModal || showClienteModal || showSolicitantesModal || showConfigModal;
@@ -436,7 +437,6 @@ const App = () => {
   };
 
   const handleLogout = async () => { setLoading(true); const { error } = await supabase.auth.signOut(); if (error) console.error(error); else setSession(null); setLoading(false); };
-  const blobToBase64 = (blob) => { return new Promise((resolve, reject) => { const reader = new FileReader(); reader.onloadend = () => resolve(reader.result); reader.onerror = reject; reader.readAsDataURL(blob); }); };
   const showToast = (mensagem, tipo = 'sucesso') => { setToast({ visivel: true, mensagem: mensagem, tipo: tipo }); setTimeout(() => { setToast(prev => ({ ...prev, visivel: false })); }, 3000); };
 
   const handleGerarPDF = () => {
@@ -466,80 +466,6 @@ const App = () => {
         'Nota Fiscal': s.numero_nfs || '-'
     }));
     const ws = XLSX.utils.json_to_sheet(dados); const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, "Serviços"); XLSX.writeFile(wb, `Relatorio_Servicos_${new Date().toISOString().split('T')[0]}.xlsx`); showToast('Planilha Excel gerada com sucesso!', 'sucesso');
-  };
-
-  // OBS: Mantive a função mesmo que não usada no JSX direto, pois ela pode ser útil futuramente ou usada em componentes filhos. 
-  // Se o linter reclamar, basta comentar. Mas vou mantê-la para não perder a lógica de envio de email.
-  const handleEnviarEmail = async () => {
-    if (!filtros.cliente || filtros.cliente.length === 0) { showToast("Selecione um cliente no filtro.", "erro"); return; }
-    const nomeClienteAlvo = filtros.cliente[0];
-    const clienteSelecionado = clientes.find(c => c.nome === nomeClienteAlvo);
-    
-    if (!clienteSelecionado) { showToast("Cliente não encontrado.", "erro"); return; }
-    if (servicosFiltradosData.length === 0) { showToast("Não há serviços listados para enviar.", "erro"); return; }
-
-    setEmailEnviando(true);
-    try {
-      const { data: todosSolicitantes, error } = await supabase.from('solicitantes').select('*').eq('cliente_id', clienteSelecionado.id);
-      if (error) throw error;
-      
-      const pacotesDeEnvio = {};
-      let servicosSemDestino = 0;
-
-      servicosFiltradosData.forEach(servico => {
-        if (servico.cliente !== clienteSelecionado.nome) return;
-
-        let emailDestino = null;
-        let emailCC = null;
-
-        const solicitanteEncontrado = todosSolicitantes.find(s => s.nome.trim().toLowerCase() === (servico.solicitante || '').trim().toLowerCase());
-
-        if (solicitanteEncontrado) {
-          if (solicitanteEncontrado.coordenador_id) {
-            const chefe = todosSolicitantes.find(s => s.id === solicitanteEncontrado.coordenador_id);
-            if (chefe && chefe.email) {
-              emailDestino = chefe.email;
-              if (solicitanteEncontrado.email) emailCC = solicitanteEncontrado.email;
-            }
-          } else if (solicitanteEncontrado.email) {
-            emailDestino = solicitanteEncontrado.email;
-          }
-        }
-
-        if (!emailDestino) { servicosSemDestino++; return; }
-
-        if (!pacotesDeEnvio[emailDestino]) { pacotesDeEnvio[emailDestino] = { destinatario: emailDestino, servicos: [], ccs: new Set() }; }
-        pacotesDeEnvio[emailDestino].servicos.push(servico);
-        if (emailCC) pacotesDeEnvio[emailDestino].ccs.add(emailCC);
-      });
-
-      if (Object.keys(pacotesDeEnvio).length === 0) { showToast("Nenhum e-mail de gestor/solicitante encontrado.", "erro"); return; }
-
-      let enviados = 0;
-      for (const [emailDestino, pacote] of Object.entries(pacotesDeEnvio)) {
-        const listaCCs = Array.from(pacote.ccs);
-        showToast(`Enviando para ${emailDestino}...`, "sucesso");
-
-        const nomeParaRelatorio = nomeConsultor || session?.user?.email || 'Consultor';
-        const pdfBlob = gerarRelatorioPDF(pacote.servicos, filtros, nomeParaRelatorio);
-        
-        if (!pdfBlob) throw new Error("Falha ao gerar PDF");
-        const pdfBase64 = await blobToBase64(pdfBlob);
-        
-        console.log("📨 ENVIO:", { Para: emailDestino, CC: listaCCs, Qtd: pacote.servicos.length });
-        
-        const response = await fetch("/api/enviar-email", {
-          method: "POST", headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ email: emailDestino, cc: listaCCs, nomeCliente: clienteSelecionado.nome, pdfBase64: pdfBase64, periodo: filtros.dataInicio ? `${new Date(filtros.dataInicio).toLocaleDateString()} a ...` : 'Período Geral' })
-        });
-
-        if (response.ok) enviados++;
-      }
-
-      if (servicosSemDestino > 0) { showToast(`Sucesso! ${enviados} emails enviados. (${servicosSemDestino} itens sem contato ignorados)`, "sucesso"); } 
-      else { showToast(`Sucesso Total! ${enviados} email(s) enviados.`, "sucesso"); }
-
-    } catch (error) { console.error("Erro:", error); showToast("Erro no processo de envio.", "erro"); } finally { setEmailEnviando(false); }
   };
   
   const resetForm = () => { 
