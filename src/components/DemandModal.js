@@ -3,10 +3,10 @@ import ReactDOM from 'react-dom';
 import { 
   X, Save, Briefcase, User, Calendar, Clock, 
   DollarSign, Lock, FileText, Link as LinkIcon, TrendingUp, AlertCircle, Copy, Check,
-  PieChart, Activity, Trash2, AlertTriangle
+  Activity, Trash2, AlertTriangle
 } from 'lucide-react';
 import supabase from '../services/supabase';
-import ConfirmModal from './ConfirmModal'; // <--- IMPORTANTE
+import ConfirmModal from './ConfirmModal';
 
 // --- HELPER: Máscara R$ ---
 const maskCurrency = (value) => {

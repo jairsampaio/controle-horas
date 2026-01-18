@@ -1,8 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { createClient } from '@supabase/supabase-js'; 
 import { 
-  Users, UserPlus, Shield, CheckCircle, X, Edit, Ban, Key, 
+  Users, UserPlus, CheckCircle, X, Edit, Ban, Key, 
   Phone, DollarSign, Lock, LayoutGrid, List, Mail, User, 
   Briefcase, Hash, CreditCard, Building, Landmark, AlertTriangle, Search
 } from 'lucide-react';
@@ -69,7 +69,8 @@ const TeamManagement = ({ showToast }) => {
     localStorage.setItem('teamViewMode', viewMode);
   }, [viewMode]);
 
-  const loadData = async () => {
+  // Envolvido em useCallback para ser dependência segura
+  const loadData = useCallback(async () => {
     setLoading(true);
     try {
       const { data: { user } } = await supabase.auth.getUser();
@@ -97,9 +98,9 @@ const TeamManagement = ({ showToast }) => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [showToast]);
 
-  useEffect(() => { loadData(); }, []);
+  useEffect(() => { loadData(); }, [loadData]);
 
   // --- FILTRAGEM ---
   const filteredMembers = members.filter(member => {
@@ -473,8 +474,8 @@ const TeamManagement = ({ showToast }) => {
                                         const val = e.target.value;
                                         createModalOpen ? setNewMember({...newMember, role: val}) : setEditingMember({...editingMember, role: val});
                                     }} className="w-full border dark:border-gray-700 rounded-xl pl-10 pr-4 py-3 bg-white dark:bg-gray-800 text-gray-900 dark:text-white outline-none focus:ring-2 focus:ring-indigo-500 appearance-none font-medium cursor-pointer">
-                                        <option value="consultor">Consultor</option>
-                                        <option value="admin">Administrador</option>
+                                            <option value="consultor">Consultor</option>
+                                            <option value="admin">Administrador</option>
                                     </select>
                                 </div>
                                 {createModalOpen && (
@@ -505,7 +506,7 @@ const TeamManagement = ({ showToast }) => {
                             </div>
                         </div>
 
-                        {/* Bank Grid (CORRIGIDO) */}
+                        {/* Bank Grid */}
                         <div className="bg-gray-50 dark:bg-gray-900/50 p-5 rounded-xl border border-gray-200 dark:border-gray-700/50">
                             <h5 className="text-xs font-bold text-gray-400 uppercase mb-3 flex items-center gap-1"><Landmark size={12}/> Dados Bancários</h5>
                             <div className="grid grid-cols-2 md:grid-cols-4 gap-3">

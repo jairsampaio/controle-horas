@@ -3,7 +3,7 @@ import ReactDOM from 'react-dom';
 import { 
   X, Save, Clock, User, FileText, Calendar, 
   Activity, RotateCcw, Building2, AlertCircle, Info, Trash2, 
-  Briefcase, Hash, Check, Search, FileDigit, DollarSign, AlertTriangle 
+  Briefcase, Check, Search, FileDigit, DollarSign, AlertTriangle 
 } from 'lucide-react'; 
 import supabase from '../services/supabase';
 import ConfirmModal from './ConfirmModal'; 
@@ -60,9 +60,22 @@ const ServiceModal = ({ isOpen, onClose, onSave, onDelete, formData, setFormData
   // --- 1. INICIALIZAÇÃO ---
   useEffect(() => {
     if (isOpen) {
+      // Formata Valor
       if (isEditing && formData.valor_hora) {
         setValorVisual(formData.valor_hora.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
       } else if (!isEditing) {
+        // Função interna para evitar dependência externa
+        const fetchUserRate = async () => {
+            const { data: { user } } = await supabase.auth.getUser();
+            if(user) {
+                const { data } = await supabase.from('profiles').select('valor_hora').eq('id', user.id).single();
+                if(data && data.valor_hora) {
+                    const val = data.valor_hora;
+                    setValorVisual(val.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
+                    setFormData(prev => ({ ...prev, valor_hora: val }));
+                }
+            }
+        };
         fetchUserRate();
       } else {
         setValorVisual('');
@@ -85,19 +98,8 @@ const ServiceModal = ({ isOpen, onClose, onSave, onDelete, formData, setFormData
 
       if (formData.canal_id === "") setFormData(prev => ({ ...prev, canal_id: null }));
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen, isEditing]);
-
-  const fetchUserRate = async () => {
-      const { data: { user } } = await supabase.auth.getUser();
-      if(user) {
-          const { data } = await supabase.from('profiles').select('valor_hora').eq('id', user.id).single();
-          if(data && data.valor_hora) {
-              const val = data.valor_hora;
-              setValorVisual(val.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
-              setFormData(prev => ({ ...prev, valor_hora: val }));
-          }
-      }
-  };
 
   // --- 2. CARREGAR LISTAS ---
   useEffect(() => {
@@ -129,9 +131,10 @@ const ServiceModal = ({ isOpen, onClose, onSave, onDelete, formData, setFormData
       }
     };
     if (isOpen) carregarDadosAuxiliares();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen]);
 
-  // --- 3. MONITOR DE DEMANDA (CÁLCULO REAL + SUPORTE LEGADO) ---
+  // --- 3. MONITOR DE DEMANDA ---
   useEffect(() => {
       const buscarDadosReaisNoBanco = async () => {
           if (!formData.demanda_id || !vincularDemanda) {
@@ -152,8 +155,7 @@ const ServiceModal = ({ isOpen, onClose, onSave, onDelete, formData, setFormData
               if (errDem) throw errDem;
               const totalEstimado = parseFloat(demandaData?.estimativa) || 0;
 
-              // B) BUSCA O CONSUMIDO (HISTÓRICO)
-              // ATENÇÃO: Trazemos hora_inicial e hora_final para calcular registros antigos
+              // B) BUSCA O CONSUMIDO
               let query = supabase
                   .from('servicos_prestados')
                   .select('horas, hora_inicial, hora_final')
@@ -166,16 +168,12 @@ const ServiceModal = ({ isOpen, onClose, onSave, onDelete, formData, setFormData
               const { data: servicosData, error: errServ } = await query;
               if (errServ) throw errServ;
 
-              // SOMA INTELIGENTE (Cobre dados novos e antigos)
+              // SOMA INTELIGENTE
               const totalConsumido = servicosData.reduce((acc, item) => {
-                  // Tenta usar a coluna 'horas'
                   let h = parseFloat(item.horas);
-                  
-                  // Se 'horas' estiver vazio ou 0 (registro antigo), calcula pela diferença
                   if (!h || h === 0) {
                       h = calcularDiferencaHoras(item.hora_inicial, item.hora_final);
                   }
-                  
                   return acc + (h || 0);
               }, 0);
 
@@ -211,7 +209,7 @@ const ServiceModal = ({ isOpen, onClose, onSave, onDelete, formData, setFormData
       setLoadingSolicitantes(false);
     };
     carregarSolicitantes();
-  }, [formData.cliente, isOpen]);
+  }, [formData.cliente, isOpen, clientes, listaSolicitantes.length]); // Adicionei dependências faltantes
 
   // Dropdown close
   useEffect(() => {
@@ -285,10 +283,9 @@ const ServiceModal = ({ isOpen, onClose, onSave, onDelete, formData, setFormData
       }
   };
 
-  // --- CÁLCULO VISUAL (TEMPO REAL) ---
+  // --- CÁLCULO VISUAL ---
   const getProgressData = () => {
       if (!vincularDemanda) return null;
-      
       let horasDigitando = 0;
       if (modoLancamento === 'rapido') {
           horasDigitando = parseFloat(horasTotais) || 0;
@@ -363,8 +360,6 @@ const ServiceModal = ({ isOpen, onClose, onSave, onDelete, formData, setFormData
     if (!formData.solicitante) { setErroValidacao('Informe o Solicitante.'); return; }
 
     setLoading(true);
-    
-    // Calcula as horas para o lançamento unitário
     let horasSalvar = 0;
     if (modoLancamento === 'detalhado') {
         horasSalvar = calcularDiferencaHoras(formData.hora_inicial, formData.hora_final);
@@ -372,52 +367,24 @@ const ServiceModal = ({ isOpen, onClose, onSave, onDelete, formData, setFormData
         horasSalvar = parseFloat(horasTotais) || 0;
     }
 
-    // Se for lote, usa a função específica
     if (modoLancamento === 'rapido' && horasSalvar > 24) {
         if (await salvarEmLote()) { onClose(); window.location.reload(); }
         setLoading(false);
         return;
     }
-
-    // Salvar unitário (Modifica formData para incluir 'horas')
-    // OBS: Como o onSave é uma prop, precisamos garantir que ela receba o objeto com 'horas'
-    // Mas o onSave geralmente chama supabase.update/insert com o formData.
-    // Vamos atualizar o formData aqui antes de chamar onSave
     
-    const dadosFinais = {
-        ...formData,
-        horas: horasSalvar
-    };
-
-    // Chamamos a função onSave passando os dados manuais ou confiamos que o pai pegue do state?
-    // Se onSave usa o estado do pai, precisamos que setFormData tenha atualizado.
-    // Se onSave recebe argumento, melhor.
-    // Assumindo a implementação padrão onde onSave usa o estado atual:
-    
-    // IMPORTANTE: O onSave do App.js provavelmente lê o 'formData' que foi passado pra ele ou o estado local dele.
-    // Vamos injetar o campo 'horas' manualmente no Supabase aqui mesmo para garantir, 
-    // OU se o onSave do pai for flexível.
-    // Vou assumir que o pai espera que a gente chame onSave() e ele se vira, 
-    // MAS para garantir o salvamento da coluna 'horas', é melhor fazer o update direto no state antes.
-    
-    // TRUQUE: Atualizamos o state e chamamos onSave num timeout ou passamos o objeto modificado se o onSave aceitar.
-    // Pelo padrão dos seus componentes anteriores, vou injetar a lógica de salvamento direto aqui se não for edição complexa,
-    // mas para manter compatibilidade com seu App.js, vou forçar o update do campo horas no formData antes.
-    
+    // Atualiza estado local antes de enviar (embora onSave do App.js possa usar o seu próprio)
     setFormData(prev => ({ ...prev, horas: horasSalvar }));
-    
-    // Pequeno delay para garantir que o state atualizou ou passar direto pro onSave se ele aceitar args
-    // Se o onSave do pai apenas lê o estado 'formData' que está lá no App.js, isso pode ser um problema de sincronia.
-    // Solução mais segura: Chamar o supabase aqui mesmo para 'Create', igual fizemos no Lote.
     
     try {
         const { data: { user } } = await supabase.auth.getUser();
         const { data: profile } = await supabase.from('profiles').select('consultoria_id').eq('id', user.id).single();
         
         const payload = {
-            ...dadosFinais,
-            canal_id: dadosFinais.canal_id || null, // Garante nulo
-            cliente: dadosFinais.cliente,
+            ...formData,
+            horas: horasSalvar, // Garante que a hora vai
+            canal_id: formData.canal_id || null,
+            cliente: formData.cliente,
             user_id: user.id,
             consultoria_id: profile.consultoria_id
         };
@@ -431,12 +398,11 @@ const ServiceModal = ({ isOpen, onClose, onSave, onDelete, formData, setFormData
         }
         
         onClose();
-        window.location.reload(); // Refresh para atualizar tabelas
+        window.location.reload(); 
     } catch (err) {
         console.error(err);
         setErroValidacao("Erro ao salvar: " + err.message);
     }
-    
     setLoading(false);
   };
 
@@ -506,7 +472,6 @@ const ServiceModal = ({ isOpen, onClose, onSave, onDelete, formData, setFormData
                                         listaDemandas.filter(d => d.titulo.toLowerCase().includes(buscaDemanda.toLowerCase()) || String(d.codigo).includes(buscaDemanda)).map(d => (
                                             <div key={d.id} onClick={() => selecionarDemanda(d)} className="p-3 hover:bg-gray-50 dark:hover:bg-gray-700 cursor-pointer border-b border-gray-100 dark:border-gray-700/50 last:border-0">
                                                 <div className="text-sm font-bold text-gray-800 dark:text-white">#{d.codigo} - {d.titulo}</div>
-                                                <div className="text-xs text-gray-500">Saldo estimado: {d.estimativa}h</div>
                                             </div>
                                         ))
                                     ) : (<div className="p-3 text-sm text-gray-500 text-center">Nenhuma demanda encontrada.</div>)}
