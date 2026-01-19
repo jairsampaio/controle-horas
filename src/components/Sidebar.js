@@ -145,7 +145,7 @@ const Sidebar = ({ activeTab, setActiveTab, isOpen, onClose, onLogout, onOpenCon
             
             <MenuButton id="dashboard" icon={LayoutDashboard} label="Dashboard" />
             <MenuButton id="servicos" icon={Briefcase} label="Meus Serviços" />
-            <MenuButton id="demandas" icon={Target} label="Mural de Demandas" />
+            <MenuButton id="demandas" icon={Target} label="Gestão de Demandas" />
             
             {/* Menu Canais: Acessível a todos */}
             <MenuButton id="channels" icon={Building2} label="Canais / Parceiros" />
