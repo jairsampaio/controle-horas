@@ -2,7 +2,7 @@
 import gerarRelatorioPDF from "./utils/gerarRelatorioPDF";
 import React, { useState, useEffect, useCallback } from 'react';
 import { 
-  Clock, DollarSign, FileText, Plus, Filter, Users, 
+  Clock, DollarSign, FileText, Plus, Filter, Users, Mail,
   LayoutDashboard, Briefcase, Hourglass, Timer, FileCheck, 
   Building2, Menu, Eye, EyeOff, ShieldCheck, Wallet, LayoutList, Kanban, Target, Calendar, CheckCircle 
 } from 'lucide-react'; 
@@ -46,6 +46,7 @@ const App = () => {
   const [selectedTenantId, setSelectedTenantId] = useState(null);
 
   const [showModal, setShowModal] = useState(false);
+  const [emailEnviando, setEmailEnviando] = useState(false);
   const [toast, setToast] = useState({ mensagem: "", tipo: "", visivel: false });
   const [aviso, setAviso] = useState({ mensagem: "", tipo: "" });
   const [showClienteModal, setShowClienteModal] = useState(false);
@@ -140,7 +141,6 @@ const App = () => {
     setLoading(false);
   };
 
-  // Envolvido em useCallback para ser dependência segura
   const carregarConfiguracao = useCallback(async () => {
     if (!session?.user?.id) return;
     try {
@@ -223,7 +223,6 @@ const App = () => {
     }
   };
 
-  // Envolvido em useCallback
   const carregarDados = useCallback(async () => {
     if (!session?.user?.id) return;
     try {
@@ -316,7 +315,7 @@ const App = () => {
         setServicos([]); 
         setClientes([]); 
     }
-  }, [session, carregarDados, carregarConfiguracao]); // Dependências completas
+  }, [session, carregarDados, carregarConfiguracao]);
 
   useEffect(() => {
     const algumModalAberto = showModal || showClienteModal || showSolicitantesModal || showConfigModal;
@@ -437,6 +436,7 @@ const App = () => {
   };
 
   const handleLogout = async () => { setLoading(true); const { error } = await supabase.auth.signOut(); if (error) console.error(error); else setSession(null); setLoading(false); };
+  const blobToBase64 = (blob) => { return new Promise((resolve, reject) => { const reader = new FileReader(); reader.onloadend = () => resolve(reader.result); reader.onerror = reject; reader.readAsDataURL(blob); }); };
   const showToast = (mensagem, tipo = 'sucesso') => { setToast({ visivel: true, mensagem: mensagem, tipo: tipo }); setTimeout(() => { setToast(prev => ({ ...prev, visivel: false })); }, 3000); };
 
   const handleGerarPDF = () => {
@@ -466,6 +466,76 @@ const App = () => {
         'Nota Fiscal': s.numero_nfs || '-'
     }));
     const ws = XLSX.utils.json_to_sheet(dados); const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, "Serviços"); XLSX.writeFile(wb, `Relatorio_Servicos_${new Date().toISOString().split('T')[0]}.xlsx`); showToast('Planilha Excel gerada com sucesso!', 'sucesso');
+  };
+
+  const handleEnviarEmail = async () => {
+    if (!filtros.cliente || filtros.cliente.length === 0) { showToast("Selecione um cliente no filtro.", "erro"); return; }
+    const nomeClienteAlvo = filtros.cliente[0];
+    const clienteSelecionado = clientes.find(c => c.nome === nomeClienteAlvo);
+    
+    if (!clienteSelecionado) { showToast("Cliente não encontrado.", "erro"); return; }
+    if (servicosFiltradosData.length === 0) { showToast("Não há serviços listados para enviar.", "erro"); return; }
+
+    setEmailEnviando(true);
+    try {
+      const { data: todosSolicitantes, error } = await supabase.from('solicitantes').select('*').eq('cliente_id', clienteSelecionado.id);
+      if (error) throw error;
+      
+      const pacotesDeEnvio = {};
+      let servicosSemDestino = 0;
+
+      servicosFiltradosData.forEach(servico => {
+        if (servico.cliente !== clienteSelecionado.nome) return;
+
+        let emailDestino = null;
+        let emailCC = null;
+
+        const solicitanteEncontrado = todosSolicitantes.find(s => s.nome.trim().toLowerCase() === (servico.solicitante || '').trim().toLowerCase());
+
+        if (solicitanteEncontrado) {
+          if (solicitanteEncontrado.coordenador_id) {
+            const chefe = todosSolicitantes.find(s => s.id === solicitanteEncontrado.coordenador_id);
+            if (chefe && chefe.email) {
+              emailDestino = chefe.email;
+              if (solicitanteEncontrado.email) emailCC = solicitanteEncontrado.email;
+            }
+          } else if (solicitanteEncontrado.email) {
+            emailDestino = solicitanteEncontrado.email;
+          }
+        }
+
+        if (!emailDestino) { servicosSemDestino++; return; }
+
+        if (!pacotesDeEnvio[emailDestino]) { pacotesDeEnvio[emailDestino] = { destinatario: emailDestino, servicos: [], ccs: new Set() }; }
+        pacotesDeEnvio[emailDestino].servicos.push(servico);
+        if (emailCC) pacotesDeEnvio[emailDestino].ccs.add(emailCC);
+      });
+
+      if (Object.keys(pacotesDeEnvio).length === 0) { showToast("Nenhum e-mail de gestor/solicitante encontrado.", "erro"); return; }
+
+      let enviados = 0;
+      for (const [emailDestino, pacote] of Object.entries(pacotesDeEnvio)) {
+        const listaCCs = Array.from(pacote.ccs);
+        showToast(`Enviando para ${emailDestino}...`, "sucesso");
+
+        const nomeParaRelatorio = nomeConsultor || session?.user?.email || 'Consultor';
+        const pdfBlob = gerarRelatorioPDF(pacote.servicos, filtros, nomeParaRelatorio);
+        
+        if (!pdfBlob) throw new Error("Falha ao gerar PDF");
+        const pdfBase64 = await blobToBase64(pdfBlob);
+        
+        const response = await fetch("/api/enviar-email", {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ email: emailDestino, cc: listaCCs, nomeCliente: clienteSelecionado.nome, pdfBase64: pdfBase64, periodo: filtros.dataInicio ? `${new Date(filtros.dataInicio).toLocaleDateString()} a ...` : 'Período Geral' })
+        });
+
+        if (response.ok) enviados++;
+      }
+
+      if (servicosSemDestino > 0) { showToast(`Sucesso! ${enviados} emails enviados. (${servicosSemDestino} itens sem contato ignorados)`, "sucesso"); } 
+      else { showToast(`Sucesso Total! ${enviados} email(s) enviados.`, "sucesso"); }
+
+    } catch (error) { console.error("Erro:", error); showToast("Erro no processo de envio.", "erro"); } finally { setEmailEnviando(false); }
   };
   
   const resetForm = () => { 
@@ -652,6 +722,40 @@ const App = () => {
 
                     {activeTab === 'servicos' && (
                         <div className="space-y-6">
+                            {/* --- NOVOS TOTALIZADORES (SUMMARY BAR) --- */}
+                            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                <div className="bg-white dark:bg-gray-800 p-4 rounded-xl border border-gray-100 dark:border-gray-700 flex items-center justify-between shadow-sm">
+                                    <div>
+                                        <p className="text-xs font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wider">Total Horas</p>
+                                        <p className="text-xl font-black text-indigo-600 dark:text-indigo-400">{formatHoursInt(stats.totalHoras)}</p>
+                                    </div>
+                                    <div className="p-3 bg-indigo-50 dark:bg-indigo-900/30 rounded-lg">
+                                        <Clock className="text-indigo-600 dark:text-indigo-400" size={24} />
+                                    </div>
+                                </div>
+                                <div className="bg-white dark:bg-gray-800 p-4 rounded-xl border border-gray-100 dark:border-gray-700 flex items-center justify-between shadow-sm">
+                                    <div>
+                                        <p className="text-xs font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wider">Valor Total</p>
+                                        <p className="text-xl font-black text-green-600 dark:text-green-400 truncate max-w-[150px]" title={formatCurrency(stats.totalValor)}>
+                                            {formatCurrency(stats.totalValor)}
+                                        </p>
+                                    </div>
+                                    <div className="p-3 bg-green-50 dark:bg-green-900/30 rounded-lg">
+                                        <DollarSign className="text-green-600 dark:text-green-400" size={24} />
+                                    </div>
+                                </div>
+                                <div className="bg-white dark:bg-gray-800 p-4 rounded-xl border border-gray-100 dark:border-gray-700 flex items-center justify-between shadow-sm">
+                                    <div>
+                                        <p className="text-xs font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wider">Quantidade</p>
+                                        <p className="text-xl font-black text-gray-700 dark:text-white">{stats.totalServicos} <span className="text-xs font-medium text-gray-400">serviços</span></p>
+                                    </div>
+                                    <div className="p-3 bg-gray-50 dark:bg-gray-700 rounded-lg">
+                                        <FileText className="text-gray-600 dark:text-gray-300" size={24} />
+                                    </div>
+                                </div>
+                            </div>
+                            {/* --- FIM DOS TOTALIZADORES --- */}
+
                             <div className="bg-white dark:bg-gray-800 p-6 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 space-y-4">
                                 <div className="flex justify-between items-center">
                                     <div className="flex items-center gap-2 text-gray-800 dark:text-white font-bold">
@@ -679,6 +783,9 @@ const App = () => {
                                 <div className="flex justify-end gap-3 pt-2">
                                     <button onClick={handleExportarExcel} className="flex items-center gap-2 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700 px-4 py-2 rounded-lg text-sm font-medium transition-colors" title="Exportar Excel"><FileText size={18} className="text-green-600 dark:text-green-400" /> Excel</button>
                                     <button onClick={handleGerarPDF} className="flex items-center gap-2 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700 px-4 py-2 rounded-lg text-sm font-medium transition-colors" title="Gerar PDF"><FileText size={18} className="text-red-600 dark:text-red-400" /> PDF</button>
+                                    <button onClick={handleEnviarEmail} disabled={emailEnviando} className={`flex items-center gap-2 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${emailEnviando ? 'opacity-50 cursor-not-allowed' : ''}`} title="Enviar por Email">
+                                        {emailEnviando ? 'Enviando...' : <><Mail size={18} className="text-blue-600 dark:text-blue-400" /> Enviar</>}
+                                    </button>
                                 </div>
                             </div>
                             
