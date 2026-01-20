@@ -1,10 +1,11 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import ReactDOM from 'react-dom'; // <--- IMPORTANTE PARA O PORTAL
+import ReactDOM from 'react-dom';
 import { Calendar, dateFnsLocalizer } from 'react-big-calendar';
 import format from 'date-fns/format';
 import parse from 'date-fns/parse';
 import startOfWeek from 'date-fns/startOfWeek';
 import getDay from 'date-fns/getDay';
+import { addDays, subDays, isSameDay } from 'date-fns'; // <--- IMPORTANTE
 import ptBR from 'date-fns/locale/pt-BR';
 import withDragAndDrop from 'react-big-calendar/lib/addons/dragAndDrop';
 import 'react-big-calendar/lib/css/react-big-calendar.css';
@@ -12,7 +13,7 @@ import 'react-big-calendar/lib/addons/dragAndDrop/styles.css';
 
 import { 
   X, Save, Trash2, User, Calendar as CalendarIcon, 
-  Clock, Filter, Plus, ChevronDown, Check
+  Clock, Filter, Plus, ChevronDown, Check, ChevronLeft, ChevronRight, MapPin
 } from 'lucide-react';
 import supabase from '../services/supabase';
 
@@ -127,23 +128,23 @@ const ConsultantMultiSelect = ({ options, selected, onChange }) => {
   };
 
   const getLabel = () => {
-    if (selected.includes('todos')) return 'Toda a Equipe';
+    if (selected.includes('todos')) return 'Todos';
     if (selected.length === 1) {
         const found = options.find(o => o.id === selected[0]);
-        return found ? (found.nome || found.email) : '1 Selecionado';
+        return found ? (found.nome || found.email).split(' ')[0] : '1 Sel.';
     }
-    return `${selected.length} Consultores`;
+    return `${selected.length} Sel.`;
   };
 
   return (
     <div className="relative" ref={containerRef}>
       <button 
         onClick={() => setIsOpen(!isOpen)}
-        className="flex items-center gap-2 bg-white dark:bg-gray-800 px-3 py-2 rounded-lg border border-gray-200 dark:border-gray-600 text-sm font-bold text-gray-700 dark:text-gray-300 hover:border-indigo-500 transition-colors shadow-sm min-w-[200px] justify-between"
+        className="flex items-center gap-2 bg-white dark:bg-gray-800 px-3 py-2 rounded-lg border border-gray-200 dark:border-gray-600 text-sm font-bold text-gray-700 dark:text-gray-300 hover:border-indigo-500 transition-colors shadow-sm min-w-[140px] md:min-w-[200px] justify-between"
       >
         <div className="flex items-center gap-2">
             <Filter size={16} className="text-indigo-600" />
-            <span className="truncate max-w-[140px]">{getLabel()}</span>
+            <span className="truncate max-w-[100px] md:max-w-[140px]">{getLabel()}</span>
         </div>
         <ChevronDown size={16} className={`text-gray-400 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
       </button>
@@ -192,6 +193,9 @@ const TeamCalendar = ({ userId, userRole, showToast }) => {
   const [, setLoading] = useState(true); 
   const [modalOpen, setModalOpen] = useState(false);
   const [filterConsultant, setFilterConsultant] = useState(['todos']);
+  
+  // Controle de Data (Crucial para o Mobile)
+  const [viewDate, setViewDate] = useState(new Date());
 
   const [formData, setFormData] = useState({
     id: null,
@@ -361,11 +365,23 @@ const TeamCalendar = ({ userId, userRole, showToast }) => {
     };
   };
 
+  // --- FILTRO DE EVENTOS DO DIA (MOBILE) ---
+  const eventsOnDay = events.filter(evt => 
+    isSameDay(evt.start, viewDate)
+  ).sort((a, b) => a.start - b.start);
+
+  // --- CORES PARA OS CARDS MOBILE ---
+  const typeColors = {
+    execucao: 'border-l-4 border-blue-500 bg-blue-50 dark:bg-blue-900/20',
+    reuniao: 'border-l-4 border-purple-500 bg-purple-50 dark:bg-purple-900/20',
+    bloqueio: 'border-l-4 border-red-500 bg-red-50 dark:bg-red-900/20',
+    pessoal: 'border-l-4 border-green-500 bg-green-50 dark:bg-green-900/20'
+  };
+
   // --- MODAL COM PORTAL (SOLUÇÃO DEFINITIVA) ---
   const renderModal = () => {
     if (!modalOpen) return null;
 
-    // Criamos o Portal para jogar o modal direto no body
     return ReactDOM.createPortal(
         <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in w-screen h-screen">
           <div className="bg-white dark:bg-gray-900 w-full max-w-md rounded-2xl shadow-2xl p-6 border border-gray-200 dark:border-gray-800 animate-scale-in relative">
@@ -442,15 +458,24 @@ const TeamCalendar = ({ userId, userRole, showToast }) => {
     <div className="h-full flex flex-col space-y-4 animate-fade-in p-4 md:p-6">
       <style>{customStyles}</style>
 
+      {/* --- HEADER RESPONSIVO --- */}
       <div className="flex flex-col md:flex-row justify-between items-center gap-4 bg-white dark:bg-gray-800 p-4 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700">
-        <div>
+        <div className="w-full md:w-auto">
           <h2 className="text-xl font-bold text-gray-800 dark:text-white flex items-center gap-2">
-            <CalendarIcon className="text-indigo-600" /> Agenda da Equipe
+            <CalendarIcon className="text-indigo-600" /> 
+            <span className="hidden md:inline">Agenda da Equipe</span>
+            
+            {/* CONTROLES DE DATA SÓ NO MOBILE */}
+            <div className="flex md:hidden items-center gap-2 ml-auto">
+                <button onClick={() => setViewDate(subDays(viewDate, 1))} className="p-1 rounded hover:bg-gray-100 dark:hover:bg-gray-700"><ChevronLeft size={20}/></button>
+                <span className="text-sm font-bold text-indigo-600">{format(viewDate, 'dd/MM/yyyy')}</span>
+                <button onClick={() => setViewDate(addDays(viewDate, 1))} className="p-1 rounded hover:bg-gray-100 dark:hover:bg-gray-700"><ChevronRight size={20}/></button>
+            </div>
           </h2>
-          <p className="text-sm text-gray-500">Arraste para mover • Clique para editar</p>
+          <p className="text-sm text-gray-500 hidden md:block">Arraste para mover • Clique para editar</p>
         </div>
         
-        <div className="flex gap-3 items-center">
+        <div className="flex gap-2 w-full md:w-auto justify-end">
             {isAdmin && (
                 <ConsultantMultiSelect 
                     options={team} 
@@ -458,13 +483,47 @@ const TeamCalendar = ({ userId, userRole, showToast }) => {
                     onChange={setFilterConsultant} 
                 />
             )}
-            <button onClick={() => handleSelectSlot({ start: null, end: null })} className="bg-indigo-600 text-white px-4 py-2 rounded-lg font-bold text-sm hover:bg-indigo-700 transition-colors flex items-center gap-2 h-[38px]">
-                <Plus size={18} /> Novo
+            <button onClick={() => handleSelectSlot({ start: null, end: null })} className="bg-indigo-600 text-white px-3 md:px-4 py-2 rounded-lg font-bold text-sm hover:bg-indigo-700 transition-colors flex items-center gap-2 h-[38px]">
+                <Plus size={18} /> <span className="hidden md:inline">Novo</span>
             </button>
         </div>
       </div>
 
-      <div className="flex-1 bg-white dark:bg-gray-800 p-4 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 min-h-[650px]">
+      {/* --- VISÃO MOBILE (AGENDA LISTA) --- */}
+      <div className="md:hidden flex-1 overflow-y-auto">
+        {eventsOnDay.length === 0 ? (
+            <div className="flex flex-col items-center justify-center h-64 text-gray-400">
+                <CalendarIcon size={48} className="mb-2 opacity-20"/>
+                <p>Agenda livre neste dia.</p>
+            </div>
+        ) : (
+            <div className="space-y-3">
+                {eventsOnDay.map(evt => (
+                    <div 
+                        key={evt.id} 
+                        onClick={() => handleSelectEvent(evt)}
+                        className={`p-4 rounded-xl bg-white dark:bg-gray-800 shadow-sm border border-gray-100 dark:border-gray-700 ${typeColors[evt.tipo] || typeColors.execucao}`}
+                    >
+                        <div className="flex justify-between items-start">
+                            <div>
+                                <h4 className="font-bold text-gray-800 dark:text-white">{evt.title}</h4>
+                                <div className="flex items-center gap-2 text-xs text-gray-500 mt-1">
+                                    <Clock size={12}/>
+                                    {format(evt.start, 'HH:mm')} - {format(evt.end, 'HH:mm')}
+                                </div>
+                            </div>
+                            <span className="text-[10px] uppercase font-bold text-gray-400 bg-gray-100 dark:bg-gray-700 px-2 py-1 rounded">
+                                {evt.tipo}
+                            </span>
+                        </div>
+                    </div>
+                ))}
+            </div>
+        )}
+      </div>
+
+      {/* --- VISÃO DESKTOP (CALENDÁRIO GRANDE) --- */}
+      <div className="hidden md:block flex-1 bg-white dark:bg-gray-800 p-4 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 min-h-[650px]">
         <DnDCalendar
           localizer={localizer}
           events={events}
@@ -482,6 +541,9 @@ const TeamCalendar = ({ userId, userRole, showToast }) => {
           eventPropGetter={eventStyleGetter}
           messages={{ next: "Próximo", previous: "Anterior", today: "Hoje", month: "Mês", week: "Semana", day: "Dia", agenda: "Agenda" }}
           className="text-gray-700 dark:text-gray-300 font-sans text-sm"
+          // Sincroniza navegação do calendário grande com o state viewDate
+          date={viewDate}
+          onNavigate={date => setViewDate(date)}
         />
       </div>
 
