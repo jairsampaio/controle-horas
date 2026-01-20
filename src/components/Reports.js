@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { 
   FileText, BarChart3, 
-  DollarSign, TrendingUp, Download, Clock 
+  DollarSign, TrendingUp, Download, Clock, Wallet, AlertCircle
 } from 'lucide-react';
 import supabase from '../services/supabase';
 import { formatCurrency, formatHoursInt } from '../utils/formatters';
@@ -13,7 +13,7 @@ const Reports = () => {
   const [loading, setLoading] = useState(false);
   const [canais, setCanais] = useState([]);
   
-  // Filtros - Padrão: Início do Ano até Hoje (para pegar dados reais)
+  // Filtros - Padrão: Ano atual
   const [periodo, setPeriodo] = useState({
     inicio: new Date(new Date().getFullYear(), 0, 1).toISOString().split('T')[0], 
     fim: new Date().toISOString().split('T')[0]
@@ -22,13 +22,14 @@ const Reports = () => {
 
   const [dados, setDados] = useState([]);
   const [resumo, setResumo] = useState({
-    totalHorasVendidas: 0,
-    totalFaturamento: 0,
-    qtdDemandas: 0,
-    ticketMedio: 0
+    totalVenda: 0,
+    totalCusto: 0,
+    lucro: 0,
+    margem: 0,
+    horasVendidas: 0,
+    horasCusto: 0
   });
 
-  // Carrega lista de canais
   useEffect(() => {
     const fetchCanais = async () => {
       const { data } = await supabase.from('canais').select('*').eq('ativo', true).order('nome');
@@ -37,14 +38,13 @@ const Reports = () => {
     fetchCanais();
   }, []);
 
-  // Busca e Processa os Dados (Lógica Blindada: Tabelas Separadas)
   const gerarRelatorio = useCallback(async () => {
     setLoading(true);
     try {
       // 1. Busca Demandas Básicas
       const { data: demandas, error: errDemandas } = await supabase
         .from('demandas')
-        .select('*') // Traz tudo para evitar erro de nome de coluna
+        .select('*') 
         .gte('created_at', `${periodo.inicio}T00:00:00`)
         .lte('created_at', `${periodo.fim}T23:59:59`)
         .neq('status', 'Cancelada');
@@ -53,43 +53,36 @@ const Reports = () => {
 
       if (!demandas || demandas.length === 0) {
           setDados([]);
-          setResumo({ totalHorasVendidas: 0, totalFaturamento: 0, qtdDemandas: 0, ticketMedio: 0 });
+          setResumo({ totalVenda: 0, totalCusto: 0, lucro: 0, margem: 0, horasVendidas: 0, horasCusto: 0 });
           setLoading(false);
           return;
       }
 
       // 2. Coleta IDs
       const demandaIds = demandas.map(d => d.id);
-      // Tenta pegar ID do cliente (suporta 'cliente_id' ou 'cliente')
       const clienteIds = [...new Set(demandas.map(d => d.cliente_id || d.cliente).filter(Boolean))];
       
-      // 3. Busca Financeiro
+      // 3. Busca Financeiro (Trazendo CUSTO agora)
       const { data: finData } = await supabase
         .from('demandas_financeiro')
-        .select('demanda_id, horas_vendidas, valor_cobrado')
+        .select('demanda_id, horas_vendidas, valor_cobrado, valor_interno_hora') // <--- Trouxe o custo hora
         .in('demanda_id', demandaIds);
 
       // 4. Busca Clientes
       let clientesMap = {};
       if (clienteIds.length > 0) {
-          const { data: clientesData } = await supabase
-            .from('clientes')
-            .select('id, nome')
-            .in('id', clienteIds);
-          
-          if (clientesData) {
-              clientesData.forEach(c => { clientesMap[c.id] = c.nome; });
-          }
+          const { data: clientesData } = await supabase.from('clientes').select('id, nome').in('id', clienteIds);
+          if (clientesData) clientesData.forEach(c => { clientesMap[c.id] = c.nome; });
       }
 
-      // 5. Mapeamentos Auxiliares
+      // 5. Mapeamentos
       let financeiroMap = {};
       if (finData) finData.forEach(f => { financeiroMap[f.demanda_id] = f; });
 
       let canaisMap = {};
       canais.forEach(c => { canaisMap[c.id] = c.nome; });
 
-      // 6. Cruzamento de Dados
+      // 6. Cruzamento e Cálculos
       let listaProcessada = demandas.map(d => {
           const fin = financeiroMap[d.id] || {};
           
@@ -99,19 +92,36 @@ const Reports = () => {
           const nomeCliente = clientesMap[idClienteReal] || 'Cliente n/d';
           const nomeCanal = canaisMap[idCanalReal] || 'Direto / Sem Canal';
 
+          // Cálculos Financeiros
+          const vlrVenda = Number(fin.valor_cobrado || 0);
+          const hrsVendidas = Number(fin.horas_vendidas || 0);
+          
+          // Custo = Horas Estimadas (Repasse) * Valor Hora Interno
+          const hrsCusto = Number(d.estimativa || 0); 
+          const vlrHoraCusto = Number(fin.valor_interno_hora || 0);
+          const custoTotal = hrsCusto * vlrHoraCusto;
+
+          const lucroItem = vlrVenda - custoTotal;
+
           return {
               data: new Date(d.created_at).toLocaleDateString('pt-BR'),
               cliente: nomeCliente,
               demanda: d.titulo,
               canal: nomeCanal,
               canal_id: idCanalReal,
-              horasVendidas: Number(fin.horas_vendidas || 0),
-              valorVenda: Number(fin.valor_cobrado || 0),
+              
+              horasVendidas: hrsVendidas,
+              horasCusto: hrsCusto,
+              
+              valorVenda: vlrVenda,
+              custoTotal: custoTotal,
+              lucro: lucroItem,
+              
               status: d.status
           };
       });
 
-      // 7. Filtro de Canal (No Array Final)
+      // 7. Filtro de Canal
       if (canalSelecionado === 'direto') {
         listaProcessada = listaProcessada.filter(d => !d.canal_id);
       } else if (canalSelecionado !== 'todos') {
@@ -119,20 +129,30 @@ const Reports = () => {
         listaProcessada = listaProcessada.filter(d => d.canal_id == canalSelecionado);
       }
 
-      // 8. Totais
-      let somaHoras = 0;
-      let somaValor = 0;
+      // 8. Totais Gerais
+      let totalVenda = 0;
+      let totalCusto = 0;
+      let totalHorasVenda = 0;
+      let totalHorasCusto = 0;
+
       listaProcessada.forEach(item => {
-          somaHoras += item.horasVendidas;
-          somaValor += item.valorVenda;
+          totalVenda += item.valorVenda;
+          totalCusto += item.custoTotal;
+          totalHorasVenda += item.horasVendidas;
+          totalHorasCusto += item.horasCusto;
       });
+
+      const lucroTotal = totalVenda - totalCusto;
+      const margemTotal = totalVenda > 0 ? (lucroTotal / totalVenda) * 100 : 0;
 
       setDados(listaProcessada);
       setResumo({
-        totalHorasVendidas: somaHoras,
-        totalFaturamento: somaValor,
-        qtdDemandas: listaProcessada.length,
-        ticketMedio: listaProcessada.length > 0 ? somaValor / listaProcessada.length : 0
+        totalVenda,
+        totalCusto,
+        lucro: lucroTotal,
+        margem: margemTotal,
+        horasVendidas: totalHorasVenda,
+        horasCusto: totalHorasCusto
       });
 
     } catch (error) {
@@ -142,7 +162,6 @@ const Reports = () => {
     }
   }, [periodo, canalSelecionado, canais]);
 
-  // Gera ao carregar ou mudar filtros
   useEffect(() => {
     if (canais.length > 0 || !loading) {
         gerarRelatorio();
@@ -156,52 +175,48 @@ const Reports = () => {
         Cliente: d.cliente,
         Demanda: d.demanda,
         Canal: d.canal,
-        'Horas Vendidas': d.horasVendidas,
+        'Hrs Vendidas': d.horasVendidas,
+        'Hrs Custo': d.horasCusto,
         'Valor Venda': d.valorVenda,
-        Status: d.status
+        'Custo Total': d.custoTotal,
+        'Lucro': d.lucro
     })));
     const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, "Relatorio_Vendas");
-    XLSX.writeFile(wb, `Relatorio_Vendas_${periodo.inicio}.xlsx`);
+    XLSX.utils.book_append_sheet(wb, ws, "Resultado_Financeiro");
+    XLSX.writeFile(wb, `Resultado_Financeiro_${periodo.inicio}.xlsx`);
   };
 
   const exportarPDF = () => {
-    const doc = new jsPDF();
+    const doc = new jsPDF('l', 'mm', 'a4'); // Paisagem para caber mais colunas
 
     // Cabeçalho
     doc.setFillColor(79, 70, 229); 
-    doc.rect(0, 0, 210, 24, 'F');
+    doc.rect(0, 0, 297, 24, 'F');
     doc.setTextColor(255, 255, 255);
     doc.setFontSize(16);
     doc.setFont('helvetica', 'bold');
-    doc.text("Relatório Gerencial de Vendas", 14, 15);
+    doc.text("Relatório de Performance Financeira", 14, 15);
 
-    // Filtros
     doc.setTextColor(40, 40, 40);
     doc.setFontSize(10);
     doc.setFont('helvetica', 'normal');
     
     const dataIni = new Date(periodo.inicio).toLocaleDateString('pt-BR');
     const dataFim = new Date(periodo.fim).toLocaleDateString('pt-BR');
-    
-    let canalLabel = 'Todos os Canais';
-    if (canalSelecionado === 'direto') canalLabel = 'Apenas Direto (Sem Canal)';
-    // eslint-disable-next-line
-    else if (canalSelecionado !== 'todos') canalLabel = canais.find(c => c.id == canalSelecionado)?.nome || 'Canal Específico';
-
     doc.text(`Período: ${dataIni} até ${dataFim}`, 14, 35);
-    doc.text(`Filtro de Canal: ${canalLabel}`, 14, 40);
-    doc.text(`Emissão: ${new Date().toLocaleDateString('pt-BR')}`, 196, 35, { align: 'right' });
+    doc.text(`Emissão: ${new Date().toLocaleDateString('pt-BR')}`, 280, 35, { align: 'right' });
 
-    // Tabela
-    const tableColumn = ["Data", "Cliente", "Demanda", "Canal", "Hrs Vendidas", "Valor Venda"];
+    const tableColumn = ["Data", "Cliente", "Demanda", "Canal", "Hrs Venda", "Hrs Custo", "Venda (R$)", "Custo (R$)", "Lucro (R$)"];
     const tableRows = dados.map(row => [
         row.data,
         row.cliente,
         row.demanda,
         row.canal,
         formatHoursInt(row.horasVendidas),
-        formatCurrency(row.valorVenda)
+        formatHoursInt(row.horasCusto),
+        formatCurrency(row.valorVenda),
+        formatCurrency(row.custoTotal),
+        formatCurrency(row.lucro)
     ]);
 
     autoTable(doc, {
@@ -209,37 +224,26 @@ const Reports = () => {
       head: [tableColumn],
       body: tableRows,
       theme: 'grid',
-      styles: { fontSize: 8, cellPadding: 3, textColor: [50, 50, 50] },
+      styles: { fontSize: 8, cellPadding: 2, textColor: [50, 50, 50] },
       headStyles: { fillColor: [79, 70, 229], textColor: [255, 255, 255], fontStyle: 'bold', halign: 'center' },
       columnStyles: {
-        0: { cellWidth: 20, halign: 'center' },
-        1: { cellWidth: 35, fontStyle: 'bold' },
-        4: { cellWidth: 25, halign: 'center', fontStyle: 'bold', textColor: [79, 70, 229] }, 
-        5: { cellWidth: 30, halign: 'right', fontStyle: 'bold', textColor: [22, 163, 74] }   
+        6: { halign: 'right', textColor: [22, 163, 74], fontStyle: 'bold' }, // Venda Verde
+        7: { halign: 'right', textColor: [220, 38, 38] }, // Custo Vermelho
+        8: { halign: 'right', fontStyle: 'bold' } // Lucro
       },
       alternateRowStyles: { fillColor: [245, 247, 255] }
     });
 
-    // Rodapé
     let finalY = doc.lastAutoTable.finalY + 10;
-    if (finalY > 260) { doc.addPage(); finalY = 20; }
+    if (finalY > 180) { doc.addPage(); finalY = 20; }
 
-    doc.setDrawColor(200, 200, 200);
-    doc.setFillColor(250, 250, 250);
-    doc.roundedRect(120, finalY, 76, 24, 2, 2, 'FD');
+    doc.setFontSize(10); doc.setTextColor(100, 100, 100);
+    doc.text(`Total Faturamento: ${formatCurrency(resumo.totalVenda)}`, 280, finalY, { align: 'right' });
+    doc.text(`Custo Consultores: ${formatCurrency(resumo.totalCusto)}`, 280, finalY + 6, { align: 'right' });
+    doc.setFontSize(12); doc.setTextColor(0, 0, 0); doc.setFont('helvetica', 'bold');
+    doc.text(`Lucro Líquido: ${formatCurrency(resumo.lucro)} (${resumo.margem.toFixed(1)}%)`, 280, finalY + 14, { align: 'right' });
 
-    doc.setFontSize(10);
-    doc.setTextColor(100, 100, 100);
-    doc.text("Total Horas Vendidas:", 125, finalY + 8);
-    doc.text("Faturamento Total:", 125, finalY + 16);
-
-    doc.setFontSize(11);
-    doc.setTextColor(0, 0, 0);
-    doc.setFont('helvetica', 'bold');
-    doc.text(formatHoursInt(resumo.totalHorasVendidas), 190, finalY + 8, { align: 'right' });
-    doc.text(formatCurrency(resumo.totalFaturamento), 190, finalY + 16, { align: 'right' });
-
-    doc.save(`Relatorio_Vendas_${periodo.inicio}.pdf`);
+    doc.save(`Performance_Financeira.pdf`);
   };
 
   return (
@@ -249,9 +253,9 @@ const Reports = () => {
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-6">
           <div>
             <h2 className="text-2xl font-bold text-gray-800 dark:text-white flex items-center gap-2">
-              <BarChart3 className="text-indigo-600" /> Relatórios de Vendas
+              <BarChart3 className="text-indigo-600" /> Relatórios Financeiros
             </h2>
-            <p className="text-gray-500 text-sm">Análise de Demandas Vendidas e Performance</p>
+            <p className="text-gray-500 text-sm">Confronto: Vendas vs Custo de Consultores</p>
           </div>
           
           <div className="flex gap-2">
@@ -276,7 +280,7 @@ const Reports = () => {
           <div className="md:col-span-2">
             <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Filtrar por Canal</label>
             <select value={canalSelecionado} onChange={e => setCanalSelecionado(e.target.value)} className="w-full border rounded-lg p-2 dark:bg-gray-700 dark:border-gray-600 dark:text-white font-medium">
-              <option value="todos">Todos os Canais (Inclui Direto)</option>
+              <option value="todos">Todos os Canais</option>
               <option value="direto">Apenas Direto / Sem Canal</option>
               {canais.map(c => <option key={c.id} value={c.id}>{c.nome}</option>)}
             </select>
@@ -288,52 +292,77 @@ const Reports = () => {
         <div className="text-center py-20"><div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600 mx-auto"></div></div>
       ) : (
         <>
+          {/* --- CARDS DE DRE (DEMONSTRATIVO DE RESULTADO) --- */}
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-            <div className="bg-indigo-600 p-6 rounded-2xl shadow-lg text-white">
-              <div className="flex justify-between items-start">
-                <div>
-                  <p className="text-indigo-200 text-xs font-bold uppercase">Total Horas Vendidas</p>
-                  <h3 className="text-3xl font-black mt-1">{formatHoursInt(resumo.totalHorasVendidas)}</h3>
-                </div>
-                <div className="p-2 bg-indigo-500/30 rounded-lg"><Clock className="text-white" size={24}/></div>
+            
+            {/* 1. FATURAMENTO (VENDA) */}
+            <div className="bg-white dark:bg-gray-800 p-5 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 relative overflow-hidden group">
+              <div className="absolute top-0 right-0 p-3 opacity-10 group-hover:opacity-20 transition-opacity">
+                <DollarSign size={40} className="text-green-600" />
               </div>
-              <p className="text-xs text-indigo-200 mt-4 font-medium">No período selecionado</p>
+              <p className="text-gray-400 text-xs font-bold uppercase mb-1">Faturamento (Venda)</p>
+              <h3 className="text-2xl font-black text-green-600 dark:text-green-400">
+                {formatCurrency(resumo.totalVenda)}
+              </h3>
+              <p className="text-xs text-gray-400 mt-2 flex items-center gap-1">
+                <Clock size={12}/> {formatHoursInt(resumo.horasVendidas)}h vendidas
+              </p>
             </div>
 
-            <div className="bg-white dark:bg-gray-800 p-6 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700">
+            {/* 2. CUSTO CONSULTOR */}
+            <div className="bg-white dark:bg-gray-800 p-5 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 relative overflow-hidden group">
+              <div className="absolute top-0 right-0 p-3 opacity-10 group-hover:opacity-20 transition-opacity">
+                <Wallet size={40} className="text-red-600" />
+              </div>
+              <p className="text-gray-400 text-xs font-bold uppercase mb-1">Custos (Consultores)</p>
+              <h3 className="text-2xl font-black text-red-500 dark:text-red-400">
+                {formatCurrency(resumo.totalCusto)}
+              </h3>
+              <p className="text-xs text-gray-400 mt-2 flex items-center gap-1">
+                <Clock size={12}/> {formatHoursInt(resumo.horasCusto)}h de repasse
+              </p>
+            </div>
+
+            {/* 3. LUCRO LÍQUIDO (DESTAQUE) */}
+            <div className="bg-indigo-600 p-5 rounded-2xl shadow-lg text-white relative overflow-hidden">
+              <div className="absolute -right-6 -top-6 w-24 h-24 bg-white/10 rounded-full blur-xl"></div>
               <div className="flex justify-between items-start">
                 <div>
-                  <p className="text-gray-400 text-xs font-bold uppercase">Faturamento (Venda)</p>
-                  <h3 className="text-2xl font-black text-green-600 dark:text-green-400 mt-1">{formatCurrency(resumo.totalFaturamento)}</h3>
+                  <p className="text-indigo-200 text-xs font-bold uppercase mb-1">Lucro Líquido</p>
+                  <h3 className="text-3xl font-black">{formatCurrency(resumo.lucro)}</h3>
                 </div>
-                <div className="p-2 bg-green-50 dark:bg-green-900/20 rounded-lg"><DollarSign className="text-green-600" size={24}/></div>
+                <TrendingUp className="text-indigo-200" size={28}/>
+              </div>
+              <div className="mt-4 inline-flex items-center px-2 py-1 rounded bg-white/20 text-xs font-bold">
+                Margem: {resumo.margem.toFixed(1)}%
               </div>
             </div>
 
-            <div className="bg-white dark:bg-gray-800 p-6 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700">
-              <div className="flex justify-between items-start">
-                <div>
-                  <p className="text-gray-400 text-xs font-bold uppercase">Novas Demandas</p>
-                  <h3 className="text-2xl font-black text-gray-800 dark:text-white mt-1">{resumo.qtdDemandas}</h3>
-                </div>
-                <div className="p-2 bg-blue-50 dark:bg-blue-900/20 rounded-lg"><FileText className="text-blue-600" size={24}/></div>
-              </div>
+            {/* 4. BALANÇO DE HORAS */}
+            <div className="bg-white dark:bg-gray-800 p-5 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 flex flex-col justify-center">
+               <div className="flex justify-between text-xs mb-2">
+                  <span className="text-gray-500 font-bold">HORAS VENDIDAS</span>
+                  <span className="text-indigo-600 font-bold">{formatHoursInt(resumo.horasVendidas)}</span>
+               </div>
+               <div className="w-full bg-gray-100 dark:bg-gray-700 h-2 rounded-full mb-4 overflow-hidden">
+                  <div className="bg-indigo-500 h-full rounded-full" style={{ width: '100%' }}></div>
+               </div>
+
+               <div className="flex justify-between text-xs mb-2">
+                  <span className="text-gray-500 font-bold">HORAS CUSTO</span>
+                  <span className="text-red-500 font-bold">{formatHoursInt(resumo.horasCusto)}</span>
+               </div>
+               <div className="w-full bg-gray-100 dark:bg-gray-700 h-2 rounded-full overflow-hidden">
+                  <div className="bg-red-400 h-full rounded-full" style={{ width: `${resumo.horasVendidas > 0 ? (resumo.horasCusto / resumo.horasVendidas) * 100 : 0}%` }}></div>
+               </div>
             </div>
 
-            <div className="bg-white dark:bg-gray-800 p-6 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700">
-              <div className="flex justify-between items-start">
-                <div>
-                  <p className="text-gray-400 text-xs font-bold uppercase">Ticket Médio (Venda)</p>
-                  <h3 className="text-2xl font-black text-gray-800 dark:text-white mt-1">{formatCurrency(resumo.ticketMedio)}</h3>
-                </div>
-                <div className="p-2 bg-purple-50 dark:bg-purple-900/20 rounded-lg"><TrendingUp className="text-purple-600" size={24}/></div>
-              </div>
-            </div>
           </div>
 
           <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 overflow-hidden">
-            <div className="p-6 border-b border-gray-100 dark:border-gray-700">
-              <h3 className="font-bold text-gray-800 dark:text-white">Detalhamento das Vendas (Demandas)</h3>
+            <div className="p-6 border-b border-gray-100 dark:border-gray-700 flex justify-between items-center">
+              <h3 className="font-bold text-gray-800 dark:text-white">Detalhamento Financeiro (DRE por Demanda)</h3>
+              <span className="text-xs text-gray-400 flex items-center gap-1"><AlertCircle size={12}/> Venda - Custo = Lucro</span>
             </div>
             <div className="overflow-x-auto">
               <table className="w-full text-sm text-left">
@@ -343,30 +372,40 @@ const Reports = () => {
                     <th className="px-6 py-4">Cliente</th>
                     <th className="px-6 py-4">Demanda</th>
                     <th className="px-6 py-4">Canal</th>
-                    <th className="px-6 py-4 text-center">Horas Vendidas</th>
-                    <th className="px-6 py-4 text-right">Valor Venda</th>
+                    <th className="px-6 py-4 text-center">Hrs Venda</th>
+                    <th className="px-6 py-4 text-center">Hrs Custo</th>
+                    <th className="px-6 py-4 text-right">Venda (R$)</th>
+                    <th className="px-6 py-4 text-right">Custo (R$)</th>
+                    <th className="px-6 py-4 text-right">Lucro</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
                   {dados.length === 0 ? (
                     <tr>
-                      <td colSpan="6" className="px-6 py-8 text-center text-gray-400">
+                      <td colSpan="9" className="px-6 py-8 text-center text-gray-400">
                         Nenhum registro encontrado.
                       </td>
                     </tr>
                   ) : (
                     dados.map((row, index) => (
                       <tr key={index} className="hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors">
-                        <td className="px-6 py-4 text-gray-500">{row.data}</td>
+                        <td className="px-6 py-4 text-gray-500 text-xs">{row.data}</td>
                         <td className="px-6 py-4 font-bold text-gray-800 dark:text-white">{row.cliente}</td>
-                        <td className="px-6 py-4 text-gray-600 dark:text-gray-300 truncate max-w-[200px]" title={row.demanda}>{row.demanda}</td>
+                        <td className="px-6 py-4 text-gray-600 dark:text-gray-300 truncate max-w-[150px]" title={row.demanda}>{row.demanda}</td>
                         <td className="px-6 py-4">
                           <span className={`px-2 py-1 rounded text-xs font-bold ${row.canal.includes('Direto') ? 'bg-gray-200 text-gray-600 dark:bg-gray-700 dark:text-gray-400' : 'bg-indigo-50 text-indigo-600 dark:bg-indigo-900/30 dark:text-indigo-400'}`}>
                             {row.canal}
                           </span>
                         </td>
+                        
                         <td className="px-6 py-4 text-center font-bold text-indigo-600">{formatHoursInt(row.horasVendidas)}</td>
+                        <td className="px-6 py-4 text-center text-gray-500">{formatHoursInt(row.horasCusto)}</td>
+                        
                         <td className="px-6 py-4 text-right font-bold text-green-600">{formatCurrency(row.valorVenda)}</td>
+                        <td className="px-6 py-4 text-right text-red-500 text-xs">{formatCurrency(row.custoTotal)}</td>
+                        <td className={`px-6 py-4 text-right font-black ${row.lucro >= 0 ? 'text-indigo-600' : 'text-red-600'}`}>
+                            {formatCurrency(row.lucro)}
+                        </td>
                       </tr>
                     ))
                   )}
