@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { 
-  FileText, Calendar, Filter, BarChart3, 
-  DollarSign, TrendingUp, PieChart, Download, Clock 
+  FileText, BarChart3, 
+  DollarSign, TrendingUp, Download, Clock 
 } from 'lucide-react';
 import supabase from '../services/supabase';
 import { formatCurrency, formatHoursInt } from '../utils/formatters';
