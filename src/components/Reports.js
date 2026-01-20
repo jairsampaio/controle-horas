@@ -12,15 +12,15 @@ import autoTable from 'jspdf-autotable';
 const Reports = () => {
   const [loading, setLoading] = useState(false);
   const [canais, setCanais] = useState([]);
-  const [clientes, setClientes] = useState([]); // <--- NOVO
+  const [clientes, setClientes] = useState([]);
   
-  // Filtros
+  // Filtros - Padrão: Início do Ano até Hoje
   const [periodo, setPeriodo] = useState({
     inicio: new Date(new Date().getFullYear(), 0, 1).toISOString().split('T')[0], 
     fim: new Date().toISOString().split('T')[0]
   });
   const [canalSelecionado, setCanalSelecionado] = useState('todos');
-  const [clienteSelecionado, setClienteSelecionado] = useState('todos'); // <--- NOVO
+  const [clienteSelecionado, setClienteSelecionado] = useState('todos');
 
   const [dados, setDados] = useState([]);
   const [resumo, setResumo] = useState({
@@ -32,7 +32,7 @@ const Reports = () => {
     horasCusto: 0
   });
 
-  // Carrega Listas Auxiliares (Canais e Clientes)
+  // Carrega Listas Auxiliares
   useEffect(() => {
     const fetchAuxiliar = async () => {
       // Busca Canais
@@ -112,7 +112,7 @@ const Reports = () => {
           return {
               data: new Date(d.created_at).toLocaleDateString('pt-BR'),
               cliente: nomeCliente,
-              cliente_id: idClienteReal, // Guardamos o ID para filtrar
+              cliente_id: idClienteReal, 
               demanda: d.titulo,
               canal: nomeCanal,
               canal_id: idCanalReal,
@@ -128,20 +128,20 @@ const Reports = () => {
           };
       });
 
-      // 7. Filtros (Canal E Cliente)
+      // 7. Filtros (Canal E Cliente) - CORREÇÃO DE LINT AQUI (String vs String)
       
       // Filtro Canal
       if (canalSelecionado === 'direto') {
         listaProcessada = listaProcessada.filter(d => !d.canal_id);
       } else if (canalSelecionado !== 'todos') {
-        // eslint-disable-next-line
-        listaProcessada = listaProcessada.filter(d => d.canal_id == canalSelecionado);
+        // Converte ambos para String para usar ===
+        listaProcessada = listaProcessada.filter(d => String(d.canal_id) === String(canalSelecionado));
       }
 
-      // Filtro Cliente (NOVO)
+      // Filtro Cliente
       if (clienteSelecionado !== 'todos') {
-        // eslint-disable-next-line
-        listaProcessada = listaProcessada.filter(d => d.cliente_id == clienteSelecionado);
+        // Converte ambos para String para usar ===
+        listaProcessada = listaProcessada.filter(d => String(d.cliente_id) === String(clienteSelecionado));
       }
 
       // 8. Totais Gerais
@@ -175,7 +175,7 @@ const Reports = () => {
     } finally {
       setLoading(false);
     }
-  }, [periodo, canalSelecionado, clienteSelecionado, canais]); // Adicionado clienteSelecionado
+  }, [periodo, canalSelecionado, clienteSelecionado, canais]);
 
   useEffect(() => {
     // Garante que só roda se tiver listas carregadas ou se não estiver carregando
@@ -220,10 +220,18 @@ const Reports = () => {
     const dataIni = new Date(periodo.inicio).toLocaleDateString('pt-BR');
     const dataFim = new Date(periodo.fim).toLocaleDateString('pt-BR');
     
-    // Texto dos Filtros no PDF
+    // Texto dos Filtros no PDF - CORREÇÃO DE LINT AQUI
     let filtrosTexto = `Período: ${dataIni} até ${dataFim}`;
-    if (canalSelecionado !== 'todos') filtrosTexto += ` | Canal: ${canais.find(c => c.id == canalSelecionado)?.nome || 'Direto'}`;
-    if (clienteSelecionado !== 'todos') filtrosTexto += ` | Cliente: ${clientes.find(c => c.id == clienteSelecionado)?.nome}`;
+    
+    if (canalSelecionado !== 'todos') {
+        const canalEnc = canais.find(c => String(c.id) === String(canalSelecionado));
+        filtrosTexto += ` | Canal: ${canalEnc?.nome || 'Direto'}`;
+    }
+    
+    if (clienteSelecionado !== 'todos') {
+        const cliEnc = clientes.find(c => String(c.id) === String(clienteSelecionado));
+        filtrosTexto += ` | Cliente: ${cliEnc?.nome}`;
+    }
 
     doc.text(filtrosTexto, 14, 35);
     doc.text(`Emissão: ${new Date().toLocaleDateString('pt-BR')}`, 280, 35, { align: 'right' });
@@ -290,7 +298,7 @@ const Reports = () => {
           </div>
         </div>
 
-        {/* --- ÁREA DE FILTROS REORGANIZADA --- */}
+        {/* --- ÁREA DE FILTROS --- */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
           <div>
             <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Data Início</label>
