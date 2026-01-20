@@ -46,7 +46,7 @@ const DemandModal = ({
 
   // --- DELETE STATES ---
   const [showConfirmModal, setShowConfirmModal] = useState(false);
-  const [deleteMode, setDeleteMode] = useState(null); // 'hard' (apagar) ou 'soft' (inativar)
+  const [deleteMode, setDeleteMode] = useState(null); 
   const [deleteMessage, setDeleteMessage] = useState('');
 
   // --- PROGRESSO ---
@@ -64,12 +64,31 @@ const DemandModal = ({
     status: 'Pendente',
     data_expiracao: '',
     link_arquivos: '',
-    valor_cobrado: '', 
-    horas_vendidas: '',
+    valor_cobrado: '',      // Total Cobrado (calculado ou input)
+    horas_vendidas: '',     // Qtd Horas Vendidas
+    valor_hora_venda: '',   // Valor Hora Unitário Venda (NOVO)
     modelo_cobranca: 'hora',
-    valor_interno_hora: '',
+    valor_interno_hora: '', // Valor Hora Custo Unitário
     observacoes_internas: ''
   });
+
+  // Atualiza Valor Total de Venda quando muda Qtd ou Valor Unitário
+  useEffect(() => {
+    if (activeTab === 'financeiro') {
+        const qtd = parseFloat(formData.horas_vendidas) || 0;
+        const vlrUnit = parseCurrency(formData.valor_hora_venda);
+        if (qtd > 0 && vlrUnit > 0) {
+            const total = qtd * vlrUnit;
+            // Só atualiza se o total calculado for diferente do atual para evitar loop,
+            // mas aqui vamos forçar a atualização para garantir consistência visual
+            // Nota: Se quiser permitir editar o total livremente, precisaria de uma flag "manual override"
+            setFormData(prev => ({ 
+                ...prev, 
+                valor_cobrado: maskCurrency(total.toFixed(2)) 
+            }));
+        }
+    }
+  }, [formData.horas_vendidas, formData.valor_hora_venda, activeTab]);
 
   const handleCurrencyChange = (e, field) => {
     setFormData(prev => ({ ...prev, [field]: maskCurrency(e.target.value) }));
@@ -96,7 +115,7 @@ const DemandModal = ({
     fetchAuxData();
   }, [consultoriaId, isOpen]);
 
-  // Carrega Dados da Demanda + Cálculo de Progresso
+  // Carrega Dados
   useEffect(() => {
     if (!isOpen) return;
     
@@ -107,7 +126,8 @@ const DemandModal = ({
       setFormData({
         id: null, codigo: '', titulo: '', descricao: '', status: 'Pendente', produto: 'ERP',
         estimativa: '', vencedor_id: '', cliente_id: '', link_arquivos: '',
-        valor_cobrado: '', horas_vendidas: '', valor_interno_hora: '', observacoes_internas: '', modelo_cobranca: 'hora'
+        valor_cobrado: '', horas_vendidas: '', valor_hora_venda: '', valor_interno_hora: '', 
+        observacoes_internas: '', modelo_cobranca: 'hora'
       });
       setProgresso({ consumido: 0, total: 0, percentual: 0 });
       setActiveTab('geral');
@@ -139,11 +159,18 @@ const DemandModal = ({
       if (isAdmin) {
         const { data: finData } = await supabase.from('demandas_financeiro').select('*').eq('demanda_id', demand.id).single();
         if (finData) {
+            // Tenta calcular o valor hora venda se não vier salvo, baseado no total / horas
+            let vlrHoraVenda = '';
+            if (finData.horas_vendidas > 0 && finData.valor_cobrado > 0) {
+                vlrHoraVenda = maskCurrency((finData.valor_cobrado / finData.horas_vendidas).toFixed(2));
+            }
+
             initialData = { 
                 ...initialData, 
                 ...finData,
                 valor_cobrado: finData.valor_cobrado ? maskCurrency(finData.valor_cobrado.toFixed(2)) : '',
-                valor_interno_hora: finData.valor_interno_hora ? maskCurrency(finData.valor_interno_hora.toFixed(2)) : ''
+                valor_interno_hora: finData.valor_interno_hora ? maskCurrency(finData.valor_interno_hora.toFixed(2)) : '',
+                valor_hora_venda: vlrHoraVenda // Preenche o novo campo visual
             };
         }
       }
@@ -164,34 +191,23 @@ const DemandModal = ({
     }));
   };
 
-  // --- LÓGICA DE DELETE (ERP STYLE) ---
   const handleRequestDelete = async () => {
       if (!formData.id) return;
       setLoading(true);
-
-      // 1. Verifica vínculos
       const { count, error } = await supabase
           .from('servicos_prestados')
-          .select('*', { count: 'exact', head: true }) // Conta quantos registros existem
+          .select('*', { count: 'exact', head: true })
           .eq('demanda_id', formData.id);
-
       setLoading(false);
-
-      if (error) {
-          alert('Erro ao verificar vínculos.');
-          return;
-      }
+      if (error) { alert('Erro ao verificar vínculos.'); return; }
 
       if (count > 0) {
-          // TEM VÍNCULO: INATIVA
           setDeleteMode('soft');
-          setDeleteMessage(`Esta demanda possui ${count} apontamentos de horas vinculados. Para manter o histórico, ela será INATIVADA (Status: Cancelada) em vez de excluída.`);
+          setDeleteMessage(`Esta demanda possui ${count} apontamentos. Será INATIVADA.`);
       } else {
-          // NÃO TEM VÍNCULO: DELETE REAL
           setDeleteMode('hard');
-          setDeleteMessage('Esta demanda não possui apontamentos. Ela será excluída permanentemente do sistema.');
+          setDeleteMessage('Sem apontamentos. Será EXCLUÍDA permanentemente.');
       }
-      
       setShowConfirmModal(true);
   };
 
@@ -199,39 +215,24 @@ const DemandModal = ({
       setLoading(true);
       try {
           if (deleteMode === 'soft') {
-              // INATIVAR
-              const { error } = await supabase
-                  .from('demandas')
-                  .update({ status: 'Cancelada' })
-                  .eq('id', formData.id);
+              const { error } = await supabase.from('demandas').update({ status: 'Cancelada' }).eq('id', formData.id);
               if (error) throw error;
           } else {
-              // EXCLUIR TUDO (Hard Delete)
-              // Remove financeiro primeiro (se não tiver cascade no banco)
               await supabase.from('demandas_financeiro').delete().eq('demanda_id', formData.id);
-              // Remove demanda
               const { error } = await supabase.from('demandas').delete().eq('id', formData.id);
               if (error) throw error;
           }
-          onSuccess();
-          onClose();
-      } catch (err) {
-          alert('Erro ao processar ação: ' + err.message);
-      } finally {
-          setLoading(false);
-          setShowConfirmModal(false);
-      }
+          onSuccess(); onClose();
+      } catch (err) { alert('Erro: ' + err.message); } 
+      finally { setLoading(false); setShowConfirmModal(false); }
   };
 
   const handleSave = async (e) => {
     e.preventDefault();
     if (isReadOnly) return;
-
-    if (!formData.titulo || !formData.titulo.trim()) { alert("Informe o Título."); setActiveTab('geral'); return; }
-    if (!formData.cliente_id) { alert("Selecione um Cliente."); setActiveTab('geral'); return; }
+    if (!formData.titulo.trim() || !formData.cliente_id) { alert("Preencha Título e Cliente."); return; }
 
     setLoading(true);
-
     try {
       const payloadPublico = {
         titulo: formData.titulo,
@@ -248,7 +249,6 @@ const DemandModal = ({
       };
 
       let demandaId = formData.id;
-
       if (demandaId) {
         const { error } = await supabase.from('demandas').update(payloadPublico).eq('id', demandaId);
         if (error) throw error;
@@ -271,14 +271,9 @@ const DemandModal = ({
         const { error: finError } = await supabase.from('demandas_financeiro').upsert(payloadFinanceiro, { onConflict: 'demanda_id' });
         if (finError) throw finError;
       }
-
-      onSuccess();
-      onClose();
-    } catch (error) { 
-        alert('Erro ao salvar: ' + (error.message || "Verifique os dados")); 
-    } finally { 
-        setLoading(false); 
-    }
+      onSuccess(); onClose();
+    } catch (error) { alert('Erro ao salvar: ' + error.message); } 
+    finally { setLoading(false); }
   };
 
   const calcularMargem = () => {
@@ -300,7 +295,6 @@ const DemandModal = ({
   };
 
   const margem = calcularMargem();
-
   let progressColor = 'bg-indigo-500';
   if (progresso.percentual > 80) progressColor = 'bg-yellow-500';
   if (progresso.percentual > 100) progressColor = 'bg-red-500';
@@ -495,19 +489,18 @@ const DemandModal = ({
                     <h4 className="text-xs font-bold text-emerald-600 dark:text-emerald-400 uppercase tracking-wider mb-2 flex items-center gap-2">
                         <DollarSign size={14}/> Venda (Cliente)
                     </h4>
-                    <div className="grid grid-cols-2 gap-4">
-                        <div>
-                            <label className="block text-[10px] font-bold text-gray-400 uppercase mb-1">Valor Cobrado Total</label>
-                            <div className="relative">
-                                <input type="text" value={formData.valor_cobrado} onChange={(e) => handleCurrencyChange(e, 'valor_cobrado')} className="w-full border-2 border-emerald-100 dark:border-emerald-900 rounded-lg p-3 bg-white dark:bg-gray-800 dark:text-white font-bold outline-none focus:border-emerald-500" placeholder="R$ 0,00" />
-                            </div>
+                    <div className="grid grid-cols-12 gap-3">
+                        <div className="col-span-4">
+                            <label className="block text-[10px] font-bold text-gray-400 uppercase mb-1">Qtd Horas</label>
+                            <input type="number" value={formData.horas_vendidas} onChange={e => setFormData({...formData, horas_vendidas: e.target.value})} className="w-full border border-gray-200 dark:border-gray-700 rounded-lg p-3 bg-white dark:bg-gray-800 dark:text-white font-medium outline-none focus:ring-1 focus:ring-emerald-500" placeholder="0" />
                         </div>
-                        <div>
-                            <label className="block text-[10px] font-bold text-gray-400 uppercase mb-1">Horas Vendidas</label>
-                            <div className="relative">
-                                <input type="number" value={formData.horas_vendidas} onChange={e => setFormData({...formData, horas_vendidas: e.target.value})} className="w-full border border-gray-200 dark:border-gray-700 rounded-lg p-3 pr-8 bg-white dark:bg-gray-800 dark:text-white font-medium outline-none focus:ring-1 focus:ring-emerald-500" placeholder="40" />
-                                <span className="absolute right-3 top-3.5 text-xs text-gray-400 font-bold">h</span>
-                            </div>
+                        <div className="col-span-4">
+                            <label className="block text-[10px] font-bold text-gray-400 uppercase mb-1">Valor Hora</label>
+                            <input type="text" value={formData.valor_hora_venda} onChange={(e) => handleCurrencyChange(e, 'valor_hora_venda')} className="w-full border border-gray-200 dark:border-gray-700 rounded-lg p-3 bg-white dark:bg-gray-800 dark:text-white font-medium outline-none focus:ring-1 focus:ring-emerald-500" placeholder="R$ 0,00" />
+                        </div>
+                        <div className="col-span-4">
+                            <label className="block text-[10px] font-bold text-gray-400 uppercase mb-1">Total Venda</label>
+                            <input type="text" value={formData.valor_cobrado} readOnly className="w-full border-2 border-emerald-100 dark:border-emerald-900 rounded-lg p-3 bg-gray-50 dark:bg-gray-900 dark:text-emerald-400 font-bold outline-none" placeholder="R$ 0,00" />
                         </div>
                     </div>
                 </div>
@@ -516,22 +509,21 @@ const DemandModal = ({
                     <h4 className="text-xs font-bold text-red-400 uppercase tracking-wider mb-2 flex items-center gap-2">
                         <User size={14}/> Custo (Consultor)
                     </h4>
-                    <div className="grid grid-cols-2 gap-4">
-                        <div>
-                            <label className="block text-[10px] font-bold text-gray-400 uppercase mb-1">Custo Hora</label>
-                            <div className="relative">
-                                <input type="text" value={formData.valor_interno_hora} onChange={(e) => handleCurrencyChange(e, 'valor_interno_hora')} className="w-full border border-red-100 dark:border-red-900/30 rounded-lg p-3 bg-white dark:bg-gray-800 dark:text-white outline-none focus:border-red-400" placeholder="R$ 0,00" />
-                            </div>
+                    <div className="grid grid-cols-12 gap-3">
+                        <div className="col-span-4">
+                            <label className="block text-[10px] font-bold text-gray-400 uppercase mb-1">Horas Repasse</label>
+                            <input type="number" disabled value={formData.estimativa} className="w-full border border-gray-200 dark:border-gray-700 rounded-lg p-3 bg-white dark:bg-gray-800 dark:text-white font-medium cursor-not-allowed" />
                         </div>
-                        <div>
-                            <label className="block text-[10px] font-bold text-gray-400 uppercase mb-1">Horas Repassadas</label>
-                            <div className="relative">
-                                <input type="number" disabled value={formData.estimativa} className="w-full border border-gray-200 dark:border-gray-700 rounded-lg p-3 pr-8 bg-white dark:bg-gray-800 dark:text-white font-medium cursor-not-allowed" />
-                                <span className="absolute right-3 top-3.5 text-xs text-gray-400 font-bold">h</span>
-                            </div>
-                            <p className="text-[10px] text-gray-400 mt-1">*Editável na aba Geral</p>
+                        <div className="col-span-4">
+                            <label className="block text-[10px] font-bold text-gray-400 uppercase mb-1">Custo Hora</label>
+                            <input type="text" value={formData.valor_interno_hora} onChange={(e) => handleCurrencyChange(e, 'valor_interno_hora')} className="w-full border border-red-100 dark:border-red-900/30 rounded-lg p-3 bg-white dark:bg-gray-800 dark:text-white outline-none focus:border-red-400" placeholder="R$ 0,00" />
+                        </div>
+                        <div className="col-span-4">
+                            <label className="block text-[10px] font-bold text-gray-400 uppercase mb-1">Custo Total</label>
+                            <input type="text" value={margem.custoTotal} readOnly className="w-full border border-red-100 dark:border-red-900/30 rounded-lg p-3 bg-gray-50 dark:bg-gray-900 dark:text-red-400 font-bold outline-none" placeholder="R$ 0,00" />
                         </div>
                     </div>
+                    <p className="text-[10px] text-gray-400 mt-1">*Horas de repasse editáveis na aba Geral</p>
                 </div>
 
                 <div>

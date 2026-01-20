@@ -132,7 +132,7 @@ const Sidebar = ({ activeTab, setActiveTab, isOpen, onClose, onLogout, onOpenCon
         <div className="h-16 flex items-center justify-between px-6 border-b border-gray-100 dark:border-gray-800">
           <div className="flex items-center gap-2 font-black text-xl text-indigo-600 tracking-tight">
             <Briefcase className="fill-indigo-600 text-white" size={24} />
-            <span>Consult<span className="text-gray-800 dark:text-white">Master</span></span>
+            <span>Consult<span className="text-gray-800 dark:text-white">Flow</span></span>
           </div>
           <button onClick={onClose} className="md:hidden text-gray-400 hover:text-gray-600"><X size={24} /></button>
         </div>

@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
+import ReactDOM from 'react-dom'; // <--- IMPORTANTE PARA O PORTAL
 import { Calendar, dateFnsLocalizer } from 'react-big-calendar';
 import format from 'date-fns/format';
 import parse from 'date-fns/parse';
@@ -97,7 +98,7 @@ const customStyles = `
   .dark .rbc-event { box-shadow: 0 2px 4px rgba(0,0,0,0.4); }
 `;
 
-// --- COMPONENTE MULTISELECT (CORRIGIDO Z-INDEX) ---
+// --- COMPONENTE MULTISELECT ---
 const ConsultantMultiSelect = ({ options, selected, onChange }) => {
   const [isOpen, setIsOpen] = useState(false);
   const containerRef = useRef(null);
@@ -188,14 +189,10 @@ const ConsultantMultiSelect = ({ options, selected, onChange }) => {
 const TeamCalendar = ({ userId, userRole, showToast }) => {
   const [events, setEvents] = useState([]);
   const [team, setTeam] = useState([]);
-  // CORREÇÃO AQUI: removi 'loading' do destructuring pois não é usado
   const [, setLoading] = useState(true); 
   const [modalOpen, setModalOpen] = useState(false);
-  
-  // Filtro
   const [filterConsultant, setFilterConsultant] = useState(['todos']);
 
-  // Formulário
   const [formData, setFormData] = useState({
     id: null,
     titulo: '',
@@ -210,7 +207,6 @@ const TeamCalendar = ({ userId, userRole, showToast }) => {
 
   const isAdmin = ['admin', 'dono', 'super_admin'].includes(userRole);
 
-  // --- CARREGAMENTO DE EQUIPE ---
   const fetchTeam = useCallback(async () => {
     if (!isAdmin) return;
     const { data: profile } = await supabase.from('profiles').select('consultoria_id').eq('id', userId).single();
@@ -219,7 +215,6 @@ const TeamCalendar = ({ userId, userRole, showToast }) => {
     setTeam(data || []);
   }, [isAdmin, userId]);
 
-  // --- CARREGAMENTO DE EVENTOS ---
   const fetchEvents = useCallback(async () => {
     setLoading(true);
     try {
@@ -254,7 +249,6 @@ const TeamCalendar = ({ userId, userRole, showToast }) => {
 
   useEffect(() => { fetchTeam(); fetchEvents(); }, [fetchTeam, fetchEvents]);
 
-  // --- LÓGICA DE SELEÇÃO E DATA DE HOJE ---
   const handleSelectSlot = ({ start, end }) => {
     let preSelectedConsultant = userId;
     if (isAdmin && filterConsultant.length === 1 && filterConsultant[0] !== 'todos') {
@@ -314,7 +308,6 @@ const TeamCalendar = ({ userId, userRole, showToast }) => {
       handleEventDrop({ event, start, end });
   };
 
-  // --- SALVAR E DELETAR ---
   const handleSave = async (e) => {
     e.preventDefault();
     try {
@@ -368,57 +361,14 @@ const TeamCalendar = ({ userId, userRole, showToast }) => {
     };
   };
 
-  return (
-    <div className="h-full flex flex-col space-y-4 animate-fade-in p-4 md:p-6">
-      {/* CSS CUSTOMIZADO */}
-      <style>{customStyles}</style>
+  // --- MODAL COM PORTAL (SOLUÇÃO DEFINITIVA) ---
+  const renderModal = () => {
+    if (!modalOpen) return null;
 
-      <div className="flex flex-col md:flex-row justify-between items-center gap-4 bg-white dark:bg-gray-800 p-4 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700">
-        <div>
-          <h2 className="text-xl font-bold text-gray-800 dark:text-white flex items-center gap-2">
-            <CalendarIcon className="text-indigo-600" /> Agenda da Equipe
-          </h2>
-          <p className="text-sm text-gray-500">Arraste para mover • Clique para editar</p>
-        </div>
-        
-        <div className="flex gap-3 items-center">
-            {isAdmin && (
-                <ConsultantMultiSelect 
-                    options={team} 
-                    selected={filterConsultant} 
-                    onChange={setFilterConsultant} 
-                />
-            )}
-            <button onClick={() => handleSelectSlot({ start: null, end: null })} className="bg-indigo-600 text-white px-4 py-2 rounded-lg font-bold text-sm hover:bg-indigo-700 transition-colors flex items-center gap-2 h-[38px]">
-                <Plus size={18} /> Novo
-            </button>
-        </div>
-      </div>
-
-      <div className="flex-1 bg-white dark:bg-gray-800 p-4 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 min-h-[650px]">
-        <DnDCalendar
-          localizer={localizer}
-          events={events}
-          startAccessor="start"
-          endAccessor="end"
-          style={{ height: '75vh' }}
-          culture='pt-BR'
-          selectable
-          resizable
-          views={['month', 'week', 'day', 'agenda']}
-          onSelectSlot={handleSelectSlot}
-          onSelectEvent={handleSelectEvent}
-          onEventDrop={handleEventDrop}
-          onEventResize={handleEventResize}
-          eventPropGetter={eventStyleGetter}
-          messages={{ next: "Próximo", previous: "Anterior", today: "Hoje", month: "Mês", week: "Semana", day: "Dia", agenda: "Agenda" }}
-          className="text-gray-700 dark:text-gray-300 font-sans text-sm"
-        />
-      </div>
-
-      {modalOpen && (
-        <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
-          <div className="bg-white dark:bg-gray-900 w-full max-w-md rounded-2xl shadow-2xl p-6 border border-gray-200 dark:border-gray-800 animate-scale-in">
+    // Criamos o Portal para jogar o modal direto no body
+    return ReactDOM.createPortal(
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in w-screen h-screen">
+          <div className="bg-white dark:bg-gray-900 w-full max-w-md rounded-2xl shadow-2xl p-6 border border-gray-200 dark:border-gray-800 animate-scale-in relative">
             <div className="flex justify-between items-center mb-6">
               <h3 className="text-lg font-bold text-gray-800 dark:text-white flex items-center gap-2">
                 {formData.id ? <Clock className="text-indigo-600"/> : <Plus className="text-indigo-600"/>}
@@ -483,8 +433,59 @@ const TeamCalendar = ({ userId, userRole, showToast }) => {
               </div>
             </form>
           </div>
+        </div>,
+        document.body // Alvo do Portal
+    );
+  };
+
+  return (
+    <div className="h-full flex flex-col space-y-4 animate-fade-in p-4 md:p-6">
+      <style>{customStyles}</style>
+
+      <div className="flex flex-col md:flex-row justify-between items-center gap-4 bg-white dark:bg-gray-800 p-4 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700">
+        <div>
+          <h2 className="text-xl font-bold text-gray-800 dark:text-white flex items-center gap-2">
+            <CalendarIcon className="text-indigo-600" /> Agenda da Equipe
+          </h2>
+          <p className="text-sm text-gray-500">Arraste para mover • Clique para editar</p>
         </div>
-      )}
+        
+        <div className="flex gap-3 items-center">
+            {isAdmin && (
+                <ConsultantMultiSelect 
+                    options={team} 
+                    selected={filterConsultant} 
+                    onChange={setFilterConsultant} 
+                />
+            )}
+            <button onClick={() => handleSelectSlot({ start: null, end: null })} className="bg-indigo-600 text-white px-4 py-2 rounded-lg font-bold text-sm hover:bg-indigo-700 transition-colors flex items-center gap-2 h-[38px]">
+                <Plus size={18} /> Novo
+            </button>
+        </div>
+      </div>
+
+      <div className="flex-1 bg-white dark:bg-gray-800 p-4 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 min-h-[650px]">
+        <DnDCalendar
+          localizer={localizer}
+          events={events}
+          startAccessor="start"
+          endAccessor="end"
+          style={{ height: '75vh' }}
+          culture='pt-BR'
+          selectable
+          resizable
+          views={['month', 'week', 'day', 'agenda']}
+          onSelectSlot={handleSelectSlot}
+          onSelectEvent={handleSelectEvent}
+          onEventDrop={handleEventDrop}
+          onEventResize={handleEventResize}
+          eventPropGetter={eventStyleGetter}
+          messages={{ next: "Próximo", previous: "Anterior", today: "Hoje", month: "Mês", week: "Semana", day: "Dia", agenda: "Agenda" }}
+          className="text-gray-700 dark:text-gray-300 font-sans text-sm"
+        />
+      </div>
+
+      {renderModal()}
     </div>
   );
 };
