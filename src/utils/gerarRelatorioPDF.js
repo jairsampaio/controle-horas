@@ -24,8 +24,7 @@ const gerarRelatorioPDF = (servicos, filtros, nomeConsultor) => {
   doc.setFontSize(11);
   doc.setFont('helvetica', 'bold');
   
-  // Nome do Consultor (Em destaque, como pedido)
-  // Se o nome vier vazio, usa um fallback, mas a ideia é mostrar "Jair Sampaio"
+  // Nome do Consultor (Em destaque)
   const nomeExibicao = nomeConsultor ? nomeConsultor.toUpperCase() : "CONSULTOR";
   doc.text(`PROFISSIONAL: ${nomeExibicao}`, 14, 35);
 
@@ -40,7 +39,10 @@ const gerarRelatorioPDF = (servicos, filtros, nomeConsultor) => {
   doc.text(`Período: ${dataInicial} até ${dataFinal}`, 14, 42);
   
   if (filtros.cliente && filtros.cliente.length > 0) {
-    doc.text(`Cliente(s): ${filtros.cliente.join(', ')}`, 14, 48);
+    // Ajuste para não quebrar linha se tiver muitos clientes
+    const clientesTexto = filtros.cliente.join(', ');
+    const textoFinal = clientesTexto.length > 50 ? clientesTexto.substring(0, 50) + '...' : clientesTexto;
+    doc.text(`Cliente(s): ${textoFinal}`, 14, 48);
   }
 
   // Data de Emissão (Canto direito)
@@ -51,7 +53,7 @@ const gerarRelatorioPDF = (servicos, filtros, nomeConsultor) => {
   const tableColumn = [
     "Data", 
     "Cliente", 
-    "OS/OP/DPC",  // <--- CAMPO NOVO ADICIONADO AQUI
+    "OS/OP/DPC",  
     "Atividade", 
     "Solicitante",
     "Horas", 
@@ -67,21 +69,25 @@ const gerarRelatorioPDF = (servicos, filtros, nomeConsultor) => {
   const servicosOrdenados = [...servicos].sort((a, b) => new Date(b.data) - new Date(a.data));
 
   servicosOrdenados.forEach(servico => {
-    const horas = parseFloat(servico.qtd_horas || 0);
-    const valor = parseFloat(servico.valor_total || 0);
+    // Tratamento robusto para números
+    const horas = typeof servico.qtd_horas === 'string' ? parseFloat(servico.qtd_horas) : (servico.qtd_horas || 0);
+    const valor = typeof servico.valor_total === 'string' ? parseFloat(servico.valor_total) : (servico.valor_total || 0);
     
     totalHoras += horas;
     totalValor += valor;
 
+    // Tratamento para data (evitar erro de fuso horário)
+    const dataFormatada = servico.data ? new Date(servico.data + 'T00:00:00').toLocaleDateString('pt-BR') : '-';
+
     const rowData = [
-      new Date(servico.data + 'T00:00:00').toLocaleDateString('pt-BR'), // Data corrigida fuso
-      servico.cliente,
-      servico.os_op_dpc || '-', // <--- VALOR DO CAMPO NOVO
-      servico.atividade,
+      dataFormatada, 
+      servico.cliente || '-',
+      servico.os_op_dpc || '-', 
+      servico.atividade || '',
       servico.solicitante || '-',
-      horas.toFixed(2), // Formato 1.50
+      horas.toFixed(2), 
       formatCurrency(valor),
-      servico.status
+      servico.status || 'Pendente'
     ];
     tableRows.push(rowData);
   });
@@ -95,23 +101,24 @@ const gerarRelatorioPDF = (servicos, filtros, nomeConsultor) => {
       fontSize: 8,
       cellPadding: 3,
       font: 'helvetica',
-      textColor: [50, 50, 50]
+      textColor: [50, 50, 50],
+      valign: 'middle'
     },
     headStyles: {
-      fillColor: [79, 70, 229], // Indigo combinando com cabeçalho
+      fillColor: [79, 70, 229], // Indigo
       textColor: [255, 255, 255],
       fontStyle: 'bold',
       halign: 'center'
     },
     columnStyles: {
-      0: { cellWidth: 20, halign: 'center' }, // Data
+      0: { cellWidth: 18, halign: 'center' }, // Data
       1: { cellWidth: 25, fontStyle: 'bold' }, // Cliente
-      2: { cellWidth: 20, halign: 'center', fontStyle: 'bold', textColor: [70, 70, 70] }, // OS/OP/DPC (Destaque leve)
+      2: { cellWidth: 20, halign: 'center', fontStyle: 'bold', textColor: [70, 70, 70] }, // OS
       3: { cellWidth: 'auto' }, // Atividade (Fica com o espaço restante)
       4: { cellWidth: 25 }, // Solicitante
       5: { cellWidth: 15, halign: 'center' }, // Horas
-      6: { cellWidth: 25, halign: 'right' }, // Valor
-      7: { cellWidth: 22, halign: 'center' } // Status
+      6: { cellWidth: 22, halign: 'right' }, // Valor
+      7: { cellWidth: 20, halign: 'center' } // Status
     },
     alternateRowStyles: {
       fillColor: [245, 247, 255] // Zebra suave azulada
@@ -122,12 +129,18 @@ const gerarRelatorioPDF = (servicos, filtros, nomeConsultor) => {
             const status = data.cell.raw;
             if (status === 'Pago') data.cell.styles.textColor = [22, 163, 74]; // Verde
             if (status === 'Pendente') data.cell.styles.textColor = [234, 88, 12]; // Laranja
+            if (status === 'Em aprovação') data.cell.styles.textColor = [202, 138, 4]; // Amarelo escuro
         }
     }
   });
 
   // --- 4. RODAPÉ DE TOTAIS ---
-  const finalY = doc.lastAutoTable.finalY + 10;
+  // Verifica se sobrou espaço na página, senão cria nova
+  let finalY = doc.lastAutoTable.finalY + 10;
+  if (finalY > 270) {
+      doc.addPage();
+      finalY = 20;
+  }
 
   // Caixa de Totais
   doc.setDrawColor(200, 200, 200);
@@ -145,14 +158,14 @@ const gerarRelatorioPDF = (servicos, filtros, nomeConsultor) => {
   doc.text(`${totalHoras.toFixed(2)}h`, 190, finalY + 8, { align: 'right' });
   doc.text(`${formatCurrency(totalValor)}`, 190, finalY + 16, { align: 'right' });
 
-  // Rodapé da Página
+  // Rodapé da Página (Paginação)
   const pageCount = doc.internal.getNumberOfPages();
   for (let i = 1; i <= pageCount; i++) {
     doc.setPage(i);
     doc.setFontSize(8);
     doc.setTextColor(150, 150, 150);
-    doc.text(`Página ${i} de ${pageCount}`, 105, 290, { align: 'center' });
-    doc.text("Gerado pelo Sistema de Consultoria", 105, 294, { align: 'center' });
+    const footerText = `Página ${i} de ${pageCount} | Gerado via ConsultFlow`;
+    doc.text(footerText, 105, 290, { align: 'center' });
   }
 
   return doc.output('blob');

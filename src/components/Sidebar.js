@@ -2,7 +2,8 @@ import React, { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom'; 
 import { 
   LayoutDashboard, Briefcase, Users, Settings, LogOut, X, 
-  ShieldCheck, Wallet, FileText, Building2, Lightbulb, User, Lock, Save, Target, Calendar
+  ShieldCheck, Wallet, FileText, Building2, Lightbulb, User, Lock, Save, Target, Calendar,
+  BarChart3
 } from 'lucide-react';
 import supabase from '../services/supabase';
 
@@ -116,6 +117,7 @@ const Sidebar = ({ activeTab, setActiveTab, isOpen, onClose, onLogout, onOpenCon
         <Icon size={20} className={activeTab === id ? 'text-white' : (requiredRole === 'super_admin' ? 'text-yellow-600 dark:text-yellow-500' : '')} />
         <span>{label}</span>
       </button>
+      
     );
   };
 
@@ -146,6 +148,9 @@ const Sidebar = ({ activeTab, setActiveTab, isOpen, onClose, onLogout, onOpenCon
             <MenuButton id="dashboard" icon={LayoutDashboard} label="Dashboard" />
             <MenuButton id="servicos" icon={Briefcase} label="Meus Serviços" />
             <MenuButton id="demandas" icon={Target} label="Gestão de Demandas" />
+            
+            {/* BOTÃO DE RELATÓRIOS (APENAS ADMIN) */}
+            <MenuButton id="reports" icon={BarChart3} label="Relatórios" requiredRole="admin" />
             
             {/* Menu Canais: Acessível a todos */}
             <MenuButton id="channels" icon={Building2} label="Canais / Parceiros" />

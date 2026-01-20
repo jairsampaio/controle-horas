@@ -4,7 +4,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { 
   Clock, DollarSign, FileText, Plus, Filter, Users, Mail,
   LayoutDashboard, Briefcase, Hourglass, Timer, FileCheck, 
-  Building2, Menu, Eye, EyeOff, ShieldCheck, Wallet, LayoutList, Kanban, Target, Calendar, CheckCircle 
+  Building2, Menu, Eye, EyeOff, ShieldCheck, Wallet, LayoutList, Kanban, Target, Calendar, CheckCircle ,BarChart3
 } from 'lucide-react'; 
 import supabase from './services/supabase'; 
 import StatusCard from './components/StatusCard';
@@ -30,6 +30,7 @@ import TeamManagement from './components/TeamManagement';
 import AccessDenied from './components/AccessDenied'; 
 import DemandList from './components/DemandList';
 import TeamCalendar from './components/TeamCalendar';
+import Reports from './components/Reports'; 
 import { formatCurrency, formatHoursInt } from './utils/formatters'; 
 
 const App = () => {
@@ -857,6 +858,7 @@ const App = () => {
                           showToast={showToast} 
                         />
                     )}
+                    {activeTab === 'reports' && <Reports />}
                 </>
             )}
           </div>
