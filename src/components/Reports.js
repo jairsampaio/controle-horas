@@ -12,13 +12,15 @@ import autoTable from 'jspdf-autotable';
 const Reports = () => {
   const [loading, setLoading] = useState(false);
   const [canais, setCanais] = useState([]);
+  const [clientes, setClientes] = useState([]); // <--- NOVO
   
-  // Filtros - Padrão: Ano atual
+  // Filtros
   const [periodo, setPeriodo] = useState({
     inicio: new Date(new Date().getFullYear(), 0, 1).toISOString().split('T')[0], 
     fim: new Date().toISOString().split('T')[0]
   });
   const [canalSelecionado, setCanalSelecionado] = useState('todos');
+  const [clienteSelecionado, setClienteSelecionado] = useState('todos'); // <--- NOVO
 
   const [dados, setDados] = useState([]);
   const [resumo, setResumo] = useState({
@@ -30,12 +32,18 @@ const Reports = () => {
     horasCusto: 0
   });
 
+  // Carrega Listas Auxiliares (Canais e Clientes)
   useEffect(() => {
-    const fetchCanais = async () => {
-      const { data } = await supabase.from('canais').select('*').eq('ativo', true).order('nome');
-      if (data) setCanais(data);
+    const fetchAuxiliar = async () => {
+      // Busca Canais
+      const { data: dataCanais } = await supabase.from('canais').select('*').eq('ativo', true).order('nome');
+      if (dataCanais) setCanais(dataCanais);
+
+      // Busca Clientes
+      const { data: dataClientes } = await supabase.from('clientes').select('id, nome').eq('ativo', true).order('nome');
+      if (dataClientes) setClientes(dataClientes);
     };
-    fetchCanais();
+    fetchAuxiliar();
   }, []);
 
   const gerarRelatorio = useCallback(async () => {
@@ -62,13 +70,13 @@ const Reports = () => {
       const demandaIds = demandas.map(d => d.id);
       const clienteIds = [...new Set(demandas.map(d => d.cliente_id || d.cliente).filter(Boolean))];
       
-      // 3. Busca Financeiro (Trazendo CUSTO agora)
+      // 3. Busca Financeiro
       const { data: finData } = await supabase
         .from('demandas_financeiro')
-        .select('demanda_id, horas_vendidas, valor_cobrado, valor_interno_hora') // <--- Trouxe o custo hora
+        .select('demanda_id, horas_vendidas, valor_cobrado, valor_interno_hora')
         .in('demanda_id', demandaIds);
 
-      // 4. Busca Clientes
+      // 4. Busca Clientes (Nomes)
       let clientesMap = {};
       if (clienteIds.length > 0) {
           const { data: clientesData } = await supabase.from('clientes').select('id, nome').in('id', clienteIds);
@@ -92,11 +100,9 @@ const Reports = () => {
           const nomeCliente = clientesMap[idClienteReal] || 'Cliente n/d';
           const nomeCanal = canaisMap[idCanalReal] || 'Direto / Sem Canal';
 
-          // Cálculos Financeiros
           const vlrVenda = Number(fin.valor_cobrado || 0);
           const hrsVendidas = Number(fin.horas_vendidas || 0);
           
-          // Custo = Horas Estimadas (Repasse) * Valor Hora Interno
           const hrsCusto = Number(d.estimativa || 0); 
           const vlrHoraCusto = Number(fin.valor_interno_hora || 0);
           const custoTotal = hrsCusto * vlrHoraCusto;
@@ -106,6 +112,7 @@ const Reports = () => {
           return {
               data: new Date(d.created_at).toLocaleDateString('pt-BR'),
               cliente: nomeCliente,
+              cliente_id: idClienteReal, // Guardamos o ID para filtrar
               demanda: d.titulo,
               canal: nomeCanal,
               canal_id: idCanalReal,
@@ -121,12 +128,20 @@ const Reports = () => {
           };
       });
 
-      // 7. Filtro de Canal
+      // 7. Filtros (Canal E Cliente)
+      
+      // Filtro Canal
       if (canalSelecionado === 'direto') {
         listaProcessada = listaProcessada.filter(d => !d.canal_id);
       } else if (canalSelecionado !== 'todos') {
         // eslint-disable-next-line
         listaProcessada = listaProcessada.filter(d => d.canal_id == canalSelecionado);
+      }
+
+      // Filtro Cliente (NOVO)
+      if (clienteSelecionado !== 'todos') {
+        // eslint-disable-next-line
+        listaProcessada = listaProcessada.filter(d => d.cliente_id == clienteSelecionado);
       }
 
       // 8. Totais Gerais
@@ -160,10 +175,11 @@ const Reports = () => {
     } finally {
       setLoading(false);
     }
-  }, [periodo, canalSelecionado, canais]);
+  }, [periodo, canalSelecionado, clienteSelecionado, canais]); // Adicionado clienteSelecionado
 
   useEffect(() => {
-    if (canais.length > 0 || !loading) {
+    // Garante que só roda se tiver listas carregadas ou se não estiver carregando
+    if ((canais.length > 0 && clientes.length > 0) || !loading) {
         gerarRelatorio();
     }
     // eslint-disable-next-line
@@ -187,7 +203,7 @@ const Reports = () => {
   };
 
   const exportarPDF = () => {
-    const doc = new jsPDF('l', 'mm', 'a4'); // Paisagem para caber mais colunas
+    const doc = new jsPDF('l', 'mm', 'a4');
 
     // Cabeçalho
     doc.setFillColor(79, 70, 229); 
@@ -203,7 +219,13 @@ const Reports = () => {
     
     const dataIni = new Date(periodo.inicio).toLocaleDateString('pt-BR');
     const dataFim = new Date(periodo.fim).toLocaleDateString('pt-BR');
-    doc.text(`Período: ${dataIni} até ${dataFim}`, 14, 35);
+    
+    // Texto dos Filtros no PDF
+    let filtrosTexto = `Período: ${dataIni} até ${dataFim}`;
+    if (canalSelecionado !== 'todos') filtrosTexto += ` | Canal: ${canais.find(c => c.id == canalSelecionado)?.nome || 'Direto'}`;
+    if (clienteSelecionado !== 'todos') filtrosTexto += ` | Cliente: ${clientes.find(c => c.id == clienteSelecionado)?.nome}`;
+
+    doc.text(filtrosTexto, 14, 35);
     doc.text(`Emissão: ${new Date().toLocaleDateString('pt-BR')}`, 280, 35, { align: 'right' });
 
     const tableColumn = ["Data", "Cliente", "Demanda", "Canal", "Hrs Venda", "Hrs Custo", "Venda (R$)", "Custo (R$)", "Lucro (R$)"];
@@ -268,6 +290,7 @@ const Reports = () => {
           </div>
         </div>
 
+        {/* --- ÁREA DE FILTROS REORGANIZADA --- */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
           <div>
             <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Data Início</label>
@@ -277,12 +300,19 @@ const Reports = () => {
             <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Data Fim</label>
             <input type="date" value={periodo.fim} onChange={e => setPeriodo({...periodo, fim: e.target.value})} className="w-full border rounded-lg p-2 dark:bg-gray-700 dark:border-gray-600 dark:text-white"/>
           </div>
-          <div className="md:col-span-2">
-            <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Filtrar por Canal</label>
+          <div>
+            <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Filtrar Canal</label>
             <select value={canalSelecionado} onChange={e => setCanalSelecionado(e.target.value)} className="w-full border rounded-lg p-2 dark:bg-gray-700 dark:border-gray-600 dark:text-white font-medium">
               <option value="todos">Todos os Canais</option>
-              <option value="direto">Apenas Direto / Sem Canal</option>
+              <option value="direto">Apenas Direto</option>
               {canais.map(c => <option key={c.id} value={c.id}>{c.nome}</option>)}
+            </select>
+          </div>
+          <div>
+            <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Filtrar Cliente</label>
+            <select value={clienteSelecionado} onChange={e => setClienteSelecionado(e.target.value)} className="w-full border rounded-lg p-2 dark:bg-gray-700 dark:border-gray-600 dark:text-white font-medium">
+              <option value="todos">Todos os Clientes</option>
+              {clientes.map(c => <option key={c.id} value={c.id}>{c.nome}</option>)}
             </select>
           </div>
         </div>
