@@ -13,7 +13,7 @@ import 'react-big-calendar/lib/addons/dragAndDrop/styles.css';
 
 import { 
   X, Save, Trash2, User, Calendar as CalendarIcon, 
-  Clock, Filter, Plus, ChevronDown, Check, ChevronLeft, ChevronRight, MapPin
+  Clock, Filter, Plus, ChevronDown, Check, ChevronLeft, ChevronRight
 } from 'lucide-react';
 import supabase from '../services/supabase';
 
