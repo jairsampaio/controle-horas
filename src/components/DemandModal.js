@@ -2,8 +2,8 @@ import React, { useState, useEffect } from 'react';
 import ReactDOM from 'react-dom';
 import { 
   X, Save, Briefcase, User, Calendar, Clock, 
-  DollarSign, Lock, FileText, Link as LinkIcon, TrendingUp, AlertCircle, Copy, Check,
-  Activity, Trash2, Plus, Edit2, CheckCircle2, AlertTriangle
+  DollarSign, Lock, FileText, Link as LinkIcon, Copy, Check,
+  Activity, Trash2, Plus, Edit2, CheckCircle2
 } from 'lucide-react';
 import supabase from '../services/supabase';
 import ConfirmModal from './ConfirmModal';
@@ -54,7 +54,7 @@ const DemandModal = ({
 
   // --- NOVOS STATES PARA O EXTRATO FINANCEIRO ---
   const [movimentacoes, setMovimentacoes] = useState([]);
-  const [loadingMov, setLoadingMov] = useState(false);
+  const [, setLoadingMov] = useState(false);
   
   // Estado do Modal de Lançamento (Novo ou Edição)
   const [financeiroModal, setFinanceiroModal] = useState({
@@ -437,7 +437,6 @@ const DemandModal = ({
 
   if (!isOpen) return null;
 
-  const modalThemeColor = financeiroModal.tipo === 'receita' ? 'emerald' : 'red';
   const modalThemeClass = financeiroModal.tipo === 'receita' ? 'bg-emerald-600' : 'bg-red-600';
 
   return ReactDOM.createPortal(
