@@ -3,7 +3,7 @@ import ReactDOM from 'react-dom';
 import { 
   X, Save, Briefcase, User, Calendar, Clock, 
   DollarSign, Lock, FileText, Link as LinkIcon, TrendingUp, AlertCircle, Copy, Check,
-  Activity, Trash2
+  Activity, Trash2, Plus, Edit2, CheckCircle2, AlertTriangle
 } from 'lucide-react';
 import supabase from '../services/supabase';
 import ConfirmModal from './ConfirmModal';
@@ -52,6 +52,21 @@ const DemandModal = ({
   // --- PROGRESSO ---
   const [progresso, setProgresso] = useState({ consumido: 0, total: 0, percentual: 0 });
 
+  // --- NOVOS STATES PARA O EXTRATO FINANCEIRO ---
+  const [movimentacoes, setMovimentacoes] = useState([]);
+  const [loadingMov, setLoadingMov] = useState(false);
+  
+  // Estado do Modal de Lançamento (Novo ou Edição)
+  const [financeiroModal, setFinanceiroModal] = useState({
+      aberto: false,
+      id: null, // Se tiver ID, é edição
+      tipo: 'receita', // receita ou despesa
+      valor: '',
+      data: '',
+      descricao: '',
+      status: 'pendente' // pendente, pago
+  });
+
   const [formData, setFormData] = useState({
     id: null,
     codigo: '', 
@@ -64,24 +79,44 @@ const DemandModal = ({
     status: 'Pendente',
     data_expiracao: '',
     link_arquivos: '',
-    valor_cobrado: '',      // Total Cobrado (calculado ou input)
-    horas_vendidas: '',     // Qtd Horas Vendidas
-    valor_hora_venda: '',   // Valor Hora Unitário Venda (NOVO)
+    valor_cobrado: '',      
+    horas_vendidas: '',     
+    valor_hora_venda: '',   
     modelo_cobranca: 'hora',
-    valor_interno_hora: '', // Valor Hora Custo Unitário
+    valor_interno_hora: '', 
     observacoes_internas: ''
   });
 
-  // Atualiza Valor Total de Venda quando muda Qtd ou Valor Unitário
+  // --- LÓGICA FINANCEIRA ---
+
+  const carregarMovimentacoes = async () => {
+      if (!formData.id) return;
+      setLoadingMov(true);
+      const { data, error } = await supabase
+          .from('movimentacoes_financeiras')
+          .select('*')
+          .eq('demanda_id', formData.id)
+          .order('data_vencimento', { ascending: true });
+      
+      if (!error && data) setMovimentacoes(data);
+      setLoadingMov(false);
+  };
+
+  useEffect(() => {
+      if (activeTab === 'financeiro' && formData.id) {
+          carregarMovimentacoes();
+      }
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab, formData.id]);
+
+  // Cálculo Automático de Venda Total
   useEffect(() => {
     if (activeTab === 'financeiro') {
         const qtd = parseFloat(formData.horas_vendidas) || 0;
         const vlrUnit = parseCurrency(formData.valor_hora_venda);
+        
         if (qtd > 0 && vlrUnit > 0) {
             const total = qtd * vlrUnit;
-            // Só atualiza se o total calculado for diferente do atual para evitar loop,
-            // mas aqui vamos forçar a atualização para garantir consistência visual
-            // Nota: Se quiser permitir editar o total livremente, precisaria de uma flag "manual override"
             setFormData(prev => ({ 
                 ...prev, 
                 valor_cobrado: maskCurrency(total.toFixed(2)) 
@@ -102,7 +137,7 @@ const DemandModal = ({
     }
   };
 
-  // Carrega Listas Básicas
+  // Carregamento Inicial
   useEffect(() => {
     if (!isOpen || !consultoriaId) return;
     const fetchAuxData = async () => {
@@ -115,7 +150,6 @@ const DemandModal = ({
     fetchAuxData();
   }, [consultoriaId, isOpen]);
 
-  // Carrega Dados
   useEffect(() => {
     if (!isOpen) return;
     
@@ -131,6 +165,7 @@ const DemandModal = ({
       });
       setProgresso({ consumido: 0, total: 0, percentual: 0 });
       setActiveTab('geral');
+      setMovimentacoes([]);
     }
     setDeleteMode(null);
     setShowConfirmModal(false);
@@ -159,7 +194,6 @@ const DemandModal = ({
       if (isAdmin) {
         const { data: finData } = await supabase.from('demandas_financeiro').select('*').eq('demanda_id', demand.id).single();
         if (finData) {
-            // Tenta calcular o valor hora venda se não vier salvo, baseado no total / horas
             let vlrHoraVenda = '';
             if (finData.horas_vendidas > 0 && finData.valor_cobrado > 0) {
                 vlrHoraVenda = maskCurrency((finData.valor_cobrado / finData.horas_vendidas).toFixed(2));
@@ -170,7 +204,7 @@ const DemandModal = ({
                 ...finData,
                 valor_cobrado: finData.valor_cobrado ? maskCurrency(finData.valor_cobrado.toFixed(2)) : '',
                 valor_interno_hora: finData.valor_interno_hora ? maskCurrency(finData.valor_interno_hora.toFixed(2)) : '',
-                valor_hora_venda: vlrHoraVenda // Preenche o novo campo visual
+                valor_hora_venda: vlrHoraVenda 
             };
         }
       }
@@ -294,12 +328,117 @@ const DemandModal = ({
     };
   };
 
+  // --- GESTÃO FINANCEIRA: SALDOS & OPERAÇÕES ---
+
+  const calcularSaldosExtrato = () => {
+      const totalReceitaPrevista = parseCurrency(formData.valor_cobrado);
+      
+      const custoHora = parseCurrency(formData.valor_interno_hora);
+      const horasCusto = parseFloat(formData.estimativa) || 0;
+      const totalDespesaPrevista = custoHora * horasCusto;
+
+      const receitaGerada = movimentacoes.filter(m => m.tipo === 'receita').reduce((acc, curr) => acc + Number(curr.valor), 0);
+      const despesaGerada = movimentacoes.filter(m => m.tipo === 'despesa').reduce((acc, curr) => acc + Number(curr.valor), 0);
+
+      return {
+          receita: { total: totalReceitaPrevista, gerado: receitaGerada, saldo: totalReceitaPrevista - receitaGerada },
+          despesa: { total: totalDespesaPrevista, gerado: despesaGerada, saldo: totalDespesaPrevista - despesaGerada }
+      };
+  };
+
+  const saldos = calcularSaldosExtrato();
+
+  // Abrir Modal (Novo ou Edição)
+  const abrirModalFinanceiro = (tipo, itemExistente = null) => {
+      if (itemExistente) {
+          // MODO EDIÇÃO
+          setFinanceiroModal({
+              aberto: true,
+              id: itemExistente.id,
+              tipo: itemExistente.tipo,
+              valor: maskCurrency(itemExistente.valor.toFixed(2)),
+              data: itemExistente.data_vencimento,
+              descricao: itemExistente.descricao,
+              status: itemExistente.status || 'pendente'
+          });
+      } else {
+          // MODO NOVO
+          const saldoRestante = tipo === 'receita' ? saldos.receita.saldo : saldos.despesa.saldo;
+          const sugestaoValor = saldoRestante > 0 ? maskCurrency(saldoRestante.toFixed(2)) : '';
+          
+          setFinanceiroModal({
+              aberto: true,
+              id: null,
+              tipo: tipo,
+              valor: sugestaoValor,
+              data: new Date().toISOString().split('T')[0],
+              descricao: saldoRestante > 0 ? 'Parcela Final' : 'Adiantamento',
+              status: 'pendente'
+          });
+      }
+  };
+
+  const salvarMovimentacao = async () => {
+      if (!financeiroModal.valor || !financeiroModal.data || !financeiroModal.descricao) {
+          alert("Preencha todos os campos obrigatórios."); return;
+      }
+
+      setLoadingMov(true);
+      try {
+          const { data: { user } } = await supabase.auth.getUser();
+          if (!consultoriaId) throw new Error("ID da Consultoria não identificado.");
+
+          const payload = {
+              demanda_id: formData.id,
+              consultoria_id: consultoriaId,
+              tipo: financeiroModal.tipo,
+              descricao: financeiroModal.descricao,
+              valor: parseCurrency(financeiroModal.valor),
+              data_vencimento: financeiroModal.data,
+              status: financeiroModal.status,
+              criadopor_id: user.id
+          };
+
+          if (financeiroModal.id) {
+              // UPDATE
+              const { error } = await supabase.from('movimentacoes_financeiras').update(payload).eq('id', financeiroModal.id);
+              if (error) throw error;
+          } else {
+              // INSERT
+              const { error } = await supabase.from('movimentacoes_financeiras').insert([payload]);
+              if (error) throw error;
+          }
+
+          setFinanceiroModal({ ...financeiroModal, aberto: false });
+          await carregarMovimentacoes();
+          
+      } catch (error) {
+          alert("Erro ao gravar: " + error.message);
+      } finally {
+          setLoadingMov(false);
+      }
+  };
+
+  const excluirMovimentacao = async () => {
+      if (!financeiroModal.id) return;
+      if (!window.confirm("Tem certeza que deseja excluir este lançamento?")) return;
+      
+      setLoadingMov(true);
+      await supabase.from('movimentacoes_financeiras').delete().eq('id', financeiroModal.id);
+      setFinanceiroModal({ ...financeiroModal, aberto: false });
+      await carregarMovimentacoes();
+      setLoadingMov(false);
+  };
+
   const margem = calcularMargem();
   let progressColor = 'bg-indigo-500';
   if (progresso.percentual > 80) progressColor = 'bg-yellow-500';
   if (progresso.percentual > 100) progressColor = 'bg-red-500';
 
   if (!isOpen) return null;
+
+  const modalThemeColor = financeiroModal.tipo === 'receita' ? 'emerald' : 'red';
+  const modalThemeClass = financeiroModal.tipo === 'receita' ? 'bg-emerald-600' : 'bg-red-600';
 
   return ReactDOM.createPortal(
     <>
@@ -464,72 +603,198 @@ const DemandModal = ({
             {isAdmin && (
               <div className={activeTab === 'financeiro' ? 'block animate-fade-in' : 'hidden'}>
                 
+                {/* 1. SEÇÃO DE CÁLCULO DE MARGEM (DRE Planejado) */}
                 <div className={`mb-6 p-4 rounded-xl border ${margem.percentual > 30 ? 'bg-emerald-50 border-emerald-200 dark:bg-emerald-900/20 dark:border-emerald-800' : 'bg-gray-50 border-gray-200 dark:bg-gray-800 dark:border-gray-700'}`}>
-                  <div className="flex justify-between items-center mb-2">
-                    <div className="flex items-center gap-3">
-                        <div className={`p-2 rounded-lg ${margem.percentual > 30 ? 'bg-emerald-100 text-emerald-600' : 'bg-gray-200 text-gray-500'}`}>
-                            <TrendingUp size={20} />
+                   <div className="flex justify-between items-center mb-4">
+                        <h3 className="font-bold text-gray-700 dark:text-white flex items-center gap-2"><Activity size={18}/> DRE da Demanda (Planejado)</h3>
+                        <span className={`px-3 py-1 rounded text-sm font-bold ${margem.percentual > 0 ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>Lucro: {margem.valor}</span>
+                   </div>
+                   
+                   {/* Inputs Originais (Venda e Custo) */}
+                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6 opacity-80 hover:opacity-100 transition-opacity">
+                        {/* COLUNA VENDA */}
+                        <div className="border-r border-gray-200 dark:border-gray-700 pr-4">
+                            <h4 className="text-xs font-bold text-emerald-600 dark:text-emerald-400 uppercase tracking-wider mb-3 flex items-center gap-2">
+                                <DollarSign size={14}/> Receita Prevista
+                            </h4>
+                            <div className="grid grid-cols-2 gap-3 mb-3">
+                                <div>
+                                    <label className="block text-[10px] font-bold text-gray-400 uppercase mb-1">Qtd Horas</label>
+                                    <input 
+                                        type="number" 
+                                        value={formData.horas_vendidas} 
+                                        onChange={e => setFormData({...formData, horas_vendidas: e.target.value})} 
+                                        className="w-full border-b border-gray-300 dark:border-gray-600 bg-transparent py-1 font-medium outline-none focus:border-emerald-500 text-sm" 
+                                        placeholder="0" 
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-[10px] font-bold text-gray-400 uppercase mb-1">Valor Hora</label>
+                                    <input 
+                                        type="text" 
+                                        value={formData.valor_hora_venda} 
+                                        onChange={(e) => handleCurrencyChange(e, 'valor_hora_venda')} 
+                                        className="w-full border-b border-gray-300 dark:border-gray-600 bg-transparent py-1 font-medium outline-none focus:border-emerald-500 text-sm" 
+                                        placeholder="R$ 0,00" 
+                                    />
+                                </div>
+                            </div>
+                            <div>
+                                <label className="block text-[10px] font-bold text-emerald-600 uppercase mb-1">Total Venda</label>
+                                <input type="text" value={formData.valor_cobrado} readOnly className="w-full bg-transparent font-bold text-lg text-emerald-600 border-b border-emerald-200 outline-none" placeholder="R$ 0,00" />
+                            </div>
                         </div>
-                        <div>
-                            <p className="text-xs font-bold uppercase text-gray-500 dark:text-gray-400">Margem Estimada</p>
-                            <h3 className={`text-2xl font-black ${margem.percentual > 30 ? 'text-emerald-600 dark:text-emerald-400' : 'text-gray-700 dark:text-white'}`}>{margem.percentual.toFixed(1)}%</h3>
+
+                        {/* COLUNA CUSTO */}
+                        <div className="pl-2">
+                             <h4 className="text-xs font-bold text-red-500 dark:text-red-400 uppercase tracking-wider mb-3 flex items-center gap-2">
+                                <User size={14}/> Custo Previsto
+                             </h4>
+                             <div className="mb-3">
+                                <label className="block text-[10px] font-bold text-gray-400 uppercase mb-1">Custo Hora (Consultor)</label>
+                                <input 
+                                    type="text" 
+                                    value={formData.valor_interno_hora} 
+                                    onChange={(e) => handleCurrencyChange(e, 'valor_interno_hora')} 
+                                    className="w-full border-b border-gray-300 dark:border-gray-600 bg-transparent py-1 font-medium outline-none focus:border-red-500 text-sm" 
+                                    placeholder="R$ 0,00" 
+                                />
+                             </div>
+                             <div>
+                                 <label className="block text-[10px] font-bold text-red-500 uppercase mb-1">Custo Estimado ({formData.estimativa}h)</label>
+                                 <input type="text" value={margem.custoTotal} readOnly className="w-full bg-transparent font-bold text-lg text-red-500 border-b border-red-200 outline-none" placeholder="R$ 0,00" />
+                             </div>
                         </div>
-                    </div>
-                    <div className="text-right">
-                      <p className="text-xs font-bold uppercase text-gray-500 dark:text-gray-400">Lucro Bruto</p>
-                      <p className="text-lg font-bold text-gray-800 dark:text-white">{margem.valor}</p>
-                    </div>
-                  </div>
-                  <div className="text-[10px] text-gray-400 border-t border-gray-200 dark:border-gray-700 pt-2 flex items-center gap-1">
-                    <AlertCircle size={10}/> Cálculo: Venda ({formData.valor_cobrado || 'R$ 0,00'}) - Custo Estimado ({margem.custoTotal})
-                  </div>
+                   </div>
                 </div>
 
-                <div className="mb-6">
-                    <h4 className="text-xs font-bold text-emerald-600 dark:text-emerald-400 uppercase tracking-wider mb-2 flex items-center gap-2">
-                        <DollarSign size={14}/> Venda (Cliente)
-                    </h4>
-                    <div className="grid grid-cols-12 gap-3">
-                        <div className="col-span-4">
-                            <label className="block text-[10px] font-bold text-gray-400 uppercase mb-1">Qtd Horas</label>
-                            <input type="number" value={formData.horas_vendidas} onChange={e => setFormData({...formData, horas_vendidas: e.target.value})} className="w-full border border-gray-200 dark:border-gray-700 rounded-lg p-3 bg-white dark:bg-gray-800 dark:text-white font-medium outline-none focus:ring-1 focus:ring-emerald-500" placeholder="0" />
+                <hr className="my-6 border-gray-100 dark:border-gray-700" />
+
+                {/* 2. EXTRATO FINANCEIRO */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    
+                    {/* COLUNA RECEITA (CLIENTE) */}
+                    <div className="space-y-4">
+                        <div className="flex justify-between items-end border-b pb-2 border-gray-200 dark:border-gray-700">
+                            <div>
+                                <p className="text-xs font-bold text-gray-400 uppercase mb-1">Contas a Receber</p>
+                                <p className="text-xl font-bold text-emerald-600">{maskCurrency(saldos.receita.saldo.toFixed(2))}</p>
+                                <p className="text-[10px] text-gray-400">Saldo restante a cobrar</p>
+                            </div>
+                            <button type="button" onClick={() => abrirModalFinanceiro('receita')} className="text-xs bg-emerald-600 text-white px-3 py-2 rounded-lg hover:bg-emerald-700 font-bold transition-colors flex items-center gap-1 shadow-sm">
+                                <Plus size={14}/> Nova Cobrança
+                            </button>
                         </div>
-                        <div className="col-span-4">
-                            <label className="block text-[10px] font-bold text-gray-400 uppercase mb-1">Valor Hora</label>
-                            <input type="text" value={formData.valor_hora_venda} onChange={(e) => handleCurrencyChange(e, 'valor_hora_venda')} className="w-full border border-gray-200 dark:border-gray-700 rounded-lg p-3 bg-white dark:bg-gray-800 dark:text-white font-medium outline-none focus:ring-1 focus:ring-emerald-500" placeholder="R$ 0,00" />
-                        </div>
-                        <div className="col-span-4">
-                            <label className="block text-[10px] font-bold text-gray-400 uppercase mb-1">Total Venda</label>
-                            <input type="text" value={formData.valor_cobrado} readOnly className="w-full border-2 border-emerald-100 dark:border-emerald-900 rounded-lg p-3 bg-gray-50 dark:bg-gray-900 dark:text-emerald-400 font-bold outline-none" placeholder="R$ 0,00" />
+                        
+                        <div className="space-y-2 max-h-64 overflow-y-auto custom-scrollbar pr-1">
+                            {movimentacoes.filter(m => m.tipo === 'receita').length === 0 && <p className="text-xs text-gray-400 italic text-center py-4">Nenhuma cobrança gerada.</p>}
+                            {movimentacoes.filter(m => m.tipo === 'receita').map(mov => (
+                                <div key={mov.id} onClick={() => abrirModalFinanceiro('receita', mov)} className="bg-white dark:bg-gray-800 p-3 rounded-lg border border-gray-100 dark:border-gray-700 shadow-sm hover:border-emerald-200 dark:hover:border-emerald-900 transition-colors cursor-pointer group relative overflow-hidden">
+                                    <div className="flex justify-between items-start mb-1">
+                                        <p className="text-xs font-bold text-gray-700 dark:text-gray-200">{mov.descricao}</p>
+                                        {mov.status === 'pago' ? <CheckCircle2 size={14} className="text-emerald-500"/> : <span className="w-2 h-2 rounded-full bg-gray-300"></span>}
+                                    </div>
+                                    <div className="flex justify-between items-end">
+                                        <p className="text-[10px] text-gray-400 flex items-center gap-1"><Calendar size={10}/> {new Date(mov.data_vencimento).toLocaleDateString('pt-BR')}</p>
+                                        <span className={`text-sm font-bold ${mov.status === 'pago' ? 'text-gray-400 line-through' : 'text-emerald-600'}`}>R$ {mov.valor.toLocaleString('pt-BR', {minimumFractionDigits: 2})}</span>
+                                    </div>
+                                    {/* Hover Effect */}
+                                    <div className="absolute inset-0 bg-emerald-50 opacity-0 group-hover:opacity-10 transition-opacity pointer-events-none"></div>
+                                </div>
+                            ))}
                         </div>
                     </div>
-                </div>
 
-                <div className="mb-6">
-                    <h4 className="text-xs font-bold text-red-400 uppercase tracking-wider mb-2 flex items-center gap-2">
-                        <User size={14}/> Custo (Consultor)
-                    </h4>
-                    <div className="grid grid-cols-12 gap-3">
-                        <div className="col-span-4">
-                            <label className="block text-[10px] font-bold text-gray-400 uppercase mb-1">Horas Repasse</label>
-                            <input type="number" disabled value={formData.estimativa} className="w-full border border-gray-200 dark:border-gray-700 rounded-lg p-3 bg-white dark:bg-gray-800 dark:text-white font-medium cursor-not-allowed" />
+                    {/* COLUNA DESPESA (CONSULTOR) */}
+                    <div className="space-y-4">
+                        <div className="flex justify-between items-end border-b pb-2 border-gray-200 dark:border-gray-700">
+                            <div>
+                                <p className="text-xs font-bold text-gray-400 uppercase mb-1">Contas a Pagar</p>
+                                <p className="text-xl font-bold text-red-500">{maskCurrency(saldos.despesa.saldo.toFixed(2))}</p>
+                                <p className="text-[10px] text-gray-400">Saldo restante a pagar</p>
+                            </div>
+                            <button type="button" onClick={() => abrirModalFinanceiro('despesa')} className="text-xs bg-red-500 text-white px-3 py-2 rounded-lg hover:bg-red-600 font-bold transition-colors flex items-center gap-1 shadow-sm">
+                                <Plus size={14}/> Novo Pagamento
+                            </button>
                         </div>
-                        <div className="col-span-4">
-                            <label className="block text-[10px] font-bold text-gray-400 uppercase mb-1">Custo Hora</label>
-                            <input type="text" value={formData.valor_interno_hora} onChange={(e) => handleCurrencyChange(e, 'valor_interno_hora')} className="w-full border border-red-100 dark:border-red-900/30 rounded-lg p-3 bg-white dark:bg-gray-800 dark:text-white outline-none focus:border-red-400" placeholder="R$ 0,00" />
-                        </div>
-                        <div className="col-span-4">
-                            <label className="block text-[10px] font-bold text-gray-400 uppercase mb-1">Custo Total</label>
-                            <input type="text" value={margem.custoTotal} readOnly className="w-full border border-red-100 dark:border-red-900/30 rounded-lg p-3 bg-gray-50 dark:bg-gray-900 dark:text-red-400 font-bold outline-none" placeholder="R$ 0,00" />
+
+                        <div className="space-y-2 max-h-64 overflow-y-auto custom-scrollbar pr-1">
+                            {movimentacoes.filter(m => m.tipo === 'despesa').length === 0 && <p className="text-xs text-gray-400 italic text-center py-4">Nenhum pagamento gerado.</p>}
+                            {movimentacoes.filter(m => m.tipo === 'despesa').map(mov => (
+                                <div key={mov.id} onClick={() => abrirModalFinanceiro('despesa', mov)} className="bg-white dark:bg-gray-800 p-3 rounded-lg border border-gray-100 dark:border-gray-700 shadow-sm hover:border-red-200 dark:hover:border-red-900 transition-colors cursor-pointer group relative overflow-hidden">
+                                    <div className="flex justify-between items-start mb-1">
+                                        <p className="text-xs font-bold text-gray-700 dark:text-gray-200">{mov.descricao}</p>
+                                        {mov.status === 'pago' ? <CheckCircle2 size={14} className="text-green-500"/> : <span className="w-2 h-2 rounded-full bg-gray-300"></span>}
+                                    </div>
+                                    <div className="flex justify-between items-end">
+                                        <p className="text-[10px] text-gray-400 flex items-center gap-1"><Calendar size={10}/> {new Date(mov.data_vencimento).toLocaleDateString('pt-BR')}</p>
+                                        <span className={`text-sm font-bold ${mov.status === 'pago' ? 'text-gray-400 line-through' : 'text-red-500'}`}>R$ {mov.valor.toLocaleString('pt-BR', {minimumFractionDigits: 2})}</span>
+                                    </div>
+                                    {/* Hover Effect */}
+                                    <div className="absolute inset-0 bg-red-50 opacity-0 group-hover:opacity-10 transition-opacity pointer-events-none"></div>
+                                </div>
+                            ))}
                         </div>
                     </div>
-                    <p className="text-[10px] text-gray-400 mt-1">*Horas de repasse editáveis na aba Geral</p>
+
                 </div>
 
-                <div>
-                  <label className="block text-xs font-bold text-gray-500 dark:text-gray-400 uppercase mb-1"><Lock size={12}/> Obs. Internas (Sigiloso)</label>
-                  <textarea rows={3} value={formData.observacoes_internas} onChange={e => setFormData({...formData, observacoes_internas: e.target.value})} className="w-full border border-yellow-200 dark:border-yellow-900/30 bg-yellow-50 dark:bg-yellow-900/10 rounded-lg p-3 text-sm dark:text-gray-200 focus:ring-1 focus:ring-yellow-400 outline-none" placeholder="Detalhes da negociação..." />
-                </div>
+                {/* --- MODALZINHO PREMIUM DE LANÇAMENTO --- */}
+                {financeiroModal.aberto && (
+                    <div className="fixed inset-0 z-[10000] flex items-center justify-center p-4">
+                        <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={() => setFinanceiroModal({...financeiroModal, aberto: false})}></div>
+                        <div className="bg-white dark:bg-gray-900 w-full max-w-sm rounded-2xl shadow-2xl relative z-10 overflow-hidden animate-scale-in border border-gray-100 dark:border-gray-800">
+                            
+                            <div className={`${modalThemeClass} p-4 text-white flex justify-between items-center`}>
+                                <h3 className="font-bold flex items-center gap-2">
+                                    {financeiroModal.id ? <Edit2 size={18}/> : <Plus size={18}/>}
+                                    {financeiroModal.id ? 'Editar Parcela' : (financeiroModal.tipo === 'receita' ? 'Nova Cobrança' : 'Novo Pagamento')}
+                                </h3>
+                                <button onClick={() => setFinanceiroModal({...financeiroModal, aberto: false})} className="hover:bg-white/20 p-1 rounded-full"><X size={18}/></button>
+                            </div>
+
+                            <div className="p-5 space-y-4">
+                                <div>
+                                    <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Descrição</label>
+                                    <input type="text" value={financeiroModal.descricao} onChange={e => setFinanceiroModal({...financeiroModal, descricao: e.target.value})} className="w-full border border-gray-300 dark:border-gray-700 rounded-lg p-2.5 bg-white dark:bg-gray-800 outline-none focus:ring-2 focus:ring-indigo-500 font-medium" placeholder="Ex: Parcela 1/2" />
+                                </div>
+
+                                <div className="grid grid-cols-2 gap-3">
+                                    <div>
+                                        <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Valor (R$)</label>
+                                        <input type="text" value={financeiroModal.valor} onChange={(e) => { const v = maskCurrency(e.target.value); setFinanceiroModal({...financeiroModal, valor: v}) }} className="w-full border border-gray-300 dark:border-gray-700 rounded-lg p-2.5 bg-white dark:bg-gray-800 outline-none focus:ring-2 focus:ring-indigo-500 font-bold" />
+                                    </div>
+                                    <div>
+                                        <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Vencimento</label>
+                                        <input type="date" value={financeiroModal.data} onChange={e => setFinanceiroModal({...financeiroModal, data: e.target.value})} className="w-full border border-gray-300 dark:border-gray-700 rounded-lg p-2.5 bg-white dark:bg-gray-800 outline-none focus:ring-2 focus:ring-indigo-500" />
+                                    </div>
+                                </div>
+
+                                <div>
+                                    <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Status</label>
+                                    <div className="grid grid-cols-2 gap-2">
+                                        <button type="button" onClick={() => setFinanceiroModal({...financeiroModal, status: 'pendente'})} className={`py-2 text-xs font-bold rounded-lg border ${financeiroModal.status === 'pendente' ? 'bg-gray-100 border-gray-400 text-gray-700' : 'bg-white border-gray-200 text-gray-400'}`}>
+                                            Pendente
+                                        </button>
+                                        <button type="button" onClick={() => setFinanceiroModal({...financeiroModal, status: 'pago'})} className={`py-2 text-xs font-bold rounded-lg border flex items-center justify-center gap-1 ${financeiroModal.status === 'pago' ? 'bg-green-50 border-green-500 text-green-700' : 'bg-white border-gray-200 text-gray-400'}`}>
+                                            <CheckCircle2 size={12}/> Pago / Recebido
+                                        </button>
+                                    </div>
+                                </div>
+
+                                <div className="flex gap-2 pt-2 border-t border-gray-100 dark:border-gray-700 mt-4">
+                                    {financeiroModal.id && (
+                                        <button type="button" onClick={excluirMovimentacao} className="px-3 py-2.5 bg-white border border-red-200 text-red-500 rounded-xl hover:bg-red-50 transition-colors"><Trash2 size={18}/></button>
+                                    )}
+                                    <button type="button" onClick={salvarMovimentacao} className={`flex-1 py-2.5 text-white rounded-xl font-bold shadow-lg transition-transform active:scale-95 ${modalThemeClass} hover:opacity-90`}>
+                                        {financeiroModal.id ? 'Salvar Alterações' : 'Confirmar Lançamento'}
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                )}
+
               </div>
             )}
           </form>
