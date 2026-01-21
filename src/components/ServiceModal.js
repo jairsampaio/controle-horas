@@ -113,14 +113,18 @@ const ServiceModal = ({ isOpen, onClose, onSave, onDelete, formData, setFormData
         const { data: canais } = await supabase.from('canais').select('*').eq('consultoria_id', profile.consultoria_id).eq('ativo', true).order('nome');
         if (canais) setListaCanais(canais);
 
-        // Demandas (Search Visual)
-        const { data: demandas } = await supabase
+        // Demandas (CORREÇÃO AQUI: Removemos trava de concluída para garantir visibilidade)
+        const { data: demandas, error } = await supabase
             .from('demandas')
             .select('id, codigo, titulo, cliente_id, status') 
-            .eq('consultoria_id', profile.consultoria_id)
-            .neq('status', 'Concluída') 
+            .eq('consultoria_id', profile.consultoria_id) // Filtra pela empresa
+            .neq('status', 'Cancelada') // Esconde apenas canceladas
             .order('created_at', { ascending: false });
         
+        if (error) {
+            console.error("Erro ao buscar demandas:", error);
+        }
+
         if (demandas) {
             setListaDemandas(demandas);
             if (formData.demanda_id) {
@@ -209,7 +213,7 @@ const ServiceModal = ({ isOpen, onClose, onSave, onDelete, formData, setFormData
       setLoadingSolicitantes(false);
     };
     carregarSolicitantes();
-  }, [formData.cliente, isOpen, clientes, listaSolicitantes.length]); // Adicionei dependências faltantes
+  }, [formData.cliente, isOpen, clientes, listaSolicitantes.length]); 
 
   // Dropdown close
   useEffect(() => {
@@ -373,7 +377,6 @@ const ServiceModal = ({ isOpen, onClose, onSave, onDelete, formData, setFormData
         return;
     }
     
-    // Atualiza estado local antes de enviar (embora onSave do App.js possa usar o seu próprio)
     setFormData(prev => ({ ...prev, horas: horasSalvar }));
     
     try {
@@ -382,7 +385,7 @@ const ServiceModal = ({ isOpen, onClose, onSave, onDelete, formData, setFormData
         
         const payload = {
             ...formData,
-            horas: horasSalvar, // Garante que a hora vai
+            horas: horasSalvar,
             canal_id: formData.canal_id || null,
             cliente: formData.cliente,
             user_id: user.id,
@@ -612,7 +615,8 @@ const ServiceModal = ({ isOpen, onClose, onSave, onDelete, formData, setFormData
         </div>
         </div>
         <ConfirmModal isOpen={showConfirmModal} onClose={() => setShowConfirmModal(false)} onConfirm={handleConfirmDelete} title="Excluir Serviço?" message="Essa ação afetará o saldo total de horas e não pode ser desfeita." confirmText="Sim, excluir" cancelText="Cancelar" type="danger" />
-    </>,
+    </>
+    ,
     document.body
   );
 };
