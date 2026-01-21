@@ -89,14 +89,13 @@ const ServiceModal = ({ isOpen, onClose, onSave, onDelete, formData, setFormData
       lastClientRef.current = null; 
       setModoLancamento('detalhado');
 
+      // Lógica de Vinculação na Edição
       if (formData.demanda_id) {
           setVincularDemanda(true);
       } else {
           setVincularDemanda(false); 
           setBuscaDemanda('');
       }
-
-      if (formData.canal_id === "") setFormData(prev => ({ ...prev, canal_id: null }));
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen, isEditing]);
@@ -113,12 +112,12 @@ const ServiceModal = ({ isOpen, onClose, onSave, onDelete, formData, setFormData
         const { data: canais } = await supabase.from('canais').select('*').eq('consultoria_id', profile.consultoria_id).eq('ativo', true).order('nome');
         if (canais) setListaCanais(canais);
 
-        // Demandas (CORREÇÃO AQUI: Removemos trava de concluída para garantir visibilidade)
+        // Demandas
         const { data: demandas, error } = await supabase
             .from('demandas')
             .select('id, codigo, titulo, cliente_id, status') 
-            .eq('consultoria_id', profile.consultoria_id) // Filtra pela empresa
-            .neq('status', 'Cancelada') // Esconde apenas canceladas
+            .eq('consultoria_id', profile.consultoria_id) 
+            .neq('status', 'Cancelada') 
             .order('created_at', { ascending: false });
         
         if (error) {
@@ -314,6 +313,15 @@ const ServiceModal = ({ isOpen, onClose, onSave, onDelete, formData, setFormData
 
   const pg = getProgressData();
 
+  // --- FUNÇÃO DE LIMPEZA DE UUID (A BLINDAGEM) ---
+  const limparUUID = (valor) => {
+      if (valor === undefined || valor === null) return null;
+      const strVal = String(valor).trim();
+      // Remove qualquer coisa que pareça "undefined" ou string vazia
+      if (strVal === '' || strVal === 'undefined' || strVal === 'null') return null;
+      return strVal;
+  };
+
   const salvarEmLote = async () => {
       try {
           const { data: { user } } = await supabase.auth.getUser();
@@ -333,9 +341,9 @@ const ServiceModal = ({ isOpen, onClose, onSave, onDelete, formData, setFormData
                       hora_final: `${String(hF).padStart(2, '0')}:${String(mF).padStart(2, '0')}`,
                       valor_hora: formData.valor_hora,
                       horas: hHoje,
-                      canal_id: formData.canal_id || null,
+                      canal_id: limparUUID(formData.canal_id),
                       cliente: formData.cliente || null,
-                      demanda_id: formData.demanda_id || null,
+                      demanda_id: vincularDemanda ? limparUUID(formData.demanda_id) : null,
                       os_op_dpc: formData.os_op_dpc || null,
                       atividade: formData.atividade,
                       solicitante: formData.solicitante,
@@ -377,22 +385,35 @@ const ServiceModal = ({ isOpen, onClose, onSave, onDelete, formData, setFormData
         return;
     }
     
+    // Atualiza estado local antes de enviar
     setFormData(prev => ({ ...prev, horas: horasSalvar }));
     
     try {
         const { data: { user } } = await supabase.auth.getUser();
         const { data: profile } = await supabase.from('profiles').select('consultoria_id').eq('id', user.id).single();
         
+        // PAYLOAD COM LIMPEZA RIGOROSA DE UUID
         const payload = {
             ...formData,
             horas: horasSalvar,
-            canal_id: formData.canal_id || null,
+            canal_id: limparUUID(formData.canal_id),
+            demanda_id: vincularDemanda ? limparUUID(formData.demanda_id) : null,
+            os_op_dpc: formData.os_op_dpc || null,
+            numero_nfs: formData.numero_nfs || null,
             cliente: formData.cliente,
             user_id: user.id,
             consultoria_id: profile.consultoria_id
         };
 
+        // Remove ID do payload se for insert para não dar conflito
+        if (!isEditing) {
+            delete payload.id;
+        }
+
+        console.log("Payload Enviado (Blindado):", payload);
+
         if (isEditing) {
+            if (!formData.id) throw new Error("ID do serviço não encontrado para edição.");
             const { error } = await supabase.from('servicos_prestados').update(payload).eq('id', formData.id);
             if (error) throw error;
         } else {
@@ -403,7 +424,7 @@ const ServiceModal = ({ isOpen, onClose, onSave, onDelete, formData, setFormData
         onClose();
         window.location.reload(); 
     } catch (err) {
-        console.error(err);
+        console.error("Erro DETALHADO:", err);
         setErroValidacao("Erro ao salvar: " + err.message);
     }
     setLoading(false);

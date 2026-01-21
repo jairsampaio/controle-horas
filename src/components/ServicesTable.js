@@ -3,24 +3,32 @@ import { Edit2, Trash2, Calendar, ArrowUp, ArrowDown, Building2, Filter, Check, 
 import { formatCurrency, formatHours } from '../utils/formatters';
 import supabase from '../services/supabase';
 
-const ServicesTable = ({ servicos, onStatusChange, onEdit, onDelete, onSort, sortConfig }) => {
+// AGORA RECEBE OS FILTROS DO PAI
+const ServicesTable = ({ 
+    servicos, // Já vem filtrado do Pai (ou bruto, dependendo da estratégia, mas vamos filtrar no Pai)
+    onStatusChange, 
+    onEdit, 
+    onDelete, 
+    onSort, 
+    sortConfig,
+    // Novas props para controle do filtro que está no Pai
+    filtrosConsultores,
+    setFiltrosConsultores,
+    isAdmin
+}) => {
   
-  // --- ESTADOS ---
   const [consultores, setConsultores] = useState([]);
-  const [filtrosConsultores, setFiltrosConsultores] = useState([]);
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
-  const [isAdmin, setIsAdmin] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
 
-  // Ref para detectar clique fora do filtro
   const dropdownRef = useRef(null);
 
-  // --- EFEITO: FECHAR AO CLICAR FORA ---
+  // Fecha dropdown ao clicar fora
   useEffect(() => {
     function handleClickOutside(event) {
       if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
         setIsDropdownOpen(false);
-        setSearchTerm(''); // Limpa a busca ao fechar
+        setSearchTerm('');
       }
     }
     document.addEventListener("mousedown", handleClickOutside);
@@ -29,49 +37,33 @@ const ServicesTable = ({ servicos, onStatusChange, onEdit, onDelete, onSort, sor
     };
   }, [dropdownRef]);
 
-  // --- EFEITO: CARREGAR DADOS DO ADMIN (FILTRO) ---
+  // Carrega lista de consultores para o Dropdown (Apenas se for Admin)
   useEffect(() => {
-    const carregarDadosAdmin = async () => {
+    const carregarConsultores = async () => {
+      if (!isAdmin) return;
+
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
 
-      // 1. Verifica permissão do usuário logado
-      const { data: profile } = await supabase
-        .from('profiles')
-        .select('role, consultoria_id')
-        .eq('id', user.id)
-        .single();
-
-      // MANUTENÇÃO: Lista de roles que podem filtrar (Chefia)
-      const cargosDeChefia = ['admin', 'dono', 'super_admin', 'admin_consultoria', 'gestor'];
-
-      if (profile && cargosDeChefia.includes(profile.role)) {
-        setIsAdmin(true);
-        
-        // 2. Busca lista de consultores DA MESMA CONSULTORIA para o filtro
+      const { data: profile } = await supabase.from('profiles').select('consultoria_id').eq('id', user.id).single();
+      
+      if (profile) {
         const { data: listaConsultores } = await supabase
           .from('profiles')
-          .select('id, nome, nome_completo, email') // Tenta pegar nome ou nome_completo
+          .select('id, nome, email')
           .eq('consultoria_id', profile.consultoria_id)
           .eq('ativo', true)
-          .order('nome', { ascending: true }); // Ordena pelo nome curto
+          .order('nome', { ascending: true });
           
         setConsultores(listaConsultores || []);
       }
     };
-    carregarDadosAdmin();
-  }, []);
+    carregarConsultores();
+  }, [isAdmin]);
 
-  // --- LÓGICA DE FILTRAGEM ---
-  
-  // 1. Filtra a LISTA PRINCIPAL de serviços
-  const servicosFiltrados = filtrosConsultores.length > 0
-    ? servicos.filter(s => filtrosConsultores.includes(s.consultor_id))
-    : servicos;
-
-  // 2. Filtra a LISTA DO DROPDOWN (Busca textual de consultores)
+  // Filtra visualmente a lista do dropdown
   const consultoresVisiveis = consultores.filter(c => {
-     const nomeBusca = c.nome || c.nome_completo || c.email || '';
+     const nomeBusca = c.nome || c.email || '';
      return nomeBusca.toLowerCase().includes(searchTerm.toLowerCase());
   });
 
@@ -86,9 +78,8 @@ const ServicesTable = ({ servicos, onStatusChange, onEdit, onDelete, onSort, sor
     setFiltrosConsultores([]);
   };
 
-  // --- HELPER FUNCTIONS ---
+  // --- HELPERS VISUAIS ---
   const formatData = (dataStr) => {
-    // Corrige fuso horário ao criar data (adiciona T00:00:00 para forçar local time)
     return new Date(dataStr + 'T00:00:00').toLocaleDateString('pt-BR');
   };
 
@@ -111,14 +102,15 @@ const ServicesTable = ({ servicos, onStatusChange, onEdit, onDelete, onSort, sor
   };
 
   const getCanalNome = (servico) => {
-      // Prioridade: Objeto canal populado > ID direto > Placeholder
       if (servico.canais && servico.canais.nome) return servico.canais.nome;
       if (servico.canal_id) return 'Parceiro'; 
       return '-'; 
   };
 
-  // --- EMPTY STATE (Lista Vazia) ---
-  if (servicos.length === 0) {
+  // --- RENDERIZAÇÃO ---
+
+  // Se não tiver serviços E não tiver filtro ativo, mostra vazio genérico
+  if (servicos.length === 0 && filtrosConsultores.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center py-16 text-center bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 shadow-sm">
         <div className="bg-indigo-50 dark:bg-indigo-900/20 p-4 rounded-full mb-4 animate-pulse">
@@ -126,7 +118,7 @@ const ServicesTable = ({ servicos, onStatusChange, onEdit, onDelete, onSort, sor
         </div>
         <h3 className="text-xl font-semibold text-gray-800 dark:text-white">Nenhum serviço encontrado</h3>
         <p className="text-gray-500 dark:text-gray-400 max-w-sm mt-2">
-          Sua lista está limpa ou os filtros não retornaram resultados.
+          Sua lista está limpa.
         </p>
       </div>
     );
@@ -145,9 +137,7 @@ const ServicesTable = ({ servicos, onStatusChange, onEdit, onDelete, onSort, sor
               Filtrar por Consultor
             </label>
             
-            {/* CONTAINER DO DROPDOWN */}
             <div className="relative" ref={dropdownRef}>
-              
               <button
                 onClick={() => setIsDropdownOpen(!isDropdownOpen)}
                 className="w-full md:w-72 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 text-gray-900 dark:text-gray-100 text-sm rounded-lg focus:ring-indigo-500 focus:border-indigo-500 p-2.5 text-left flex justify-between items-center group"
@@ -173,8 +163,6 @@ const ServicesTable = ({ servicos, onStatusChange, onEdit, onDelete, onSort, sor
 
               {isDropdownOpen && (
                 <div className="absolute z-20 w-full md:w-72 mt-1 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-xl overflow-hidden animate-in fade-in zoom-in-95 duration-100">
-                  
-                  {/* CAMPO DE BUSCA INTERNO */}
                   <div className="p-2 border-b border-gray-100 dark:border-gray-700 bg-gray-50 dark:bg-gray-900/50">
                     <div className="relative">
                       <Search size={14} className="absolute left-2.5 top-2.5 text-gray-400" />
@@ -189,7 +177,6 @@ const ServicesTable = ({ servicos, onStatusChange, onEdit, onDelete, onSort, sor
                     </div>
                   </div>
 
-                  {/* LISTA DE OPÇÕES */}
                   <div className="max-h-60 overflow-y-auto custom-scrollbar">
                     {consultoresVisiveis.length === 0 ? (
                        <div className="p-4 text-center text-xs text-gray-400">
@@ -217,7 +204,7 @@ const ServicesTable = ({ servicos, onStatusChange, onEdit, onDelete, onSort, sor
                             </div>
                             <div className="flex flex-col truncate">
                               <span className={`text-sm truncate ${isSelected ? 'font-semibold text-indigo-700 dark:text-indigo-300' : 'text-gray-700 dark:text-gray-200'}`}>
-                                {consultor.nome || consultor.nome_completo || consultor.email}
+                                {consultor.nome || consultor.email}
                               </span>
                             </div>
                           </div>
@@ -244,13 +231,11 @@ const ServicesTable = ({ servicos, onStatusChange, onEdit, onDelete, onSort, sor
 
       {/* --- VERSÃO MOBILE (CARDS) --- */}
       <div className="md:hidden space-y-4">
-        {servicosFiltrados.map(servico => (
+        {servicos.map(servico => ( // Agora itera sobre a prop 'servicos' que já vem filtrada do Pai
           <div key={servico.id} className="bg-white dark:bg-gray-800 p-4 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 space-y-3 relative overflow-hidden">
-            
             {getCanalNome(servico) !== '-' && (
                 <div className="absolute left-0 top-0 bottom-0 w-1 bg-indigo-500 dark:bg-indigo-400"></div>
             )}
-
             <div className="flex justify-between items-start pl-2">
               <div className="flex flex-col">
                  <span className="text-xs font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wider flex items-center gap-1">
@@ -262,7 +247,6 @@ const ServicesTable = ({ servicos, onStatusChange, onEdit, onDelete, onSort, sor
                     {formatData(servico.data)}
                  </div>
               </div>
-
               <span className={`text-xs px-2 py-1 rounded-full font-bold ${
                   servico.status === 'Pago' ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300' :
                   servico.status === 'NF Emitida' ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300' :
@@ -273,7 +257,6 @@ const ServicesTable = ({ servicos, onStatusChange, onEdit, onDelete, onSort, sor
                   {servico.status}
               </span>
             </div>
-
             <div className="space-y-1 pl-2">
               <div className="flex items-center gap-2 font-bold text-gray-800 dark:text-white text-lg">
                 <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs ${getAvatarColor(servico.cliente)}`}>
@@ -286,7 +269,6 @@ const ServicesTable = ({ servicos, onStatusChange, onEdit, onDelete, onSort, sor
                 <span className="text-xs text-gray-400 dark:text-gray-500 mt-1">Solicitante: {servico.solicitante}</span>
               </div>
             </div>
-
             <div className="pt-3 border-t border-gray-50 dark:border-gray-700 flex justify-between items-center pl-2">
                <div className="font-bold text-gray-900 dark:text-white text-lg">
                   {formatCurrency(servico.valor_total)}
@@ -298,10 +280,9 @@ const ServicesTable = ({ servicos, onStatusChange, onEdit, onDelete, onSort, sor
             </div>
           </div>
         ))}
-        
-        {filtrosConsultores.length > 0 && servicosFiltrados.length === 0 && (
+        {servicos.length === 0 && (
             <div className="text-center py-8 text-gray-500">
-                Nenhum serviço encontrado para este consultor.
+                Nenhum serviço encontrado.
             </div>
         )}
       </div>
@@ -320,43 +301,23 @@ const ServicesTable = ({ servicos, onStatusChange, onEdit, onDelete, onSort, sor
                     Data <SortIcon column="data" />
                   </div>
                 </th>
-                
-                <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider w-40">
-                    Canal
-                </th>
-
-                <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                    Cliente / Solicitante
-                </th>
-
-                <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider min-w-[200px]">
-                    Atividade
-                </th>
-
-                <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                    Valor / Horas
-                </th>
-
-                <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                    Status
-                </th>
-                <th className="px-6 py-4 text-right text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                    Ações
-                </th>
+                <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider w-40">Canal</th>
+                <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Cliente / Solicitante</th>
+                <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider min-w-[200px]">Atividade</th>
+                <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Valor / Horas</th>
+                <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Status</th>
+                <th className="px-6 py-4 text-right text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Ações</th>
               </tr>
             </thead>
-            
             <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
-              {servicosFiltrados.map(servico => (
+              {servicos.map(servico => ( // Itera sobre 'servicos' já filtrados
                 <tr key={servico.id} className="group hover:bg-gray-50 dark:hover:bg-gray-700/30 transition-colors duration-150">
-                  
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600 dark:text-gray-300">
                       <div className="flex items-center gap-2">
                         <Calendar size={14} className="text-gray-400 dark:text-gray-500"/>
                         {formatData(servico.data)}
                       </div>
                   </td>
-
                   <td className="px-6 py-4 whitespace-nowrap">
                       <div className="flex items-center gap-2">
                           {getCanalNome(servico) !== '-' ? (
@@ -371,7 +332,6 @@ const ServicesTable = ({ servicos, onStatusChange, onEdit, onDelete, onSort, sor
                           )}
                       </div>
                   </td>
-
                   <td className="px-6 py-4 whitespace-nowrap">
                     <div className="flex items-center">
                       <div className={`flex-shrink-0 h-8 w-8 rounded-full flex items-center justify-center font-bold text-xs ${getAvatarColor(servico.cliente)}`}>
@@ -383,18 +343,15 @@ const ServicesTable = ({ servicos, onStatusChange, onEdit, onDelete, onSort, sor
                       </div>
                     </div>
                   </td>
-
                   <td className="px-6 py-4">
                     <div className="text-sm text-gray-600 dark:text-gray-300 max-w-xs truncate" title={servico.atividade}>
                       {servico.atividade}
                     </div>
                   </td>
-
                   <td className="px-6 py-4 whitespace-nowrap">
                     <div className="text-sm font-bold text-gray-900 dark:text-white">{formatCurrency(servico.valor_total)}</div>
                     <div className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">{formatHours(servico.qtd_horas)}</div>
                   </td>
-
                   <td className="px-6 py-4 whitespace-nowrap">
                       <select
                         value={servico.status}
@@ -414,34 +371,20 @@ const ServicesTable = ({ servicos, onStatusChange, onEdit, onDelete, onSort, sor
                         <option value="Pago">Pago</option>
                       </select>
                   </td>
-
                   <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                     <div className="flex justify-end gap-3 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
-                      <button
-                        onClick={() => onEdit(servico)}
-                        className="text-gray-400 dark:text-gray-500 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors p-1 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 rounded"
-                        title="Editar"
-                      >
+                      <button onClick={() => onEdit(servico)} className="text-gray-400 dark:text-gray-500 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors p-1 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 rounded" title="Editar">
                         <Edit2 size={18} />
                       </button>
-                      <button
-                        onClick={() => onDelete(servico.id)}
-                        className="text-gray-400 dark:text-gray-500 hover:text-red-600 dark:hover:text-red-400 transition-colors p-1 hover:bg-red-50 dark:hover:bg-red-900/20 rounded"
-                        title="Excluir"
-                      >
+                      <button onClick={() => onDelete(servico.id)} className="text-gray-400 dark:text-gray-500 hover:text-red-600 dark:hover:text-red-400 transition-colors p-1 hover:bg-red-50 dark:hover:bg-red-900/20 rounded" title="Excluir">
                         <Trash2 size={18} />
                       </button>
                     </div>
                   </td>
                 </tr>
               ))}
-              {/* Mensagem na tabela se o filtro estiver vazio */}
-              {filtrosConsultores.length > 0 && servicosFiltrados.length === 0 && (
-                 <tr>
-                   <td colSpan="7" className="text-center py-8 text-gray-500">
-                     Nenhum serviço encontrado para este consultor.
-                   </td>
-                 </tr>
+              {servicos.length === 0 && (
+                 <tr><td colSpan="7" className="text-center py-8 text-gray-500">Nenhum serviço encontrado.</td></tr>
               )}
             </tbody>
           </table>

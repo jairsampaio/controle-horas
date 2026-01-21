@@ -42,7 +42,15 @@ const App = () => {
   const [canais, setCanais] = useState([]); 
   const [loading, setLoading] = useState(true);
   
-  const [activeTab, setActiveTab] = useState('dashboard');
+  // Inicia lendo da memória do navegador. Se não tiver nada, vai pro dashboard.
+  const [activeTab, setActiveTab] = useState(() => {
+      return localStorage.getItem('lastActiveTab') || 'dashboard';
+  });
+
+  // Sempre que mudar a aba, salva na memória
+  useEffect(() => {
+      localStorage.setItem('lastActiveTab', activeTab);
+  }, [activeTab]);
   const [viewMode, setViewMode] = useState('list'); 
   const [selectedTenantId, setSelectedTenantId] = useState(null);
 
@@ -73,6 +81,9 @@ const App = () => {
   
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   
+  // NOVO ESTADO PARA FILTRO DE CONSULTORES (Elevado do ServicesTable)
+  const [filtrosConsultores, setFiltrosConsultores] = useState([]);
+
   const [filtros, setFiltros] = useState({
     canal: [], 
     cliente: [],
@@ -112,20 +123,22 @@ const App = () => {
     'Pago': { color: 'bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-300 border-green-200 dark:border-green-800', icon: DollarSign, label: 'Pago' }
   };
 
+
   useEffect(() => {
     const carregarSolicitantesFiltro = async () => {
-      if (filtros.cliente.length === 0) {
-        setTodosSolicitantesDoCliente([]);
-        setFiltros(prev => ({ ...prev, solicitantes: [] })); 
-        return;
-      }
+      // ... (código anterior igual)
       
       if (filtros.cliente.length === 1) {
           const nomeCliente = filtros.cliente[0];
           const clienteObj = clientes.find(c => c.nome === nomeCliente);
           if (clienteObj) {
             const { data } = await supabase.from('solicitantes').select('nome').eq('cliente_id', clienteObj.id).order('nome', { ascending: true });
-            if (data) setTodosSolicitantesDoCliente(data.map(s => s.nome));
+            
+            if (data) {
+                // ALTERAÇÃO AQUI: Remove duplicatas e espaços extras
+                const nomesUnicos = [...new Set(data.map(s => s.nome.trim()))];
+                setTodosSolicitantesDoCliente(nomesUnicos);
+            }
           }
       } else {
           setTodosSolicitantesDoCliente([]); 
@@ -299,7 +312,6 @@ const App = () => {
     const { data: authListener } = supabase.auth.onAuthStateChange((event, session) => { 
         setSession(session); 
         if (event === 'SIGNED_IN') {
-            setActiveTab('dashboard');
             setAccessDeniedType(null); 
         }
     });
@@ -308,10 +320,15 @@ const App = () => {
 
   useEffect(() => {
     if (session) { 
-        setLoading(true); 
-        carregarDados(); 
+        // SÓ ativa o loading se a lista estiver vazia (primeira carga).
+        // Se for só atualização de token, carrega os dados em "background" sem travar a tela.
+        if (servicos.length === 0) setLoading(true); 
+        
+        carregarDados().then(() => {
+             // Garante que o loading saia apenas depois de carregar
+             if (servicos.length === 0) setLoading(false);
+        });
         carregarConfiguracao(); 
-        setLoading(false); 
     } else { 
         setServicos([]); 
         setClientes([]); 
@@ -587,6 +604,13 @@ const App = () => {
       if (filtros.dataInicio && s.data < filtros.dataInicio) return false;
       if (filtros.dataFim && s.data > filtros.dataFim) return false;
       if (filtros.solicitantes && filtros.solicitantes.length > 0) { const solNome = (s.solicitante || '').trim(); if (!filtros.solicitantes.includes(solNome)) return false; }
+      
+      // --- NOVO FILTRO DE CONSULTORES ---
+      if (filtrosConsultores.length > 0) {
+         // O ID do usuário no banco é 'user_id'
+         if (!filtrosConsultores.includes(s.user_id)) return false;
+      }
+
       return true;
     });
     if (sortConfig.key) {
@@ -791,11 +815,31 @@ const App = () => {
                             </div>
                             
                             <div className="md:hidden">
-                                <ServicesTable servicos={servicosFiltradosData} onStatusChange={alterarStatusRapido} onEdit={editarServico} onDelete={deletarServico} onSort={handleSort} sortConfig={sortConfig} />
+                                <ServicesTable 
+                                    servicos={servicosFiltradosData} 
+                                    onStatusChange={alterarStatusRapido} 
+                                    onEdit={editarServico} 
+                                    onDelete={deletarServico} 
+                                    onSort={handleSort} 
+                                    sortConfig={sortConfig} 
+                                    filtrosConsultores={filtrosConsultores}
+                                    setFiltrosConsultores={setFiltrosConsultores}
+                                    isAdmin={['admin', 'dono', 'super_admin', 'gestor'].includes(userRole)}
+                                />
                             </div>
                             <div className="hidden md:block">
                                 {viewMode === 'list' ? (
-                                    <ServicesTable servicos={servicosFiltradosData} onStatusChange={alterarStatusRapido} onEdit={editarServico} onDelete={deletarServico} onSort={handleSort} sortConfig={sortConfig} />
+                                    <ServicesTable 
+                                        servicos={servicosFiltradosData} 
+                                        onStatusChange={alterarStatusRapido} 
+                                        onEdit={editarServico} 
+                                        onDelete={deletarServico} 
+                                        onSort={handleSort} 
+                                        sortConfig={sortConfig}
+                                        filtrosConsultores={filtrosConsultores}
+                                        setFiltrosConsultores={setFiltrosConsultores}
+                                        isAdmin={['admin', 'dono', 'super_admin', 'gestor'].includes(userRole)} 
+                                    />
                                 ) : (
                                     <div className="h-[600px]"><ServicesKanban servicos={servicosFiltradosData} onEditService={editarServico} onStatusChange={alterarStatusRapido} /></div>
                                 )}
