@@ -3,23 +3,22 @@ import {
   Plus, Calendar, Clock, User, 
   Briefcase, ChevronRight, Search, 
   LayoutGrid, List as ListIcon, Filter, X,
-  ChevronDown, Check, Building2 // <--- Adicionei o Building2
+  ChevronDown, Check, Building2
 } from 'lucide-react';
 import supabase from '../services/supabase';
 import DemandModal from './DemandModal';
 
-// --- COMPONENTE MULTI-SELECT PERSONALIZADO (UX PREMIUM) ---
+// --- COMPONENTE MULTI-SELECT PERSONALIZADO ---
 const MultiSelect = ({ label, options, selectedValues, onChange, icon: Icon }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const dropdownRef = useRef(null);
 
-  // Fecha ao clicar fora
   useEffect(() => {
     const handleClickOutside = (event) => {
       if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
         setIsOpen(false);
-        setSearchTerm(''); // Limpa busca ao fechar
+        setSearchTerm('');
       }
     };
     document.addEventListener("mousedown", handleClickOutside);
@@ -28,8 +27,8 @@ const MultiSelect = ({ label, options, selectedValues, onChange, icon: Icon }) =
 
   const toggleOption = (id) => {
     const newSelection = selectedValues.includes(id)
-      ? selectedValues.filter(item => item !== id) // Remove
-      : [...selectedValues, id]; // Adiciona
+      ? selectedValues.filter(item => item !== id)
+      : [...selectedValues, id];
     onChange(newSelection);
   };
 
@@ -37,11 +36,9 @@ const MultiSelect = ({ label, options, selectedValues, onChange, icon: Icon }) =
     opt.nome.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
-  // Texto do Botão (Feedback Visual)
   const getButtonText = () => {
-    // Pluralização inteligente
     const plural = label.endsWith('l') ? 'is' : (label.endsWith('r') ? 'es' : 's');
-    const labelAdjusted = label.endsWith('l') ? label.slice(0, -1) : label; // Canal -> Cana
+    const labelAdjusted = label.endsWith('l') ? label.slice(0, -1) : label;
     
     if (selectedValues.length === 0) return `Todos ${labelAdjusted}${plural}`;
     
@@ -67,7 +64,6 @@ const MultiSelect = ({ label, options, selectedValues, onChange, icon: Icon }) =
 
       {isOpen && (
         <div className="absolute top-full left-0 mt-1 w-64 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl shadow-xl z-50 overflow-hidden animate-fade-in">
-          {/* Busca interna no dropdown */}
           <div className="p-2 border-b border-gray-100 dark:border-gray-700 sticky top-0 bg-white dark:bg-gray-800">
             <div className="relative">
               <Search size={14} className="absolute left-2.5 top-2.5 text-gray-400" />
@@ -116,34 +112,27 @@ const MultiSelect = ({ label, options, selectedValues, onChange, icon: Icon }) =
 };
 
 const DemandList = ({ userRole, userId, consultoriaId, showToast }) => {
-  // --- ESTADOS DE DADOS ---
   const [demands, setDemands] = useState([]);
   const [loading, setLoading] = useState(true);
   
-  // --- ESTADOS DE CONTROLE VISUAL E FILTROS ---
   const [viewMode, setViewMode] = useState(() => localStorage.getItem('demand_view_mode') || 'cards');
   const [searchTerm, setSearchTerm] = useState('');
   
-  // AGORA SÃO ARRAYS PARA MULTI-SELECT
   const [selectedClientIds, setSelectedClientIds] = useState([]);
   const [selectedConsultantIds, setSelectedConsultantIds] = useState([]);
-  const [selectedChannelIds, setSelectedChannelIds] = useState([]); // <--- Novo State Canal
+  const [selectedChannelIds, setSelectedChannelIds] = useState([]); 
   
-  // Filtro rápido (Minhas/Todas)
   const [quickFilter, setQuickFilter] = useState('todas'); 
 
-  // --- ESTADOS DO MODAL ---
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedDemand, setSelectedDemand] = useState(null);
 
   const isAdmin = ['admin', 'dono', 'super_admin'].includes(userRole);
 
-  // --- PERSISTÊNCIA ---
   useEffect(() => {
     localStorage.setItem('demand_view_mode', viewMode);
   }, [viewMode]);
 
-  // --- CARREGAR DEMANDAS ---
   const fetchDemands = useCallback(async () => {
     setLoading(true);
     try {
@@ -154,7 +143,7 @@ const DemandList = ({ userRole, userId, consultoriaId, showToast }) => {
           clientes (id, nome),
           canais (id, nome), 
           profiles:vencedor_id (id, nome)
-        `) // <--- Adicionei 'canais' aqui
+        `)
         .eq('consultoria_id', consultoriaId)
         .order('created_at', { ascending: false });
 
@@ -176,25 +165,15 @@ const DemandList = ({ userRole, userId, consultoriaId, showToast }) => {
     fetchDemands();
   }, [fetchDemands]);
 
-  // --- LISTAS ÚNICAS PARA OS FILTROS ---
-  
-  // --- LISTAS ÚNICAS PARA OS FILTROS ---
-  
-  // Lista de Canais (COM OPÇÃO 'SEM CANAL')
   const uniqueChannels = useMemo(() => {
-    // 1. Pega os canais reais
     const channels = demands.map(d => d.canais).filter(Boolean);
     const unique = [...new Map(channels.map(item => [item['id'], item])).values()]
       .sort((a, b) => a.nome.localeCompare(b.nome));
 
-    // 2. Verifica se existe alguma demanda sem canal (null)
     const hasNoChannel = demands.some(d => !d.canal_id);
-
-    // 3. Se tiver, adiciona a opção manual no início da lista
     if (hasNoChannel) {
         unique.unshift({ id: 'sem-canal', nome: '(Sem Canal definido)' });
     }
-
     return unique;
   }, [demands]);
 
@@ -210,37 +189,27 @@ const DemandList = ({ userRole, userId, consultoriaId, showToast }) => {
       .sort((a, b) => a.nome.localeCompare(b.nome));
   }, [demands]);
 
-// --- LÓGICA DE FILTRAGEM (CORRIGIDA PARA NULL) ---
   const filteredDemands = useMemo(() => {
     return demands.filter(d => {
-      // 1. Busca Texto
       const matchesSearch = 
         d.titulo.toLowerCase().includes(searchTerm.toLowerCase()) || 
         d.clientes?.nome?.toLowerCase().includes(searchTerm.toLowerCase());
 
-      // 2. Filtro de Canais (Multi + Lógica de Null)
       let matchesChannel = true;
       if (selectedChannelIds.length > 0) {
           const wantsNoChannel = selectedChannelIds.includes('sem-canal');
           const wantsSpecificChannel = selectedChannelIds.some(id => id !== 'sem-canal' && d.canal_id === id);
-          
-          // Lógica: 
-          // OU o usuário quer ver os sem canal E o item não tem canal
-          // OU o item bate com um dos canais específicos selecionados
           matchesChannel = (wantsNoChannel && !d.canal_id) || wantsSpecificChannel;
       }
 
-      // 3. Filtro de Clientes (Multi)
       const matchesClient = selectedClientIds.length > 0 
         ? selectedClientIds.includes(d.cliente_id) 
         : true;
 
-      // 4. Filtro de Consultores (Multi)
       const matchesConsultant = selectedConsultantIds.length > 0 
         ? selectedConsultantIds.includes(d.vencedor_id) 
         : true;
 
-      // 5. Filtro Rápido
       let matchesQuick = true;
       if (isAdmin && selectedConsultantIds.length === 0) {
         if (quickFilter === 'minhas') matchesQuick = d.vencedor_id === userId;
@@ -250,7 +219,6 @@ const DemandList = ({ userRole, userId, consultoriaId, showToast }) => {
     });
   }, [demands, searchTerm, selectedChannelIds, selectedClientIds, selectedConsultantIds, quickFilter, isAdmin, userId]);
 
-  // --- HANDLERS ---
   const handleNewDemand = () => { setSelectedDemand(null); setIsModalOpen(true); };
   const handleEditDemand = (demand) => { setSelectedDemand(demand); setIsModalOpen(true); };
   const handleModalSuccess = () => { fetchDemands(); if (showToast) showToast('Salvo com sucesso!', 'sucesso'); };
@@ -322,16 +290,18 @@ const DemandList = ({ userRole, userId, consultoriaId, showToast }) => {
           </div>
 
           <div className="flex flex-col sm:flex-row gap-2 w-full">
-            {/* 1. CANAL (PRIMEIRO) */}
-            <MultiSelect 
-              label="Canal" 
-              icon={Building2}
-              options={uniqueChannels} 
-              selectedValues={selectedChannelIds} 
-              onChange={setSelectedChannelIds} 
-            />
+            {/* 1. CANAL (SÓ PARA ADMIN) */}
+            {isAdmin && (
+              <MultiSelect 
+                label="Canal" 
+                icon={Building2}
+                options={uniqueChannels} 
+                selectedValues={selectedChannelIds} 
+                onChange={setSelectedChannelIds} 
+              />
+            )}
 
-            {/* 2. CLIENTE */}
+            {/* 2. CLIENTE (PARA TODOS) */}
             <MultiSelect 
               label="Cliente" 
               icon={Briefcase}
@@ -340,14 +310,16 @@ const DemandList = ({ userRole, userId, consultoriaId, showToast }) => {
               onChange={setSelectedClientIds} 
             />
 
-            {/* 3. CONSULTOR */}
-            <MultiSelect 
-              label="Consultor" 
-              icon={User}
-              options={uniqueConsultants} 
-              selectedValues={selectedConsultantIds} 
-              onChange={setSelectedConsultantIds} 
-            />
+            {/* 3. CONSULTOR (SÓ PARA ADMIN) */}
+            {isAdmin && (
+              <MultiSelect 
+                label="Consultor" 
+                icon={User}
+                options={uniqueConsultants} 
+                selectedValues={selectedConsultantIds} 
+                onChange={setSelectedConsultantIds} 
+              />
+            )}
 
             {(searchTerm || selectedChannelIds.length > 0 || selectedClientIds.length > 0 || selectedConsultantIds.length > 0) && (
               <button onClick={clearFilters} className="text-gray-500 hover:text-red-500 p-2 ml-auto sm:ml-0" title="Limpar filtros">
@@ -405,7 +377,6 @@ const DemandList = ({ userRole, userId, consultoriaId, showToast }) => {
                       <h3 className="font-bold text-gray-800 dark:text-white mt-2 group-hover:text-indigo-600 transition-colors line-clamp-1" title={demand.titulo}>
                         {demand.titulo}
                       </h3>
-                      {/* MOSTRANDO O CANAL NO CARD TAMBÉM SE EXISTIR */}
                       <p className="text-xs text-gray-500 font-bold uppercase">
                         {demand.clientes?.nome || 'Sem Cliente'}
                         {demand.canais?.nome && <span className="text-gray-400 font-normal ml-1">• {demand.canais.nome}</span>}
