@@ -355,28 +355,61 @@ const App = () => {
 
   const salvarServico = async () => {
     try {
-      if (!profileData?.consultoria_id) throw new Error("Consultoria não identificada.");
+      console.log("--- Iniciando Salvamento ---");
+      console.log("Modo:", editingService ? "EDIÇÃO" : "CRIAÇÃO");
+      
+      if (!profileData?.consultoria_id) throw new Error("Consultoria não identificada no perfil.");
 
+      // Prepara o objeto base
       const dadosParaSalvar = {
           ...formData,
           user_id: session.user.id,
           consultoria_id: profileData.consultoria_id,
+          // Garante que campos vazios virem NULL para não dar erro de chave estrangeira
           canal_id: formData.canal_id === '' ? null : formData.canal_id,
           cliente: formData.cliente === '' ? null : formData.cliente
       };
 
       let error;
+
       if (editingService) {
-        const { error: updateError } = await supabase.from('servicos_prestados').update(dadosParaSalvar).eq('id', editingService.id);
+        // --- BLINDAGEM DE EDIÇÃO ---
+        console.log("ID do serviço a editar:", editingService.id);
+
+        if (!editingService.id) {
+            throw new Error("ID do serviço não encontrado para edição. Tente fechar e abrir o modal novamente.");
+        }
+
+        const { error: updateError } = await supabase
+            .from('servicos_prestados')
+            .update(dadosParaSalvar)
+            .eq('id', editingService.id);
+            
         error = updateError;
       } else {
-        const { error: insertError } = await supabase.from('servicos_prestados').insert([dadosParaSalvar]);
+        // --- CRIAÇÃO ---
+        const { error: insertError } = await supabase
+            .from('servicos_prestados')
+            .insert([dadosParaSalvar]);
+            
         error = insertError;
       }
+
       if (error) throw error;
-      showToast(editingService ? 'Serviço atualizado!' : 'Serviço cadastrado!', 'sucesso');
-      setShowModal(false); setEditingService(null); resetForm(); carregarDados();
-    } catch (error) { console.error('Erro ao salvar:', error); showToast('Erro ao salvar serviço: ' + error.message, 'erro'); }
+
+      showToast(editingService ? 'Serviço atualizado com sucesso!' : 'Serviço cadastrado com sucesso!', 'sucesso');
+      
+      // Limpeza
+      setShowModal(false); 
+      setEditingService(null); 
+      resetForm(); 
+      await carregarDados(); // Aguarda recarregar para garantir a lista atualizada
+
+    } catch (error) { 
+      console.error('Erro CRÍTICO ao salvar:', error); 
+      // Mostra a mensagem real do banco ou a nossa mensagem personalizada
+      showToast('Erro ao salvar: ' + (error.message || error.details || 'Erro desconhecido'), 'erro'); 
+    }
   };
 
   const deletarServico = async (id) => {
