@@ -3,7 +3,8 @@ import ReactDOM from 'react-dom';
 import { 
   X, Save, Briefcase, User, Calendar, Clock, 
   DollarSign, Lock, FileText, Link as LinkIcon, Copy, Check,
-  Activity, Trash2, Plus, Edit2, CheckCircle2
+  Activity, Trash2, Plus, Edit2, CheckCircle2,
+  Building2, FileDigit // <--- Ícones Novos
 } from 'lucide-react';
 import supabase from '../services/supabase';
 import ConfirmModal from './ConfirmModal';
@@ -40,8 +41,12 @@ const DemandModal = ({
 
   const [activeTab, setActiveTab] = useState('geral');
   const [loading, setLoading] = useState(false);
+  
+  // Listas Auxiliares
   const [clients, setClients] = useState([]);
   const [consultants, setConsultants] = useState([]);
+  const [channels, setChannels] = useState([]); // 
+
   const [copied, setCopied] = useState(false);
 
   // --- DELETE STATES ---
@@ -59,12 +64,12 @@ const DemandModal = ({
   // Estado do Modal de Lançamento (Novo ou Edição)
   const [financeiroModal, setFinanceiroModal] = useState({
       aberto: false,
-      id: null, // Se tiver ID, é edição
-      tipo: 'receita', // receita ou despesa
+      id: null, 
+      tipo: 'receita', 
       valor: '',
       data: '',
       descricao: '',
-      status: 'pendente' // pendente, pago
+      status: 'pendente' 
   });
 
   const [formData, setFormData] = useState({
@@ -73,6 +78,8 @@ const DemandModal = ({
     titulo: '',
     descricao: '',
     cliente_id: '',
+    canal_id: '', // <--- Novo Campo
+    os_op_dpc: '', // <--- Novo Campo
     produto: 'ERP',
     vencedor_id: '',
     estimativa: '',
@@ -137,15 +144,21 @@ const DemandModal = ({
     }
   };
 
-  // Carregamento Inicial
+  // Carregamento Inicial (Incluindo Canais)
   useEffect(() => {
     if (!isOpen || !consultoriaId) return;
     const fetchAuxData = async () => {
+      // Clientes
       const { data: clientsData } = await supabase.from('clientes').select('id, nome').eq('consultoria_id', consultoriaId).order('nome');
       if (clientsData) setClients(clientsData);
       
+      // Consultores
       const { data: teamData } = await supabase.from('profiles').select('id, nome, email, valor_hora').eq('consultoria_id', consultoriaId).order('nome');
       if (teamData) setConsultants(teamData);
+
+      // Canais (Novo)
+      const { data: channelData } = await supabase.from('canais').select('id, nome').eq('consultoria_id', consultoriaId).eq('ativo', true).order('nome');
+      if (channelData) setChannels(channelData);
     };
     fetchAuxData();
   }, [consultoriaId, isOpen]);
@@ -159,7 +172,7 @@ const DemandModal = ({
     } else {
       setFormData({
         id: null, codigo: '', titulo: '', descricao: '', status: 'Pendente', produto: 'ERP',
-        estimativa: '', vencedor_id: '', cliente_id: '', link_arquivos: '',
+        estimativa: '', vencedor_id: '', cliente_id: '', canal_id: '', os_op_dpc: '', link_arquivos: '',
         valor_cobrado: '', horas_vendidas: '', valor_hora_venda: '', valor_interno_hora: '', 
         observacoes_internas: '', modelo_cobranca: 'hora'
       });
@@ -191,6 +204,10 @@ const DemandModal = ({
     setLoading(true);
     try {
       let initialData = { ...demand };
+      // Garante que campos novos não sejam undefined se o registro for antigo
+      initialData.canal_id = initialData.canal_id || '';
+      initialData.os_op_dpc = initialData.os_op_dpc || '';
+
       if (isAdmin) {
         const { data: finData } = await supabase.from('demandas_financeiro').select('*').eq('demanda_id', demand.id).single();
         if (finData) {
@@ -272,6 +289,8 @@ const DemandModal = ({
         titulo: formData.titulo,
         descricao: formData.descricao,
         cliente_id: formData.cliente_id,
+        canal_id: formData.canal_id || null, // <--- Salva Canal
+        os_op_dpc: formData.os_op_dpc || null, // <--- Salva OS
         produto: formData.produto,
         vencedor_id: formData.vencedor_id || null,
         estimativa: formData.estimativa ? parseFloat(formData.estimativa) : 0,
@@ -522,14 +541,29 @@ const DemandModal = ({
                   <input type="text" value={formData.titulo} onChange={e => setFormData({...formData, titulo: e.target.value})} className="w-full border rounded-lg p-3 bg-gray-50 dark:bg-gray-800 dark:border-gray-700 dark:text-white font-medium disabled:opacity-60 focus:ring-2 focus:ring-indigo-500 outline-none" placeholder="Ex: Relatório Fiscal" disabled={isReadOnly} />
                 </div>
 
+                {/* --- NOVA LINHA: CLIENTE E CANAL --- */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+
                   <div>
-                    <label className="block text-xs font-bold text-gray-500 dark:text-gray-400 uppercase mb-1">Cliente *</label>
+                    <label className="block text-xs font-bold text-gray-500 dark:text-gray-400 uppercase mb-1 flex items-center gap-1"><Building2 size={12}/> Canal de Venda</label>
+                    <select value={formData.canal_id} onChange={e => setFormData({...formData, canal_id: e.target.value})} className="w-full border rounded-lg p-3 bg-white dark:bg-gray-800 dark:border-gray-700 dark:text-white disabled:opacity-60 focus:ring-2 focus:ring-indigo-500 outline-none" disabled={isReadOnly}>
+                      <option value="">Venda Direta / Sem Canal</option>
+                      {channels.map(c => <option key={c.id} value={c.id}>{c.nome}</option>)}
+                    </select>
+                  </div>      
+
+                  <div>
+                    <label className="block text-xs font-bold text-gray-500 dark:text-gray-400 uppercase mb-1 flex items-center gap-1"><User size={12}/> Cliente *</label>
                     <select value={formData.cliente_id} onChange={e => setFormData({...formData, cliente_id: e.target.value})} className="w-full border rounded-lg p-3 bg-white dark:bg-gray-800 dark:border-gray-700 dark:text-white disabled:opacity-60 focus:ring-2 focus:ring-indigo-500 outline-none" disabled={isReadOnly}>
                       <option value="">Selecione...</option>
                       {clients.map(c => <option key={c.id} value={c.id}>{c.nome}</option>)}
                     </select>
                   </div>
+                  
+                </div>
+
+                {/* --- NOVA LINHA: PRODUTO E OS/OP --- */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
                     <label className="block text-xs font-bold text-gray-500 dark:text-gray-400 uppercase mb-1">Produto</label>
                     <select value={formData.produto} onChange={e => setFormData({...formData, produto: e.target.value})} className="w-full border rounded-lg p-3 bg-white dark:bg-gray-800 dark:border-gray-700 dark:text-white disabled:opacity-60 focus:ring-2 focus:ring-indigo-500 outline-none" disabled={isReadOnly}>
@@ -539,11 +573,15 @@ const DemandModal = ({
                       <option value="OUTROS">Outros</option>
                     </select>
                   </div>
+                  <div>
+                    <label className="block text-xs font-bold text-gray-500 dark:text-gray-400 uppercase mb-1 flex items-center gap-1"><FileDigit size={12}/> OS / OC / DPC</label>
+                    <input type="text" value={formData.os_op_dpc} onChange={e => setFormData({...formData, os_op_dpc: e.target.value})} className="w-full border rounded-lg p-3 bg-white dark:bg-gray-800 dark:border-gray-700 dark:text-white disabled:opacity-60 focus:ring-2 focus:ring-indigo-500 outline-none" placeholder="Cód. Interno" disabled={isReadOnly} />
+                  </div>
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-xs font-bold text-gray-500 dark:text-gray-400 uppercase mb-1 flex items-center gap-1"><User size={12}/> Responsável</label>
+                    <label className="block text-xs font-bold text-gray-500 dark:text-gray-400 uppercase mb-1 flex items-center gap-1"><User size={12}/> Consultor Responsável</label>
                     <select value={formData.vencedor_id} onChange={handleConsultantChange} className="w-full border rounded-lg p-3 bg-white dark:bg-gray-800 dark:border-gray-700 dark:text-white disabled:opacity-60 focus:ring-2 focus:ring-indigo-500 outline-none" disabled={isReadOnly}>
                       <option value="">Nenhum (Em aberto)</option>
                       {consultants.map(c => <option key={c.id} value={c.id}>{c.nome || c.email}</option>)}

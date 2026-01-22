@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom'; 
 import { 
   LayoutDashboard, Briefcase, Users, Settings, LogOut, X, 
-  ShieldCheck, Wallet, FileText, Building2, Lightbulb, User, Lock, Save, Target, Calendar,
+  ShieldCheck, Wallet, FileText, Building2, Lightbulb, User, Lock, Eye, EyeOff, Save, Target, Calendar,
   BarChart3
 } from 'lucide-react';
 import supabase from '../services/supabase';
@@ -16,6 +16,7 @@ const Sidebar = ({ activeTab, setActiveTab, isOpen, onClose, onLogout, onOpenCon
   const [editName, setEditName] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [loadingProfile, setLoadingProfile] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
 
   // --- CARREGAR DADOS DO USUÁRIO ---
   useEffect(() => {
@@ -256,18 +257,30 @@ const Sidebar = ({ activeTab, setActiveTab, isOpen, onClose, onLogout, onOpenCon
                  <div>
                     <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Alterar Senha</label>
                     <div className="relative">
-                       <Lock size={18} className="absolute left-3 top-2.5 text-gray-400" />
-                       <input 
-                         type="password" 
-                         value={newPassword}
-                         onChange={(e) => setNewPassword(e.target.value)}
-                         placeholder="Nova senha (mín. 6 caracteres)"
-                         className="w-full pl-10 rounded-lg border border-gray-300 dark:border-gray-700 p-2.5 bg-white dark:bg-gray-800 text-gray-900 dark:text-white outline-none focus:ring-2 focus:ring-indigo-500"
-                         autoComplete="new-password"
-                       />
+                        {/* Ícone de Cadeado na Esquerda */}
+                        <Lock size={18} className="absolute left-3 top-2.5 text-gray-400" />
+                        
+                        <input 
+                            type={showPassword ? "text" : "password"} // <--- A Mágica acontece aqui
+                            value={newPassword}
+                            onChange={(e) => setNewPassword(e.target.value)}
+                            placeholder="Nova senha (mín. 6 caracteres)"
+                            // Adicionei 'pr-10' aqui embaixo para o texto não ficar por cima do olho
+                            className="w-full pl-10 pr-10 rounded-lg border border-gray-300 dark:border-gray-700 p-2.5 bg-white dark:bg-gray-800 text-gray-900 dark:text-white outline-none focus:ring-2 focus:ring-indigo-500"
+                            autoComplete="new-password"
+                        />
+
+                        {/* Botão do Olho na Direita */}
+                        <button
+                            type="button"
+                            onClick={() => setShowPassword(!showPassword)}
+                            className="absolute right-3 top-2.5 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 transition-colors"
+                        >
+                            {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                        </button>
                     </div>
                     <p className="text-[10px] text-gray-500 mt-1">Deixe em branco se não quiser alterar a senha.</p>
-                 </div>
+                </div>
 
                  <div className="pt-2">
                     <button 

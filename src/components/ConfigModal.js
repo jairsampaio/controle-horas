@@ -209,7 +209,7 @@ const ConfigModal = ({
                             <div className="bg-blue-50 dark:bg-blue-900/20 p-4 rounded-xl border border-blue-100 dark:border-blue-800/50 flex gap-3">
                                 <div className="shrink-0 text-blue-500 mt-0.5">ℹ️</div>
                                 <p className="text-sm text-blue-700 dark:text-blue-300 leading-relaxed">
-                                    Para segurança, dados sensíveis como senha, e-mail e informações bancárias só podem ser alterados pelo administrador.
+                                    Para segurança, dados sensíveis como e-mail e informações bancárias só podem ser alterados pelo administrador.
                                 </p>
                             </div>
                         </div>
