@@ -313,15 +313,15 @@ const ServiceModal = ({ isOpen, onClose, onSave, onDelete, formData, setFormData
 
   const pg = getProgressData();
 
-  // --- FUNÇÃO DE LIMPEZA DE UUID (A BLINDAGEM) ---
+  // --- FUNÇÃO DE LIMPEZA DE UUID ---
   const limparUUID = (valor) => {
       if (valor === undefined || valor === null) return null;
       const strVal = String(valor).trim();
-      // Remove qualquer coisa que pareça "undefined" ou string vazia
       if (strVal === '' || strVal === 'undefined' || strVal === 'null') return null;
       return strVal;
   };
 
+  // --- SALVAR EM LOTE (Mantido pois é lógica específica do Modal) ---
   const salvarEmLote = async () => {
       try {
           const { data: { user } } = await supabase.auth.getUser();
@@ -379,53 +379,31 @@ const ServiceModal = ({ isOpen, onClose, onSave, onDelete, formData, setFormData
         horasSalvar = parseFloat(horasTotais) || 0;
     }
 
+    // MODO LOTE (Mantém a lógica local pois o Pai não sabe fazer lote)
     if (modoLancamento === 'rapido' && horasSalvar > 24) {
         if (await salvarEmLote()) { onClose(); window.location.reload(); }
         setLoading(false);
         return;
     }
     
-    // Atualiza estado local antes de enviar
-    setFormData(prev => ({ ...prev, horas: horasSalvar }));
+    // MODO NORMAL (Edição ou Criação Simples)
+    // Atualiza o estado local para garantir
+    const novoFormData = { ...formData, horas: horasSalvar };
+    setFormData(novoFormData);
     
     try {
-        const { data: { user } } = await supabase.auth.getUser();
-        const { data: profile } = await supabase.from('profiles').select('consultoria_id').eq('id', user.id).single();
-        
-        // PAYLOAD COM LIMPEZA RIGOROSA DE UUID
-        const payload = {
-            ...formData,
-            horas: horasSalvar,
-            canal_id: limparUUID(formData.canal_id),
-            demanda_id: vincularDemanda ? limparUUID(formData.demanda_id) : null,
-            os_op_dpc: formData.os_op_dpc || null,
-            numero_nfs: formData.numero_nfs || null,
-            cliente: formData.cliente,
-            user_id: user.id,
-            consultoria_id: profile.consultoria_id
-        };
-
-        // Remove ID do payload se for insert para não dar conflito
-        if (!isEditing) {
-            delete payload.id;
-        }
-
-        console.log("Payload Enviado (Blindado):", payload);
-
-        if (isEditing) {
-            if (!formData.id) throw new Error("ID do serviço não encontrado para edição.");
-            const { error } = await supabase.from('servicos_prestados').update(payload).eq('id', formData.id);
-            if (error) throw error;
+        // AQUI ESTÁ A CORREÇÃO:
+        // Não tentamos salvar diretamente no Supabase aqui.
+        // Chamamos a função onSave do Pai (App.js) que já tem o ID seguro (editingService)
+        if (onSave) {
+            await onSave(); 
         } else {
-            const { error } = await supabase.from('servicos_prestados').insert([payload]);
-            if (error) throw error;
+            console.error("Função onSave não fornecida pelo componente pai.");
         }
         
-        onClose();
-        window.location.reload(); 
     } catch (err) {
-        console.error("Erro DETALHADO:", err);
-        setErroValidacao("Erro ao salvar: " + err.message);
+        console.error("Erro ao salvar:", err);
+        setErroValidacao("Erro: " + (err.message || "Falha ao salvar."));
     }
     setLoading(false);
   };
