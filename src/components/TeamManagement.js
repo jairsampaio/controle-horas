@@ -8,7 +8,7 @@ import {
 } from 'lucide-react';
 import supabase from '../services/supabase';
 
-// --- HELPERS ---
+// --- HELPERS (Mantidos e Otimizados) ---
 const maskPhone = (value) => {
   if (!value) return "";
   return value
@@ -20,19 +20,49 @@ const maskPhone = (value) => {
 
 const maskCurrency = (value) => {
   if (!value) return "";
-  let v = value.replace(/\D/g, "");
-  v = (v / 100).toFixed(2) + "";
+  let v = String(value).replace(/\D/g, "");
+  v = (Number(v) / 100).toFixed(2) + "";
   v = v.replace(".", ",");
   v = v.replace(/(\d)(?=(\d{3})+(?!\d))/g, "$1.");
-  return v;
+  return `R$ ${v}`; // Adicionei o prefixo visual
 };
 
 const parseCurrency = (value) => {
   if (!value) return 0;
   if (typeof value === 'number') return value;
-  const cleanValue = parseFloat(value.replace(/\./g, '').replace(',', '.'));
-  return isNaN(cleanValue) ? 0 : cleanValue;
+  // Remove R$, espaços e converte
+  const clean = String(value).replace('R$', '').trim().replace(/\./g, '').replace(',', '.');
+  return parseFloat(clean) || 0;
 };
+
+// --- COMPONENTES AUXILIARES (Definidos FORA para evitar bugs de renderização) ---
+
+const ActionButtons = ({ member, onEdit, onReset, onStatus }) => (
+  <div className="flex gap-1 justify-end items-center" onClick={(e) => e.stopPropagation()}>
+     <button onClick={() => onReset(member)} className="p-2 text-gray-400 hover:text-indigo-600 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors" title="Alterar Senha">
+        <Key size={16}/>
+     </button>
+     <button onClick={() => onEdit(member)} className="p-2 text-gray-400 hover:text-blue-600 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors" title="Editar Dados">
+        <Edit size={16}/>
+     </button>
+     <div className="w-px h-4 bg-gray-200 dark:bg-gray-700 mx-1"></div>
+     <button onClick={() => onStatus(member)} className={`p-2 rounded-lg transition-colors ${member.ativo ? 'text-gray-400 hover:text-red-600 hover:bg-gray-100 dark:hover:bg-gray-700' : 'text-red-500 hover:text-green-600 hover:bg-gray-100'}`} title={member.ativo ? "Bloquear" : "Ativar"}>
+        {member.ativo ? <Ban size={16}/> : <CheckCircle size={16}/>}
+     </button>
+  </div>
+);
+
+const RoleBadge = ({ role }) => {
+    const styles = {
+        super_admin: 'bg-yellow-100 text-yellow-800 border-yellow-200',
+        admin: 'bg-purple-100 text-purple-800 border-purple-200 dark:bg-purple-900/30 dark:text-purple-300 dark:border-purple-800',
+        consultor: 'bg-blue-100 text-blue-800 border-blue-200 dark:bg-blue-900/30 dark:text-blue-300 dark:border-blue-800',
+    };
+    const label = role === 'super_admin' ? 'Super Admin' : role === 'admin' ? 'Gestor' : 'Consultor';
+    return <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold uppercase border ${styles[role] || styles.consultor}`}>{label}</span>;
+};
+
+// --- COMPONENTE PRINCIPAL ---
 
 const TeamManagement = ({ showToast }) => {
   const [members, setMembers] = useState([]);
@@ -41,7 +71,7 @@ const TeamManagement = ({ showToast }) => {
   
   // View & Filter States
   const [viewMode, setViewMode] = useState(() => localStorage.getItem('teamViewMode') || 'grid');
-  const [searchTerm, setSearchTerm] = useState(''); // NOVO: Estado da busca
+  const [searchTerm, setSearchTerm] = useState('');
 
   // Modals
   const [createModalOpen, setCreateModalOpen] = useState(false);
@@ -49,9 +79,7 @@ const TeamManagement = ({ showToast }) => {
   const [resetModalOpen, setResetModalOpen] = useState(false);
 
   // Loadings
-  const [inviteLoading, setInviteLoading] = useState(false);
-  const [editLoading, setEditLoading] = useState(false);
-  const [resetLoading, setResetLoading] = useState(false);
+  const [actionLoading, setActionLoading] = useState(false);
 
   // Data States
   const [editingMember, setEditingMember] = useState(null);
@@ -69,7 +97,7 @@ const TeamManagement = ({ showToast }) => {
     localStorage.setItem('teamViewMode', viewMode);
   }, [viewMode]);
 
-  // Envolvido em useCallback para ser dependência segura
+// Envolvido em useCallback para ser dependência segura
   const loadData = useCallback(async () => {
     setLoading(true);
     try {
@@ -98,46 +126,28 @@ const TeamManagement = ({ showToast }) => {
     } finally {
       setLoading(false);
     }
-  }, [showToast]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // <--- ARRAY VAZIO: Garante que a função é estável e não gera loop
 
   useEffect(() => { loadData(); }, [loadData]);
 
-  // --- FILTRAGEM ---
-  const filteredMembers = members.filter(member => {
-    const searchLower = searchTerm.toLowerCase();
-    const nome = member.nome ? member.nome.toLowerCase() : '';
-    const email = member.email ? member.email.toLowerCase() : '';
-    return nome.includes(searchLower) || email.includes(searchLower);
-  });
-
   // --- HANDLERS ---
-  const handlePhoneChange = (e, setter, state) => {
-    setter({ ...state, whatsapp: maskPhone(e.target.value) });
-  };
-
-  const handleCurrencyChange = (e, setter, state) => {
-    setter({ ...state, valor_hora: maskCurrency(e.target.value) });
-  };
-
-  const openResetModal = (member) => {
-    setMemberToReset(member);
-    setResetPassword('');
-    setResetModalOpen(true);
-  };
 
   const handleCreateMember = async (e) => {
     e.preventDefault();
-    setInviteLoading(true);
+    setActionLoading(true);
 
     try {
       if (newMember.senha.length < 6) throw new Error("A senha deve ter no mínimo 6 caracteres.");
 
-      const SUPABASE_URL = 'https://ubwutmslwlefviiabysc.supabase.co'; 
-      const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVid3V0bXNsd2xlZnZpaWFieXNjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjUyMjQ4MTgsImV4cCI6MjA4MDgwMDgxOH0.lTlvqtu0hKtYDQXJB55BG9ueZ-MdtbCtBvSNQMII2b8';
-
-      const tempClient = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
-        auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false }
-      });
+      // CRIAÇÃO DE CLIENTE TEMPORÁRIO (Necessário para criar user sem deslogar o admin)
+      // ATENÇÃO: O ideal é usar variáveis de ambiente para a URL e KEY
+      // Se não tiver variáveis, use as strings hardcoded APENAS SE FOR SEGURO (Anon Key)
+      const tempClient = createClient(
+        process.env.REACT_APP_SUPABASE_URL || 'https://ubwutmslwlefviiabysc.supabase.co', 
+        process.env.REACT_APP_SUPABASE_ANON_KEY || 'SUA_CHAVE_ANONIMA_AQUI', // <--- COLOQUE A CHAVE ANON AQUI SE NÃO TIVER ENV
+        { auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false } }
+      );
 
       const { data: authData, error: authError } = await tempClient.auth.signUp({
         email: newMember.email.trim(),
@@ -148,6 +158,7 @@ const TeamManagement = ({ showToast }) => {
       if (authError) throw authError;
       if (!authData.user) throw new Error("Erro ao criar usuário no Auth.");
 
+      // Vincula na tabela profiles (via Trigger ou RPC, aqui usamos RPC conforme seu código)
       const { data: rpcData, error: rpcError } = await supabase.rpc('vincular_funcionario_criado', {
         email_func: newMember.email.trim(),
         nome_func: newMember.nome,
@@ -157,6 +168,7 @@ const TeamManagement = ({ showToast }) => {
       if (rpcError) throw rpcError;
       if (rpcData && rpcData.status === 'erro') throw new Error(rpcData.msg);
 
+      // Atualiza dados complementares
       const { error: updateError } = await supabase
         .from('profiles')
         .update({
@@ -182,22 +194,20 @@ const TeamManagement = ({ showToast }) => {
       if (msg.includes('already registered')) msg = "E-mail já cadastrado.";
       if (showToast) showToast(msg, 'erro');
     } finally {
-      setInviteLoading(false);
+      setActionLoading(false);
     }
   };
 
   const openEditModal = (member) => {
-    const valorFormatado = member.valor_hora 
-      ? member.valor_hora.toFixed(2).replace('.', ',').replace(/(\d)(?=(\d{3})+(?!\d))/g, "$1.")
-      : '';
-
+    // Formata para exibição (R$ 100,00)
+    const valorFormatado = member.valor_hora ? maskCurrency(member.valor_hora.toFixed(2)) : '';
     setEditingMember({ ...member, valor_hora: valorFormatado });
     setEditModalOpen(true);
   };
 
   const handleUpdateMember = async (e) => {
     e.preventDefault();
-    setEditLoading(true);
+    setActionLoading(true);
     try {
         const { error } = await supabase
             .from('profiles')
@@ -221,7 +231,7 @@ const TeamManagement = ({ showToast }) => {
         console.error(error);
         if (showToast) showToast("Erro ao atualizar.", 'erro');
     } finally {
-        setEditLoading(false);
+        setActionLoading(false);
     }
   };
 
@@ -236,9 +246,15 @@ const TeamManagement = ({ showToast }) => {
       } catch (error) { console.error(error); }
   };
 
+  const openResetModal = (member) => {
+    setMemberToReset(member);
+    setResetPassword('');
+    setResetModalOpen(true);
+  };
+
   const handleResetPassword = async (e) => {
       e.preventDefault();
-      setResetLoading(true);
+      setActionLoading(true);
       try {
           if (resetPassword.length < 6) throw new Error("Mínimo 6 caracteres.");
           const { data, error } = await supabase.rpc('resetar_senha_via_dono', {
@@ -252,31 +268,34 @@ const TeamManagement = ({ showToast }) => {
       } catch (error) {
           if (showToast) showToast(error.message, 'erro');
       } finally {
-          setResetLoading(false);
+          setActionLoading(false);
       }
   };
 
-  // --- RENDER HELPERS ---
-  const renderRoleBadge = (role) => {
-    const styles = {
-        super_admin: 'bg-yellow-100 text-yellow-800 border-yellow-200',
-        admin: 'bg-purple-100 text-purple-800 border-purple-200 dark:bg-purple-900/30 dark:text-purple-300 dark:border-purple-800',
-        consultor: 'bg-blue-100 text-blue-800 border-blue-200 dark:bg-blue-900/30 dark:text-blue-300 dark:border-blue-800',
-    };
-    const label = role === 'super_admin' ? 'Super Admin' : role === 'admin' ? 'Gestor' : 'Consultor';
-    return <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold uppercase border ${styles[role] || styles.consultor}`}>{label}</span>;
+  // Filtragem
+  const filteredMembers = members.filter(member => {
+    const searchLower = searchTerm.toLowerCase();
+    const nome = member.nome ? member.nome.toLowerCase() : '';
+    const email = member.email ? member.email.toLowerCase() : '';
+    return nome.includes(searchLower) || email.includes(searchLower);
+  });
+
+  // Função genérica para inputs do modal (evita repetição)
+  const handleInputChange = (field, value, isNew = false) => {
+      if (isNew) {
+          setNewMember(prev => ({ ...prev, [field]: value }));
+      } else {
+          setEditingMember(prev => ({ ...prev, [field]: value }));
+      }
   };
 
-  const ActionButtons = ({ member }) => (
-    <div className="flex gap-1 justify-end items-center">
-       <button onClick={(e) => { e.stopPropagation(); openResetModal(member); }} className="p-2 text-gray-400 hover:text-indigo-600 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors" title="Senha"><Key size={16}/></button>
-       <button onClick={(e) => { e.stopPropagation(); openEditModal(member); }} className="p-2 text-gray-400 hover:text-blue-600 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors" title="Editar"><Edit size={16}/></button>
-       <div className="w-px h-4 bg-gray-200 dark:bg-gray-700 mx-1"></div>
-       <button onClick={(e) => { e.stopPropagation(); toggleStatus(member); }} className={`p-2 rounded-lg transition-colors ${member.ativo ? 'text-gray-400 hover:text-red-600 hover:bg-gray-100 dark:hover:bg-gray-700' : 'text-red-500 hover:text-green-600 hover:bg-gray-100'}`} title="Status">
-           {member.ativo ? <Ban size={16}/> : <CheckCircle size={16}/>}
-       </button>
-    </div>
-  );
+  const handlePhoneChange = (e, setter, state) => {
+    setter({ ...state, whatsapp: maskPhone(e.target.value) });
+  };
+
+  const handleCurrencyChange = (e, setter, state) => {
+    setter({ ...state, valor_hora: maskCurrency(e.target.value) });
+  };
 
   return (
     <div className="space-y-6 animate-fade-in pb-10 p-2">
@@ -291,7 +310,6 @@ const TeamManagement = ({ showToast }) => {
         </div>
         
         <div className="flex flex-col sm:flex-row items-center gap-3 w-full lg:w-auto">
-            {/* SEARCH BAR (NOVO) */}
             <div className="relative w-full sm:w-64">
                 <Search className="absolute left-3 top-2.5 text-gray-400" size={18} />
                 <input 
@@ -346,7 +364,7 @@ const TeamManagement = ({ showToast }) => {
                                     <p className="text-xs text-gray-500 truncate max-w-[140px]">{member.email}</p>
                                 </div>
                             </div>
-                            {renderRoleBadge(member.role)}
+                            <RoleBadge role={member.role} />
                         </div>
                         <div className="pl-3 space-y-2 mb-4 bg-gray-50 dark:bg-gray-900/50 p-3 rounded-lg">
                             <div className="flex justify-between items-center text-xs">
@@ -361,13 +379,13 @@ const TeamManagement = ({ showToast }) => {
                             </div>
                         </div>
                         <div className="pl-3 pt-3 border-t border-gray-100 dark:border-gray-700">
-                            <ActionButtons member={member} />
+                            <ActionButtons member={member} onEdit={openEditModal} onReset={openResetModal} onStatus={toggleStatus} />
                         </div>
                     </div>
                 ))}
             </div>
 
-            {/* --- LIST VIEW (PREMIUM TABLE) --- */}
+            {/* --- LIST VIEW (CORRIGIDO) --- */}
             {viewMode === 'list' && (
                 <div className="hidden md:block bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden animate-fade-in">
                     <table className="w-full text-sm text-left">
@@ -395,7 +413,7 @@ const TeamManagement = ({ showToast }) => {
                                             </div>
                                         </div>
                                     </td>
-                                    <td className="px-6 py-4">{renderRoleBadge(member.role)}</td>
+                                    <td className="px-6 py-4"><RoleBadge role={member.role} /></td>
                                     <td className="px-6 py-4 text-center">
                                         {member.ativo ? 
                                             <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold bg-green-100 text-green-700 border border-green-200">
@@ -414,7 +432,7 @@ const TeamManagement = ({ showToast }) => {
                                     </td>
                                     <td className="px-6 py-4 text-gray-500 font-medium">{member.whatsapp || '-'}</td>
                                     <td className="px-6 py-4">
-                                        <ActionButtons member={member} />
+                                        <ActionButtons member={member} onEdit={openEditModal} onReset={openResetModal} onStatus={toggleStatus} />
                                     </td>
                                 </tr>
                             ))}
@@ -454,26 +472,34 @@ const TeamManagement = ({ showToast }) => {
                             <div className="space-y-4">
                                 <div className="relative">
                                     <User size={18} className="absolute left-3 top-3.5 text-gray-400" />
-                                    <input type="text" value={createModalOpen ? newMember.nome : editingMember?.nome} onChange={e => {
-                                        const val = e.target.value;
-                                        createModalOpen ? setNewMember({...newMember, nome: val}) : setEditingMember({...editingMember, nome: val});
-                                    }} className="w-full border dark:border-gray-700 rounded-xl pl-10 pr-4 py-3 bg-white dark:bg-gray-800 text-gray-900 dark:text-white outline-none focus:ring-2 focus:ring-indigo-500 transition-all" placeholder="Nome Completo" required />
+                                    <input 
+                                        type="text" 
+                                        value={createModalOpen ? newMember.nome : editingMember?.nome} 
+                                        onChange={e => handleInputChange('nome', e.target.value, createModalOpen)} 
+                                        className="w-full border dark:border-gray-700 rounded-xl pl-10 pr-4 py-3 bg-white dark:bg-gray-800 text-gray-900 dark:text-white outline-none focus:ring-2 focus:ring-indigo-500 transition-all" 
+                                        placeholder="Nome Completo" required 
+                                    />
                                 </div>
                                 <div className="relative">
                                     <Mail size={18} className="absolute left-3 top-3.5 text-gray-400" />
-                                    <input type="email" disabled={!createModalOpen} value={createModalOpen ? newMember.email : editingMember?.email} onChange={e => {
-                                        const val = e.target.value;
-                                        createModalOpen ? setNewMember({...newMember, email: val}) : setEditingMember({...editingMember, email: val});
-                                    }} className="w-full border dark:border-gray-700 rounded-xl pl-10 pr-4 py-3 bg-white dark:bg-gray-800 text-gray-900 dark:text-white outline-none focus:ring-2 focus:ring-indigo-500 disabled:opacity-60" placeholder="E-mail Corporativo" required />
+                                    <input 
+                                        type="email" 
+                                        disabled={!createModalOpen} 
+                                        value={createModalOpen ? newMember.email : editingMember?.email} 
+                                        onChange={e => handleInputChange('email', e.target.value, createModalOpen)} 
+                                        className="w-full border dark:border-gray-700 rounded-xl pl-10 pr-4 py-3 bg-white dark:bg-gray-800 text-gray-900 dark:text-white outline-none focus:ring-2 focus:ring-indigo-500 disabled:opacity-60" 
+                                        placeholder="E-mail Corporativo" required 
+                                    />
                                 </div>
                             </div>
                             <div className="space-y-4">
                                 <div className="relative">
                                     <Briefcase size={18} className="absolute left-3 top-3.5 text-gray-400" />
-                                    <select value={createModalOpen ? newMember.role : editingMember?.role} onChange={e => {
-                                        const val = e.target.value;
-                                        createModalOpen ? setNewMember({...newMember, role: val}) : setEditingMember({...editingMember, role: val});
-                                    }} className="w-full border dark:border-gray-700 rounded-xl pl-10 pr-4 py-3 bg-white dark:bg-gray-800 text-gray-900 dark:text-white outline-none focus:ring-2 focus:ring-indigo-500 appearance-none font-medium cursor-pointer">
+                                    <select 
+                                        value={createModalOpen ? newMember.role : editingMember?.role} 
+                                        onChange={e => handleInputChange('role', e.target.value, createModalOpen)} 
+                                        className="w-full border dark:border-gray-700 rounded-xl pl-10 pr-4 py-3 bg-white dark:bg-gray-800 text-gray-900 dark:text-white outline-none focus:ring-2 focus:ring-indigo-500 appearance-none font-medium cursor-pointer"
+                                    >
                                             <option value="consultor">Consultor</option>
                                             <option value="admin">Administrador</option>
                                     </select>
@@ -481,7 +507,13 @@ const TeamManagement = ({ showToast }) => {
                                 {createModalOpen && (
                                     <div className="relative">
                                         <Lock size={18} className="absolute left-3 top-3.5 text-gray-400" />
-                                        <input type="text" value={newMember.senha} onChange={e => setNewMember({...newMember, senha: e.target.value})} className="w-full border dark:border-gray-700 rounded-xl pl-10 pr-4 py-3 bg-white dark:bg-gray-800 text-gray-900 dark:text-white outline-none focus:ring-2 focus:ring-indigo-500" placeholder="Senha Inicial (min 6)" required minLength={6} />
+                                        <input 
+                                            type="text" 
+                                            value={newMember.senha} 
+                                            onChange={e => handleInputChange('senha', e.target.value, true)} 
+                                            className="w-full border dark:border-gray-700 rounded-xl pl-10 pr-4 py-3 bg-white dark:bg-gray-800 text-gray-900 dark:text-white outline-none focus:ring-2 focus:ring-indigo-500" 
+                                            placeholder="Senha Inicial (min 6)" required minLength={6} 
+                                        />
                                     </div>
                                 )}
                             </div>
@@ -498,11 +530,23 @@ const TeamManagement = ({ showToast }) => {
                         <div className="grid md:grid-cols-2 gap-6 mb-4">
                              <div className="relative">
                                 <Phone size={18} className="absolute left-3 top-3.5 text-gray-400" />
-                                <input type="text" value={createModalOpen ? newMember.whatsapp : editingMember?.whatsapp} onChange={e => createModalOpen ? handlePhoneChange(e, setNewMember, newMember) : handlePhoneChange(e, setEditingMember, editingMember)} className="w-full border dark:border-gray-700 rounded-xl pl-10 pr-4 py-3 bg-white dark:bg-gray-800 text-gray-900 dark:text-white outline-none focus:ring-2 focus:ring-green-500" placeholder="WhatsApp" />
+                                <input 
+                                    type="text" 
+                                    value={createModalOpen ? newMember.whatsapp : editingMember?.whatsapp} 
+                                    onChange={e => createModalOpen ? handlePhoneChange(e, setNewMember, newMember) : handlePhoneChange(e, setEditingMember, editingMember)} 
+                                    className="w-full border dark:border-gray-700 rounded-xl pl-10 pr-4 py-3 bg-white dark:bg-gray-800 text-gray-900 dark:text-white outline-none focus:ring-2 focus:ring-green-500" 
+                                    placeholder="WhatsApp" 
+                                />
                             </div>
                             <div className="relative">
                                 <DollarSign size={18} className="absolute left-3 top-3.5 text-green-600" />
-                                <input type="text" value={createModalOpen ? newMember.valor_hora : editingMember?.valor_hora} onChange={e => createModalOpen ? handleCurrencyChange(e, setNewMember, newMember) : handleCurrencyChange(e, setEditingMember, editingMember)} className="w-full border border-green-200 dark:border-green-900/50 rounded-xl pl-10 pr-4 py-3 bg-green-50/30 dark:bg-green-900/10 text-gray-900 dark:text-white outline-none focus:ring-2 focus:ring-green-500 font-bold" placeholder="Valor Hora (R$)" />
+                                <input 
+                                    type="text" 
+                                    value={createModalOpen ? newMember.valor_hora : editingMember?.valor_hora} 
+                                    onChange={e => createModalOpen ? handleCurrencyChange(e, setNewMember, newMember) : handleCurrencyChange(e, setEditingMember, editingMember)} 
+                                    className="w-full border border-green-200 dark:border-green-900/50 rounded-xl pl-10 pr-4 py-3 bg-green-50/30 dark:bg-green-900/10 text-gray-900 dark:text-white outline-none focus:ring-2 focus:ring-green-500 font-bold" 
+                                    placeholder="Valor Hora (R$)" 
+                                />
                             </div>
                         </div>
 
@@ -517,7 +561,7 @@ const TeamManagement = ({ showToast }) => {
                                         <input 
                                             type="text" 
                                             value={createModalOpen ? newMember.banco : editingMember?.banco} 
-                                            onChange={e => { const val = e.target.value; createModalOpen ? setNewMember({...newMember, banco: val}) : setEditingMember({...editingMember, banco: val}); }} 
+                                            onChange={e => handleInputChange('banco', e.target.value, createModalOpen)} 
                                             className="w-full border dark:border-gray-700 rounded-lg pl-8 pr-2 py-2 text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-white outline-none focus:ring-1 focus:ring-indigo-500 placeholder-gray-400" 
                                             placeholder="Ex: Nubank" 
                                         />
@@ -530,7 +574,7 @@ const TeamManagement = ({ showToast }) => {
                                         <input 
                                             type="text" 
                                             value={createModalOpen ? newMember.agencia : editingMember?.agencia} 
-                                            onChange={e => { const val = e.target.value; createModalOpen ? setNewMember({...newMember, agencia: val}) : setEditingMember({...editingMember, agencia: val}); }} 
+                                            onChange={e => handleInputChange('agencia', e.target.value, createModalOpen)} 
                                             className="w-full border dark:border-gray-700 rounded-lg pl-8 pr-2 py-2 text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-white outline-none focus:ring-1 focus:ring-indigo-500 placeholder-gray-400" 
                                             placeholder="0000" 
                                         />
@@ -543,7 +587,7 @@ const TeamManagement = ({ showToast }) => {
                                         <input 
                                             type="text" 
                                             value={createModalOpen ? newMember.conta : editingMember?.conta} 
-                                            onChange={e => { const val = e.target.value; createModalOpen ? setNewMember({...newMember, conta: val}) : setEditingMember({...editingMember, conta: val}); }} 
+                                            onChange={e => handleInputChange('conta', e.target.value, createModalOpen)} 
                                             className="w-full border dark:border-gray-700 rounded-lg pl-8 pr-2 py-2 text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-white outline-none focus:ring-1 focus:ring-indigo-500 placeholder-gray-400" 
                                             placeholder="00000-0" 
                                         />
@@ -556,7 +600,7 @@ const TeamManagement = ({ showToast }) => {
                                         <input 
                                             type="text" 
                                             value={createModalOpen ? newMember.chave_pix : editingMember?.chave_pix} 
-                                            onChange={e => { const val = e.target.value; createModalOpen ? setNewMember({...newMember, chave_pix: val}) : setEditingMember({...editingMember, chave_pix: val}); }} 
+                                            onChange={e => handleInputChange('chave_pix', e.target.value, createModalOpen)} 
                                             className="w-full border dark:border-gray-700 rounded-lg pl-8 pr-2 py-2 text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-white outline-none focus:ring-1 focus:ring-indigo-500 placeholder-gray-400" 
                                             placeholder="Chave" 
                                         />
@@ -571,8 +615,8 @@ const TeamManagement = ({ showToast }) => {
 
             <div className="p-6 border-t border-gray-100 dark:border-gray-800 bg-gray-50 dark:bg-gray-900 flex justify-end gap-3 rounded-b-2xl">
                 <button onClick={() => { setCreateModalOpen(false); setEditModalOpen(false); }} className="px-6 py-2.5 rounded-xl text-gray-500 font-bold text-sm hover:bg-gray-200 dark:hover:bg-gray-800 transition-colors">Cancelar</button>
-                <button onClick={() => document.getElementById('memberForm').requestSubmit()} disabled={inviteLoading || editLoading} className="px-8 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-sm shadow-lg shadow-indigo-200 dark:shadow-none transition-all hover:scale-105 active:scale-95 flex items-center gap-2">
-                    {createModalOpen ? (inviteLoading ? 'Criando...' : 'Confirmar Cadastro') : (editLoading ? 'Salvando...' : 'Salvar Alterações')}
+                <button onClick={() => document.getElementById('memberForm').requestSubmit()} disabled={actionLoading} className="px-8 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-sm shadow-lg shadow-indigo-200 dark:shadow-none transition-all hover:scale-105 active:scale-95 flex items-center gap-2">
+                    {createModalOpen ? (actionLoading ? 'Criando...' : 'Confirmar Cadastro') : (actionLoading ? 'Salvando...' : 'Salvar Alterações')}
                 </button>
             </div>
           </div>
@@ -598,7 +642,7 @@ const TeamManagement = ({ showToast }) => {
                 </div>
                 <div className="flex gap-3 pt-2">
                     <button type="button" onClick={() => setResetModalOpen(false)} className="flex-1 py-3 text-gray-500 font-bold hover:bg-gray-100 rounded-xl">Cancelar</button>
-                    <button type="submit" disabled={resetLoading} className="flex-1 py-3 bg-red-600 hover:bg-red-700 text-white font-bold rounded-xl shadow-lg shadow-red-200 dark:shadow-none transition-all">{resetLoading ? 'Alterando...' : 'Confirmar'}</button>
+                    <button type="submit" disabled={actionLoading} className="flex-1 py-3 bg-red-600 hover:bg-red-700 text-white font-bold rounded-xl shadow-lg shadow-red-200 dark:shadow-none transition-all">{actionLoading ? 'Alterando...' : 'Confirmar'}</button>
                 </div>
             </form>
           </div>
