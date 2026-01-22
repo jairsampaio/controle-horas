@@ -1,7 +1,8 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { 
   FileText, BarChart3, 
-  DollarSign, TrendingUp, Download, Clock, Wallet, AlertCircle
+  DollarSign, Wallet, AlertCircle, TrendingUp, Download, Clock,
+  ChevronDown, CheckCircle
 } from 'lucide-react';
 import supabase from '../services/supabase';
 import { formatCurrency, formatHoursInt } from '../utils/formatters';
@@ -14,7 +15,7 @@ const Reports = () => {
   const [canais, setCanais] = useState([]);
   const [clientes, setClientes] = useState([]);
   
-  // Filtros - Padrão: Início do Ano até Hoje
+  // Filtros
   const [periodo, setPeriodo] = useState({
     inicio: new Date(new Date().getFullYear(), 0, 1).toISOString().split('T')[0], 
     fim: new Date().toISOString().split('T')[0]
@@ -22,24 +23,33 @@ const Reports = () => {
   const [canalSelecionado, setCanalSelecionado] = useState('todos');
   const [clienteSelecionado, setClienteSelecionado] = useState('todos');
 
+  // Dados
   const [dados, setDados] = useState([]);
   const [resumo, setResumo] = useState({
-    totalVenda: 0,
-    totalCusto: 0,
-    lucro: 0,
-    margem: 0,
-    horasVendidas: 0,
-    horasCusto: 0
+    totalVenda: 0, totalCusto: 0, lucro: 0, margem: 0, horasVendidas: 0, horasCusto: 0
   });
+
+  // Controle do Menu Dropdown
+  const [showPdfMenu, setShowPdfMenu] = useState(false);
+  const dropdownRef = useRef(null);
+
+  // Fecha o menu se clicar fora
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
+        setShowPdfMenu(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
 
   // Carrega Listas Auxiliares
   useEffect(() => {
     const fetchAuxiliar = async () => {
-      // Busca Canais
       const { data: dataCanais } = await supabase.from('canais').select('*').eq('ativo', true).order('nome');
       if (dataCanais) setCanais(dataCanais);
 
-      // Busca Clientes
       const { data: dataClientes } = await supabase.from('clientes').select('id, nome').eq('ativo', true).order('nome');
       if (dataClientes) setClientes(dataClientes);
     };
@@ -49,7 +59,7 @@ const Reports = () => {
   const gerarRelatorio = useCallback(async () => {
     setLoading(true);
     try {
-      // 1. Busca Demandas Básicas
+      // 1. Busca Demandas
       const { data: demandas, error: errDemandas } = await supabase
         .from('demandas')
         .select('*') 
@@ -76,7 +86,7 @@ const Reports = () => {
         .select('demanda_id, horas_vendidas, valor_cobrado, valor_interno_hora')
         .in('demanda_id', demandaIds);
 
-      // 4. Busca Clientes (Nomes)
+      // 4. Busca Nomes Clientes
       let clientesMap = {};
       if (clienteIds.length > 0) {
           const { data: clientesData } = await supabase.from('clientes').select('id, nome').in('id', clienteIds);
@@ -90,7 +100,7 @@ const Reports = () => {
       let canaisMap = {};
       canais.forEach(c => { canaisMap[c.id] = c.nome; });
 
-      // 6. Cruzamento e Cálculos
+      // 6. Processamento
       let listaProcessada = demandas.map(d => {
           const fin = financeiroMap[d.id] || {};
           
@@ -114,6 +124,7 @@ const Reports = () => {
               cliente: nomeCliente,
               cliente_id: idClienteReal, 
               demanda: d.titulo,
+              os_op_dpc: d.os_op_dpc || '-', // Garante que o campo exista
               canal: nomeCanal,
               canal_id: idCanalReal,
               
@@ -128,23 +139,18 @@ const Reports = () => {
           };
       });
 
-      // 7. Filtros (Canal E Cliente) - CORREÇÃO DE LINT AQUI (String vs String)
-      
-      // Filtro Canal
+      // 7. Filtros
       if (canalSelecionado === 'direto') {
         listaProcessada = listaProcessada.filter(d => !d.canal_id);
       } else if (canalSelecionado !== 'todos') {
-        // Converte ambos para String para usar ===
         listaProcessada = listaProcessada.filter(d => String(d.canal_id) === String(canalSelecionado));
       }
 
-      // Filtro Cliente
       if (clienteSelecionado !== 'todos') {
-        // Converte ambos para String para usar ===
         listaProcessada = listaProcessada.filter(d => String(d.cliente_id) === String(clienteSelecionado));
       }
 
-      // 8. Totais Gerais
+      // 8. Totais
       let totalVenda = 0;
       let totalCusto = 0;
       let totalHorasVenda = 0;
@@ -162,12 +168,8 @@ const Reports = () => {
 
       setDados(listaProcessada);
       setResumo({
-        totalVenda,
-        totalCusto,
-        lucro: lucroTotal,
-        margem: margemTotal,
-        horasVendidas: totalHorasVenda,
-        horasCusto: totalHorasCusto
+        totalVenda, totalCusto, lucro: lucroTotal, margem: margemTotal,
+        horasVendidas: totalHorasVenda, horasCusto: totalHorasCusto
       });
 
     } catch (error) {
@@ -178,7 +180,6 @@ const Reports = () => {
   }, [periodo, canalSelecionado, clienteSelecionado, canais]);
 
   useEffect(() => {
-    // Garante que só roda se tiver listas carregadas ou se não estiver carregando
     if ((canais.length > 0 && clientes.length > 0) || !loading) {
         gerarRelatorio();
     }
@@ -202,51 +203,31 @@ const Reports = () => {
     XLSX.writeFile(wb, `Resultado_Financeiro_${periodo.inicio}.xlsx`);
   };
 
-  const exportarPDF = () => {
+  // --- RELATÓRIO INTERNO (O ORIGINAL) ---
+  const exportarPDFInterno = () => {
     const doc = new jsPDF('l', 'mm', 'a4');
+    setShowPdfMenu(false);
 
-    // Cabeçalho
+    // Cabeçalho Roxo
     doc.setFillColor(79, 70, 229); 
     doc.rect(0, 0, 297, 24, 'F');
     doc.setTextColor(255, 255, 255);
     doc.setFontSize(16);
     doc.setFont('helvetica', 'bold');
-    doc.text("Relatório de Performance Financeira", 14, 15);
+    doc.text("Relatório Gerencial (Interno)", 14, 15);
 
     doc.setTextColor(40, 40, 40);
     doc.setFontSize(10);
     doc.setFont('helvetica', 'normal');
     
-    const dataIni = new Date(periodo.inicio).toLocaleDateString('pt-BR');
-    const dataFim = new Date(periodo.fim).toLocaleDateString('pt-BR');
-    
-    // Texto dos Filtros no PDF - CORREÇÃO DE LINT AQUI
-    let filtrosTexto = `Período: ${dataIni} até ${dataFim}`;
-    
-    if (canalSelecionado !== 'todos') {
-        const canalEnc = canais.find(c => String(c.id) === String(canalSelecionado));
-        filtrosTexto += ` | Canal: ${canalEnc?.nome || 'Direto'}`;
-    }
-    
-    if (clienteSelecionado !== 'todos') {
-        const cliEnc = clientes.find(c => String(c.id) === String(clienteSelecionado));
-        filtrosTexto += ` | Cliente: ${cliEnc?.nome}`;
-    }
-
-    doc.text(filtrosTexto, 14, 35);
+    doc.text(`Período: ${new Date(periodo.inicio).toLocaleDateString('pt-BR')} até ${new Date(periodo.fim).toLocaleDateString('pt-BR')}`, 14, 35);
     doc.text(`Emissão: ${new Date().toLocaleDateString('pt-BR')}`, 280, 35, { align: 'right' });
 
     const tableColumn = ["Data", "Cliente", "Demanda", "Canal", "Hrs Venda", "Hrs Custo", "Venda (R$)", "Custo (R$)", "Lucro (R$)"];
     const tableRows = dados.map(row => [
-        row.data,
-        row.cliente,
-        row.demanda,
-        row.canal,
-        formatHoursInt(row.horasVendidas),
-        formatHoursInt(row.horasCusto),
-        formatCurrency(row.valorVenda),
-        formatCurrency(row.custoTotal),
-        formatCurrency(row.lucro)
+        row.data, row.cliente, row.demanda, row.canal,
+        formatHoursInt(row.horasVendidas), formatHoursInt(row.horasCusto),
+        formatCurrency(row.valorVenda), formatCurrency(row.custoTotal), formatCurrency(row.lucro)
     ]);
 
     autoTable(doc, {
@@ -257,23 +238,123 @@ const Reports = () => {
       styles: { fontSize: 8, cellPadding: 2, textColor: [50, 50, 50] },
       headStyles: { fillColor: [79, 70, 229], textColor: [255, 255, 255], fontStyle: 'bold', halign: 'center' },
       columnStyles: {
-        6: { halign: 'right', textColor: [22, 163, 74], fontStyle: 'bold' }, // Venda Verde
-        7: { halign: 'right', textColor: [220, 38, 38] }, // Custo Vermelho
-        8: { halign: 'right', fontStyle: 'bold' } // Lucro
+        6: { halign: 'right', textColor: [22, 163, 74], fontStyle: 'bold' },
+        7: { halign: 'right', textColor: [220, 38, 38] },
+        8: { halign: 'right', fontStyle: 'bold' }
       },
       alternateRowStyles: { fillColor: [245, 247, 255] }
     });
 
     let finalY = doc.lastAutoTable.finalY + 10;
-    if (finalY > 180) { doc.addPage(); finalY = 20; }
+    if (finalY > 170) { doc.addPage(); finalY = 20; }
 
     doc.setFontSize(10); doc.setTextColor(100, 100, 100);
     doc.text(`Total Faturamento: ${formatCurrency(resumo.totalVenda)}`, 280, finalY, { align: 'right' });
     doc.text(`Custo Consultores: ${formatCurrency(resumo.totalCusto)}`, 280, finalY + 6, { align: 'right' });
     doc.setFontSize(12); doc.setTextColor(0, 0, 0); doc.setFont('helvetica', 'bold');
-    doc.text(`Lucro Líquido: ${formatCurrency(resumo.lucro)} (${resumo.margem.toFixed(1)}%)`, 280, finalY + 14, { align: 'right' });
+    doc.text(`Lucro Líquido: ${formatCurrency(resumo.lucro)}`, 280, finalY + 14, { align: 'right' });
 
-    doc.save(`Performance_Financeira.pdf`);
+    doc.save(`Gerencial_Interno.pdf`);
+  };
+
+  // --- RELATÓRIO EXTERNO (CORRIGIDO: COR INDIGO + NOME DO CANAL) ---
+  const exportarPDFExterno = () => {
+    const doc = new jsPDF('l', 'mm', 'a4'); // Paisagem
+    setShowPdfMenu(false);
+
+    // 1. Identifica o Nome do Canal para o Título
+    let tituloRelatorio = "Relatório de Atividades e Cobrança";
+    let subTitulo = "Geral";
+
+    if (canalSelecionado !== 'todos') {
+        if (canalSelecionado === 'direto') {
+            tituloRelatorio = "Relatório de Cobrança - Venda Direta";
+            subTitulo = "Sem Canal / Próprio";
+        } else {
+            const canalEncontrado = canais.find(c => String(c.id) === String(canalSelecionado));
+            if (canalEncontrado) {
+                tituloRelatorio = `Relatório de Cobrança - ${canalEncontrado.nome.toUpperCase()}`;
+                subTitulo = `Parceiro: ${canalEncontrado.nome}`;
+            }
+        }
+    }
+
+    // 2. Cabeçalho INDIGO (Roxo da Identidade)
+    doc.setFillColor(79, 70, 229); 
+    doc.rect(0, 0, 297, 26, 'F'); // Aumentei um pouco a altura para caber o título maior
+    
+    doc.setTextColor(255, 255, 255);
+    doc.setFontSize(16);
+    doc.setFont('helvetica', 'bold');
+    doc.text(tituloRelatorio, 14, 12); // Título Principal
+
+    doc.setFontSize(10);
+    doc.setFont('helvetica', 'normal');
+    doc.text(`Emissão: ${new Date().toLocaleDateString('pt-BR')}`, 280, 12, { align: 'right' });
+    
+    // Linha fina separadora dentro do cabeçalho (Visual Premium)
+    doc.setDrawColor(255, 255, 255);
+    doc.setLineWidth(0.1);
+    doc.line(14, 16, 283, 16);
+
+    // Subtítulo com Datas
+    const dataIni = new Date(periodo.inicio).toLocaleDateString('pt-BR');
+    const dataFim = new Date(periodo.fim).toLocaleDateString('pt-BR');
+    doc.text(`Período de Competência: ${dataIni} a ${dataFim}`, 14, 22);
+
+    // 3. Tabela
+    const tableColumn = ["Data", "Canal", "Cliente", "OS/OP/DPC", "Demanda", "Qtd Hrs", "Vlr Hora", "Vlr Total"];
+    
+    const tableRows = dados.map(row => {
+        // Cálculo do Valor Unitário (Venda / Horas)
+        let vlrUnit = 0;
+        if (row.horasVendidas > 0) {
+            vlrUnit = row.valorVenda / row.horasVendidas;
+        }
+
+        return [
+            row.data,
+            row.canal,
+            row.cliente,
+            row.os_op_dpc || '-', 
+            row.demanda,
+            formatHoursInt(row.horasVendidas),
+            formatCurrency(vlrUnit), // Vlr Hora
+            formatCurrency(row.valorVenda) // Vlr Total
+        ];
+    });
+
+    autoTable(doc, {
+      startY: 40,
+      head: [tableColumn],
+      body: tableRows,
+      theme: 'grid',
+      styles: { fontSize: 9, cellPadding: 3, textColor: [40, 40, 40] },
+      headStyles: { 
+          fillColor: [79, 70, 229], // VOLTOU O ROXO AQUI TAMBÉM
+          textColor: [255, 255, 255], 
+          fontStyle: 'bold', 
+          halign: 'center' 
+      },
+      columnStyles: {
+        5: { halign: 'center' }, // Horas
+        6: { halign: 'right' }, // Unit
+        7: { halign: 'right', fontStyle: 'bold' } // Total
+      },
+      alternateRowStyles: { fillColor: [245, 247, 255] } // Leve tom de roxo/azul alternado
+    });
+
+    // Totalizador
+    let finalY = doc.lastAutoTable.finalY + 10;
+    if (finalY > 180) { doc.addPage(); finalY = 20; }
+
+    doc.setTextColor(0, 0, 0);
+    doc.setFontSize(11);
+    doc.setFont('helvetica', 'bold');
+    doc.text(`Total de Horas: ${formatHoursInt(resumo.horasVendidas)}`, 280, finalY, { align: 'right' });
+    doc.text(`Valor Total Geral: ${formatCurrency(resumo.totalVenda)}`, 280, finalY + 6, { align: 'right' });
+
+    doc.save(`Extrato_Cobranca_${periodo.inicio}.pdf`);
   };
 
   return (
@@ -292,9 +373,47 @@ const Reports = () => {
             <button onClick={exportarExcel} disabled={dados.length === 0} className="bg-green-600 text-white px-4 py-2 rounded-lg font-bold flex items-center gap-2 hover:bg-green-700 transition-colors disabled:opacity-50 text-sm">
                 <Download size={18} /> Excel
             </button>
-            <button onClick={exportarPDF} disabled={dados.length === 0} className="bg-red-600 text-white px-4 py-2 rounded-lg font-bold flex items-center gap-2 hover:bg-red-700 transition-colors disabled:opacity-50 text-sm">
-                <FileText size={18} /> PDF
-            </button>
+            
+            {/* --- DROPDOWN DO PDF --- */}
+            <div className="relative" ref={dropdownRef}>
+                <button 
+                    onClick={() => setShowPdfMenu(!showPdfMenu)} 
+                    disabled={dados.length === 0} 
+                    className="bg-red-600 text-white px-4 py-2 rounded-lg font-bold flex items-center gap-2 hover:bg-red-700 transition-colors disabled:opacity-50 text-sm"
+                >
+                    <FileText size={18} /> PDF <ChevronDown size={16} />
+                </button>
+
+                {showPdfMenu && (
+                    <div className="absolute right-0 mt-2 w-64 bg-white dark:bg-gray-800 rounded-xl shadow-2xl border border-gray-100 dark:border-gray-700 z-50 overflow-hidden animate-fade-in">
+                        <div className="p-2 space-y-1">
+                            <button onClick={exportarPDFInterno} className="w-full text-left px-4 py-3 hover:bg-gray-50 dark:hover:bg-gray-700 rounded-lg flex items-center gap-3 transition-colors group">
+                                <div className="bg-indigo-100 dark:bg-indigo-900/30 p-2 rounded-lg text-indigo-600">
+                                    <BarChart3 size={18}/>
+                                </div>
+                                <div>
+                                    <span className="block text-sm font-bold text-gray-800 dark:text-white">Gerencial Interno</span>
+                                    <span className="block text-xs text-gray-500">Com custos e lucros</span>
+                                </div>
+                            </button>
+                            
+                            <div className="h-px bg-gray-100 dark:bg-gray-700 my-1"></div>
+
+                            <button onClick={exportarPDFExterno} className="w-full text-left px-4 py-3 hover:bg-gray-50 dark:hover:bg-gray-700 rounded-lg flex items-center gap-3 transition-colors group">
+                                <div className="bg-gray-100 dark:bg-gray-700 p-2 rounded-lg text-gray-600 dark:text-gray-300">
+                                    <CheckCircle size={18}/>
+                                </div>
+                                <div>
+                                    <span className="block text-sm font-bold text-gray-800 dark:text-white">Relatório de Cobrança</span>
+                                    <span className="block text-xs text-gray-500">Externo (Sem custos)</span>
+                                </div>
+                            </button>
+                        </div>
+                    </div>
+                )}
+            </div>
+            {/* --- FIM DO DROPDOWN --- */}
+
           </div>
         </div>
 
