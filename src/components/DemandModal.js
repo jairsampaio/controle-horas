@@ -440,13 +440,30 @@ const DemandModal = ({
 
   const excluirMovimentacao = async () => {
       if (!financeiroModal.id) return;
-      if (!window.confirm("Tem certeza que deseja excluir este lançamento?")) return;
+      
+      // Confirmação nativa simples
+      if (!window.confirm("Tem certeza que deseja excluir este lançamento financeiro?")) return;
       
       setLoadingMov(true);
-      await supabase.from('movimentacoes_financeiras').delete().eq('id', financeiroModal.id);
-      setFinanceiroModal({ ...financeiroModal, aberto: false });
-      await carregarMovimentacoes();
-      setLoadingMov(false);
+      try {
+          const { error } = await supabase
+            .from('movimentacoes_financeiras')
+            .delete()
+            .eq('id', financeiroModal.id);
+
+          if (error) throw error;
+
+          // Se deu certo:
+          setFinanceiroModal({ ...financeiroModal, aberto: false });
+          await carregarMovimentacoes(); // Recarrega a lista
+          if (onSuccess) onSuccess(); // Opcional: avisa o pai para atualizar saldos se precisar
+
+      } catch (error) {
+          console.error("Erro ao excluir:", error);
+          alert("Erro ao excluir: " + error.message);
+      } finally {
+          setLoadingMov(false);
+      }
   };
 
   const margem = calcularMargem();

@@ -364,14 +364,18 @@ const ServiceModal = ({ isOpen, onClose, onSave, onDelete, formData, setFormData
       } catch (err) { setErroValidacao("Erro lote: " + err.message); return false; }
   };
 
-  const handleSubmit = async (e) => {
+const handleSubmit = async (e) => {
     e.preventDefault();
     setErroValidacao('');
+    
+    // Validações Básicas
     if (vincularDemanda && !formData.demanda_id) { setErroValidacao('Selecione uma Demanda.'); return; }
     if (!formData.cliente) { setErroValidacao('Cliente inválido.'); return; }
     if (!formData.solicitante) { setErroValidacao('Informe o Solicitante.'); return; }
 
     setLoading(true);
+    
+    // 1. CÁLCULO DE HORAS (Garante que não vai zero)
     let horasSalvar = 0;
     if (modoLancamento === 'detalhado') {
         horasSalvar = calcularDiferencaHoras(formData.hora_inicial, formData.hora_final);
@@ -379,33 +383,74 @@ const ServiceModal = ({ isOpen, onClose, onSave, onDelete, formData, setFormData
         horasSalvar = parseFloat(horasTotais) || 0;
     }
 
-    // MODO LOTE (Mantém a lógica local pois o Pai não sabe fazer lote)
+    // Validação de horas
+    if (horasSalvar <= 0) {
+        setErroValidacao('O total de horas deve ser maior que zero.');
+        setLoading(false);
+        return;
+    }
+
+    // 2. MODO LOTE
     if (modoLancamento === 'rapido' && horasSalvar > 24) {
         if (await salvarEmLote()) { onClose(); window.location.reload(); }
         setLoading(false);
         return;
     }
     
-    // MODO NORMAL (Edição ou Criação Simples)
-    // Atualiza o estado local para garantir
-    const novoFormData = { ...formData, horas: horasSalvar };
-    setFormData(novoFormData);
-    
+    // 3. PREPARAÇÃO DO OBJETO (MODO NORMAL)
+    const dadosParaSalvar = { 
+        ...formData, 
+        horas: horasSalvar,
+        demanda_id: vincularDemanda ? limparUUID(formData.demanda_id) : null 
+    };
+
     try {
-        // AQUI ESTÁ A CORREÇÃO:
-        // Não tentamos salvar diretamente no Supabase aqui.
-        // Chamamos a função onSave do Pai (App.js) que já tem o ID seguro (editingService)
-        if (onSave) {
-            await onSave(); 
-        } else {
-            console.error("Função onSave não fornecida pelo componente pai.");
-        }
+        // --- GRAVAÇÃO DIRETA (A ÚNICA QUE VALE) ---
+        // Buscamos dados do usuário logado para garantir segurança
+        const { data: { user } } = await supabase.auth.getUser();
+        const { data: profile } = await supabase.from('profiles').select('consultoria_id').eq('id', user.id).single();
+
+        const payloadBanco = {
+            ...dadosParaSalvar,
+            user_id: user.id,
+            consultoria_id: profile.consultoria_id,
+            canal_id: limparUUID(dadosParaSalvar.canal_id),
+            os_op_dpc: dadosParaSalvar.os_op_dpc || null
+        };
+
+        delete payloadBanco.id; // Remove ID para não dar erro no insert
         
+        let error;
+        if (isEditing && formData.id) {
+            // Update
+            const { error: err } = await supabase
+                .from('servicos_prestados')
+                .update(payloadBanco)
+                .eq('id', formData.id);
+            error = err;
+        } else {
+            // Insert
+            const { error: err } = await supabase
+                .from('servicos_prestados')
+                .insert([payloadBanco]);
+            error = err;
+        }
+
+        if (error) throw error;
+
+        // --- SUCESSO ---
+        // AQUI ESTAVA O ERRO DA DUPLICIDADE:
+        // Removi a chamada "if (onSave) await onSave()" pois ela salvava de novo.
+        
+        onClose(); // Fecha o modal
+        window.location.reload(); // Força atualização da tela para ver o saldo novo
+
     } catch (err) {
         console.error("Erro ao salvar:", err);
         setErroValidacao("Erro: " + (err.message || "Falha ao salvar."));
+    } finally {
+        setLoading(false);
     }
-    setLoading(false);
   };
 
   const handleRequestDelete = () => setShowConfirmModal(true);
