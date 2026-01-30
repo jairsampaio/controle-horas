@@ -1,17 +1,17 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Edit2, Trash2, Calendar, ArrowUp, ArrowDown, Building2, Filter, Check, X, Search } from 'lucide-react'; 
+import { Edit2, Trash2, Calendar, ArrowUp, ArrowDown, Building2, Filter, Check, X, Search, Copy } from 'lucide-react'; 
 import { formatCurrency, formatHours } from '../utils/formatters';
 import supabase from '../services/supabase';
 
 // AGORA RECEBE OS FILTROS DO PAI
 const ServicesTable = ({ 
-    servicos, // Já vem filtrado do Pai (ou bruto, dependendo da estratégia, mas vamos filtrar no Pai)
+    servicos, 
     onStatusChange, 
     onEdit, 
     onDelete, 
+    onDuplicate, // <--- NOVA PROP (Função para Duplicar)
     onSort, 
     sortConfig,
-    // Novas props para controle do filtro que está no Pai
     filtrosConsultores,
     setFiltrosConsultores,
     isAdmin
@@ -109,7 +109,6 @@ const ServicesTable = ({
 
   // --- RENDERIZAÇÃO ---
 
-  // Se não tiver serviços E não tiver filtro ativo, mostra vazio genérico
   if (servicos.length === 0 && filtrosConsultores.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center py-16 text-center bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 shadow-sm">
@@ -179,9 +178,9 @@ const ServicesTable = ({
 
                   <div className="max-h-60 overflow-y-auto custom-scrollbar">
                     {consultoresVisiveis.length === 0 ? (
-                       <div className="p-4 text-center text-xs text-gray-400">
-                         Nenhum consultor encontrado.
-                       </div>
+                        <div className="p-4 text-center text-xs text-gray-400">
+                          Nenhum consultor encontrado.
+                        </div>
                     ) : (
                       consultoresVisiveis.map((consultor) => {
                         const isSelected = filtrosConsultores.includes(consultor.id);
@@ -231,7 +230,7 @@ const ServicesTable = ({
 
       {/* --- VERSÃO MOBILE (CARDS) --- */}
       <div className="md:hidden space-y-4">
-        {servicos.map(servico => ( // Agora itera sobre a prop 'servicos' que já vem filtrada do Pai
+        {servicos.map(servico => ( 
           <div key={servico.id} className="bg-white dark:bg-gray-800 p-4 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 space-y-3 relative overflow-hidden">
             {getCanalNome(servico) !== '-' && (
                 <div className="absolute left-0 top-0 bottom-0 w-1 bg-indigo-500 dark:bg-indigo-400"></div>
@@ -239,12 +238,12 @@ const ServicesTable = ({
             <div className="flex justify-between items-start pl-2">
               <div className="flex flex-col">
                  <span className="text-xs font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wider flex items-center gap-1">
-                    {getCanalNome(servico) !== '-' && <Building2 size={10} />}
-                    {getCanalNome(servico)}
+                   {getCanalNome(servico) !== '-' && <Building2 size={10} />}
+                   {getCanalNome(servico)}
                  </span>
                  <div className="flex items-center gap-2 text-gray-600 dark:text-gray-300 font-medium text-sm mt-1">
-                    <Calendar size={16} />
-                    {formatData(servico.data)}
+                   <Calendar size={16} />
+                   {formatData(servico.data)}
                  </div>
               </div>
               <span className={`text-xs px-2 py-1 rounded-full font-bold ${
@@ -274,6 +273,12 @@ const ServicesTable = ({
                   {formatCurrency(servico.valor_total)}
                </div>
                <div className="flex gap-2">
+                 {/* BOTÃO DUPLICAR (MOBILE) - SÓ ADMIN */}
+                 {isAdmin && (
+                    <button onClick={() => onDuplicate(servico)} className="p-2 text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-900/20 rounded-lg" title="Duplicar">
+                        <Copy size={16}/>
+                    </button>
+                 )}
                  <button onClick={() => onEdit(servico)} className="p-2 text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/20 rounded-lg"><Edit2 size={16}/></button>
                  <button onClick={() => onDelete(servico.id)} className="p-2 text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/20 rounded-lg"><Trash2 size={16}/></button>
                </div>
@@ -310,7 +315,7 @@ const ServicesTable = ({
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
-              {servicos.map(servico => ( // Itera sobre 'servicos' já filtrados
+              {servicos.map(servico => ( 
                 <tr key={servico.id} className="group hover:bg-gray-50 dark:hover:bg-gray-700/30 transition-colors duration-150">
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600 dark:text-gray-300">
                       <div className="flex items-center gap-2">
@@ -373,6 +378,12 @@ const ServicesTable = ({
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                     <div className="flex justify-end gap-3 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+                      {/* BOTÃO DUPLICAR (DESKTOP) - SÓ ADMIN */}
+                      {isAdmin && (
+                          <button onClick={() => onDuplicate(servico)} className="text-gray-400 dark:text-gray-500 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors p-1 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 rounded" title="Duplicar">
+                            <Copy size={18} />
+                          </button>
+                      )}
                       <button onClick={() => onEdit(servico)} className="text-gray-400 dark:text-gray-500 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors p-1 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 rounded" title="Editar">
                         <Edit2 size={18} />
                       </button>

@@ -625,6 +625,37 @@ const App = () => {
     });
     setShowModal(true); 
   };
+
+  // --- FUNÇÃO DE DUPLICAÇÃO (NOVO) ---
+  const handleDuplicateService = (servicoOriginal) => {
+    // 1. Prepara os dados copiando do original
+    const dadosDuplicados = {
+      data: servicoOriginal.data, // Mantém a data original (ou mude para hoje se preferir)
+      hora_inicial: servicoOriginal.hora_inicial,
+      hora_final: servicoOriginal.hora_final,
+      valor_hora: servicoOriginal.valor_hora,
+      atividade: servicoOriginal.atividade, // Opcional: marca como cópia
+      solicitante: servicoOriginal.solicitante || '',
+      cliente: servicoOriginal.cliente,
+      canal_id: servicoOriginal.canal_id || '', 
+      status: 'Pendente', // Reseta status para Pendente
+      numero_nfs: '', // Limpa NF
+      os_op_dpc: servicoOriginal.os_op_dpc || '',
+      observacoes: servicoOriginal.observacoes || '',
+      // IMPORTANTE: Mantém o vínculo com a demanda se houver
+      demanda_id: servicoOriginal.demanda_id || null 
+    };
+
+    // 2. Atualiza o estado do formulário
+    setFormData(dadosDuplicados);
+    
+    // 3. Garante que NÃO estamos em modo de edição (ID nulo)
+    setEditingService(null); 
+    
+    // 4. Abre o modal
+    setShowModal(true);
+  };
+
   const editarCliente = (cliente) => { setEditingCliente(cliente); setClienteFormData(cliente); setShowClienteModal(true); };
   const handleManageTeam = (cliente) => { setClienteParaSolicitantes(cliente); setShowSolicitantesModal(true); };
   const handleSort = (key) => { let direction = 'asc'; if (sortConfig.key === key && sortConfig.direction === 'asc') direction = 'desc'; setSortConfig({ key, direction }); };
@@ -854,6 +885,7 @@ const App = () => {
                                     onEdit={editarServico} 
                                     onDelete={deletarServico} 
                                     onSort={handleSort} 
+                                    onDuplicate={handleDuplicateService}
                                     sortConfig={sortConfig} 
                                     filtrosConsultores={filtrosConsultores}
                                     setFiltrosConsultores={setFiltrosConsultores}
@@ -861,22 +893,36 @@ const App = () => {
                                 />
                             </div>
                             <div className="hidden md:block">
-                                {viewMode === 'list' ? (
-                                    <ServicesTable 
-                                        servicos={servicosFiltradosData} 
-                                        onStatusChange={alterarStatusRapido} 
-                                        onEdit={editarServico} 
-                                        onDelete={deletarServico} 
-                                        onSort={handleSort} 
-                                        sortConfig={sortConfig}
-                                        filtrosConsultores={filtrosConsultores}
-                                        setFiltrosConsultores={setFiltrosConsultores}
-                                        isAdmin={['admin', 'dono', 'super_admin', 'gestor'].includes(userRole)} 
-                                    />
-                                ) : (
-                                    <div className="h-[600px]"><ServicesKanban servicos={servicosFiltradosData} onEditService={editarServico} onStatusChange={alterarStatusRapido} /></div>
-                                )}
-                            </div>
+                                    {viewMode === 'list' ? (
+                                        <ServicesTable 
+                                            servicos={servicosFiltradosData} 
+                                            onStatusChange={alterarStatusRapido} 
+                                            onEdit={editarServico} 
+                                            onDelete={deletarServico} 
+                                            
+                                            // ADICIONE ESTA LINHA AQUI:
+                                            onDuplicate={handleDuplicateService} 
+                                            // --------------------------
+
+                                            onSort={handleSort} 
+                                            sortConfig={sortConfig}
+                                            filtrosConsultores={filtrosConsultores}
+                                            setFiltrosConsultores={setFiltrosConsultores}
+                                            isAdmin={['admin', 'dono', 'super_admin', 'gestor'].includes(userRole)} 
+                                        />
+                                    ) : (
+                                        <div className="h-[600px]">
+                                            <ServicesKanban 
+                                                servicos={servicosFiltradosData} 
+                                                onEditService={editarServico} 
+                                                onStatusChange={alterarStatusRapido} 
+                                                
+                                                // SE QUISER NO KANBAN TAMBÉM:
+                                                // onDuplicate={handleDuplicateService}
+                                            />
+                                        </div>
+                                    )}
+                                </div>
                         </div>
                     )}
 
