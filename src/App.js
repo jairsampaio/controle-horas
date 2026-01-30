@@ -1,10 +1,10 @@
 /* eslint-disable no-restricted-globals */
 import gerarRelatorioPDF from "./utils/gerarRelatorioPDF";
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { 
   Clock, DollarSign, FileText, Plus, Filter, Users, Mail,
   LayoutDashboard, Briefcase, Hourglass, Timer, FileCheck, 
-  Building2, Menu, Eye, EyeOff, ShieldCheck, Wallet, LayoutList, Kanban, Target, Calendar, CheckCircle
+  Building2, Menu, Eye, EyeOff, ShieldCheck, Wallet, LayoutList, Kanban, Target, Calendar, CheckCircle, ChevronDown
 } from 'lucide-react'; 
 import supabase from './services/supabase'; 
 import StatusCard from './components/StatusCard';
@@ -87,6 +87,10 @@ const App = () => {
   // NOVO ESTADO PARA SELEÇÃO DE SERVIÇOS (CHECKBOX)
   const [selectedIds, setSelectedIds] = useState([]);
 
+  // ESTADO PARA O MENU PDF (DROPDOWN)
+  const [showPdfMenu, setShowPdfMenu] = useState(false);
+  const pdfMenuRef = useRef(null);
+
   const [filtros, setFiltros] = useState({
     canal: [], 
     cliente: [],
@@ -126,10 +130,19 @@ const App = () => {
     'Pago': { color: 'bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-300 border-green-200 dark:border-green-800', icon: DollarSign, label: 'Pago' }
   };
 
+  // Fecha o menu PDF ao clicar fora
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+        if (pdfMenuRef.current && !pdfMenuRef.current.contains(event.target)) {
+            setShowPdfMenu(false);
+        }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
 
   useEffect(() => {
     const carregarSolicitantesFiltro = async () => {
-      // ... (código anterior igual)
       
       if (filtros.cliente.length === 1) {
           const nomeCliente = filtros.cliente[0];
@@ -138,7 +151,6 @@ const App = () => {
             const { data } = await supabase.from('solicitantes').select('nome').eq('cliente_id', clienteObj.id).order('nome', { ascending: true });
             
             if (data) {
-                // ALTERAÇÃO AQUI: Remove duplicatas e espaços extras
                 const nomesUnicos = [...new Set(data.map(s => s.nome.trim()))];
                 setTodosSolicitantesDoCliente(nomesUnicos);
             }
@@ -323,12 +335,9 @@ const App = () => {
 
   useEffect(() => {
     if (session) { 
-        // SÓ ativa o loading se a lista estiver vazia (primeira carga).
-        // Se for só atualização de token, carrega os dados em "background" sem travar a tela.
         if (servicos.length === 0) setLoading(true); 
         
         carregarDados().then(() => {
-             // Garante que o loading saia apenas depois de carregar
              if (servicos.length === 0) setLoading(false);
         });
         carregarConfiguracao(); 
@@ -363,12 +372,10 @@ const App = () => {
       
       if (!profileData?.consultoria_id) throw new Error("Consultoria não identificada no perfil.");
 
-      // Prepara o objeto base
       const dadosParaSalvar = {
           ...formData,
           user_id: session.user.id,
           consultoria_id: profileData.consultoria_id,
-          // Garante que campos vazios virem NULL para não dar erro de chave estrangeira
           canal_id: formData.canal_id === '' ? null : formData.canal_id,
           cliente: formData.cliente === '' ? null : formData.cliente
       };
@@ -376,7 +383,6 @@ const App = () => {
       let error;
 
       if (editingService) {
-        // --- BLINDAGEM DE EDIÇÃO ---
         console.log("ID do serviço a editar:", editingService.id);
 
         if (!editingService.id) {
@@ -390,7 +396,6 @@ const App = () => {
             
         error = updateError;
       } else {
-        // --- CRIAÇÃO ---
         const { error: insertError } = await supabase
             .from('servicos_prestados')
             .insert([dadosParaSalvar]);
@@ -402,15 +407,13 @@ const App = () => {
 
       showToast(editingService ? 'Serviço atualizado com sucesso!' : 'Serviço cadastrado com sucesso!', 'sucesso');
       
-      // Limpeza
       setShowModal(false); 
       setEditingService(null); 
       resetForm(); 
-      await carregarDados(); // Aguarda recarregar para garantir a lista atualizada
+      await carregarDados(); 
 
     } catch (error) { 
       console.error('Erro CRÍTICO ao salvar:', error); 
-      // Mostra a mensagem real do banco ou a nossa mensagem personalizada
       showToast('Erro ao salvar: ' + (error.message || error.details || 'Erro desconhecido'), 'erro'); 
     }
   };
@@ -493,8 +496,8 @@ const App = () => {
   const blobToBase64 = (blob) => { return new Promise((resolve, reject) => { const reader = new FileReader(); reader.onloadend = () => resolve(reader.result); reader.onerror = reject; reader.readAsDataURL(blob); }); };
   const showToast = (mensagem, tipo = 'sucesso') => { setToast({ visivel: true, mensagem: mensagem, tipo: tipo }); setTimeout(() => { setToast(prev => ({ ...prev, visivel: false })); }, 3000); };
 
-  const handleGerarPDF = () => {
-    // LÓGICA NOVA: Se tiver itens selecionados, usa eles. Se não, usa todos do filtro.
+  // --- PDF COM SUPORTE A SEM VALORES ---
+  const handleGerarPDF = (semValores = false) => {
     const baseDados = servicosFiltradosData;
     const dadosParaRelatorio = selectedIds.length > 0 
         ? baseDados.filter(s => selectedIds.includes(s.id)) 
@@ -506,17 +509,21 @@ const App = () => {
     }
 
     const nomeParaRelatorio = nomeConsultor || profileData?.nome || session?.user?.email || 'Consultor';
-    const pdfBlob = gerarRelatorioPDF(dadosParaRelatorio, filtros, nomeParaRelatorio);
+    
+    // Passando o parâmetro semValores
+    const pdfBlob = gerarRelatorioPDF(dadosParaRelatorio, filtros, nomeParaRelatorio, semValores);
+    
     const url = URL.createObjectURL(pdfBlob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = "relatorio-servicos.pdf";
+    a.download = semValores ? "relatorio-horas-canais.pdf" : "relatorio-completo.pdf";
     a.click();
     URL.revokeObjectURL(url);
+    
+    setShowPdfMenu(false); // Fecha menu
   };
 
-const handleExportarExcel = () => {
-    // 1. LÓGICA DE SELEÇÃO (Igual ao PDF)
+  const handleExportarExcel = () => {
     const baseDados = servicosFiltradosData;
     const dadosParaExportar = selectedIds.length > 0 
         ? baseDados.filter(s => selectedIds.includes(s.id)) 
@@ -527,7 +534,6 @@ const handleExportarExcel = () => {
         return;
     }
 
-    // 2. Mapeamento usando a lista correta (dadosParaExportar)
     const dados = dadosParaExportar.map(s => ({
         Data: new Date(s.data + 'T00:00:00').toLocaleDateString('pt-BR'),
         Canal: s.canais?.nome || 'Direto',
@@ -541,19 +547,12 @@ const handleExportarExcel = () => {
         Solicitante: s.solicitante || '-',
         'Nota Fiscal': s.numero_nfs || '-'
     }));
-
-    const ws = XLSX.utils.json_to_sheet(dados); 
-    const wb = XLSX.utils.book_new(); 
-    XLSX.utils.book_append_sheet(wb, ws, "Serviços"); 
-    XLSX.writeFile(wb, `Relatorio_Servicos_${new Date().toISOString().split('T')[0]}.xlsx`); 
-    showToast('Planilha Excel gerada com sucesso!', 'sucesso');
+    const ws = XLSX.utils.json_to_sheet(dados); const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, "Serviços"); XLSX.writeFile(wb, `Relatorio_Servicos_${new Date().toISOString().split('T')[0]}.xlsx`); showToast('Planilha Excel gerada com sucesso!', 'sucesso');
   };
 
 const handleEnviarEmail = async () => {
-    // 1. Validações Iniciais
     if (!filtros.cliente || filtros.cliente.length === 0) { showToast("Selecione um cliente no filtro.", "erro"); return; }
     
-    // Define o que será enviado (Seleção ou Tudo filtrado)
     const dadosParaEnvio = selectedIds.length > 0 
         ? servicosFiltradosData.filter(s => selectedIds.includes(s.id))
         : servicosFiltradosData;
@@ -567,65 +566,46 @@ const handleEnviarEmail = async () => {
 
     setEmailEnviando(true);
     try {
-      // Busca emails
       const { data: todosSolicitantes, error } = await supabase.from('solicitantes').select('*').eq('cliente_id', clienteSelecionado.id);
       if (error) throw error;
       
       const pacotesDeEnvio = {};
       let servicosSemDestino = 0;
 
-      // 2. Loop de Agrupamento
-      dadosParaEnvio.forEach(servico => {
-        // Segurança: só processa serviços do cliente filtrado
+      dadosParaEnvio.forEach(servico => { 
         if (servico.cliente !== clienteSelecionado.nome) return;
 
         let emailDestino = null;
         let emailCC = null;
 
-        // Tenta achar o solicitante (ignorando maiúsculas/minúsculas e espaços)
         const nomeNoServico = (servico.solicitante || '').trim().toLowerCase();
         const solicitanteEncontrado = todosSolicitantes.find(s => s.nome.trim().toLowerCase() === nomeNoServico);
 
         if (solicitanteEncontrado) {
-          // Lógica de Hierarquia
           if (solicitanteEncontrado.coordenador_id) {
-            // Se tem chefe, manda pro chefe
             const chefe = todosSolicitantes.find(s => s.id === solicitanteEncontrado.coordenador_id);
             if (chefe && chefe.email) {
               emailDestino = chefe.email;
               if (solicitanteEncontrado.email) emailCC = solicitanteEncontrado.email;
             }
           } else if (solicitanteEncontrado.email) {
-            // Se não tem chefe, manda pra ele mesmo
             emailDestino = solicitanteEncontrado.email;
           }
         }
 
-        // Se não achou email, conta como falha para este item
-        if (!emailDestino) { 
-            console.warn(`Serviço ID ${servico.id}: Sem email para solicitante "${servico.solicitante}"`);
-            servicosSemDestino++; 
-            return; 
-        }
+        if (!emailDestino) { servicosSemDestino++; return; }
 
-        // Agrupa por destinatário
-        if (!pacotesDeEnvio[emailDestino]) { 
-            pacotesDeEnvio[emailDestino] = { destinatario: emailDestino, servicos: [], ccs: new Set() }; 
-        }
+        if (!pacotesDeEnvio[emailDestino]) { pacotesDeEnvio[emailDestino] = { destinatario: emailDestino, servicos: [], ccs: new Set() }; }
         pacotesDeEnvio[emailDestino].servicos.push(servico);
         if (emailCC) pacotesDeEnvio[emailDestino].ccs.add(emailCC);
       });
 
-      // 3. Envio
-      if (Object.keys(pacotesDeEnvio).length === 0) { 
-          showToast(`Nenhum email encontrado. Verifique o cadastro dos solicitantes de ${clienteSelecionado.nome}.`, "erro"); 
-          return; 
-      }
+      if (Object.keys(pacotesDeEnvio).length === 0) { showToast("Nenhum e-mail de gestor/solicitante encontrado.", "erro"); return; }
 
       let enviados = 0;
       for (const [emailDestino, pacote] of Object.entries(pacotesDeEnvio)) {
         const listaCCs = Array.from(pacote.ccs);
-        showToast(`Enviando para ${emailDestino}...`, "aviso"); // Aviso amarelo enquanto envia
+        showToast(`Enviando para ${emailDestino}...`, "aviso");
 
         const nomeParaRelatorio = nomeConsultor || session?.user?.email || 'Consultor';
         const pdfBlob = gerarRelatorioPDF(pacote.servicos, filtros, nomeParaRelatorio);
@@ -635,30 +615,16 @@ const handleEnviarEmail = async () => {
         
         const response = await fetch("/api/enviar-email", {
           method: "POST", headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ 
-              email: emailDestino, 
-              cc: listaCCs, 
-              nomeCliente: clienteSelecionado.nome, 
-              pdfBase64: pdfBase64, 
-              periodo: filtros.dataInicio ? `${new Date(filtros.dataInicio).toLocaleDateString()} a ...` : 'Período Geral' 
-          })
+          body: JSON.stringify({ email: emailDestino, cc: listaCCs, nomeCliente: clienteSelecionado.nome, pdfBase64: pdfBase64, periodo: filtros.dataInicio ? `${new Date(filtros.dataInicio).toLocaleDateString()} a ...` : 'Período Geral' })
         });
 
         if (response.ok) enviados++;
       }
 
-      if (servicosSemDestino > 0) { 
-          showToast(`Enviados: ${enviados}. Atenção: ${servicosSemDestino} serviços não tinham e-mail cadastrado.`, "aviso"); 
-      } else { 
-          showToast(`Sucesso! ${enviados} pacote(s) de email enviados.`, "sucesso"); 
-      }
+      if (servicosSemDestino > 0) { showToast(`Enviados: ${enviados}. Atenção: ${servicosSemDestino} serviços sem email cadastrado.`, "aviso"); } 
+      else { showToast(`Sucesso! ${enviados} pacote(s) de email enviados.`, "sucesso"); }
 
-    } catch (error) { 
-        console.error("Erro:", error); 
-        showToast("Erro no processo de envio.", "erro"); 
-    } finally { 
-        setEmailEnviando(false); 
-    }
+    } catch (error) { console.error("Erro:", error); showToast("Erro no processo de envio.", "erro"); } finally { setEmailEnviando(false); }
   };
   
   const resetForm = () => { 
@@ -679,9 +645,10 @@ const handleEnviarEmail = async () => {
   };
   const resetClienteForm = () => { setClienteFormData({ nome: '', email: '', telefone: '', ativo: true }); };
   
-  const editarServico = (servico) => { 
+const editarServico = (servico) => { 
     setEditingService(servico); 
     setFormData({
+      id: servico.id, // <--- AQUI ESTAVA FALTANDO! (Obrigatório para o Update)
       data: servico.data,
       hora_inicial: servico.hora_inicial,
       hora_final: servico.hora_final,
@@ -693,19 +660,19 @@ const handleEnviarEmail = async () => {
       status: servico.status,
       numero_nfs: servico.numero_nfs || '',
       os_op_dpc: servico.os_op_dpc || '',
-      observacoes: servico.observacoes || ''
+      observacoes: servico.observacoes || '',
+      demanda_id: servico.demanda_id || null // Garante vínculo na edição
     });
     setShowModal(true); 
   };
 
-  // --- FUNÇÃO DE DUPLICAÇÃO (NOVO) ---
   const handleDuplicateService = (servicoOriginal) => {
     const dadosDuplicados = {
       data: servicoOriginal.data, 
       hora_inicial: servicoOriginal.hora_inicial,
       hora_final: servicoOriginal.hora_final,
       valor_hora: servicoOriginal.valor_hora,
-      atividade: servicoOriginal.atividade, // Sem texto "Cópia"
+      atividade: servicoOriginal.atividade, 
       solicitante: servicoOriginal.solicitante || '',
       cliente: servicoOriginal.cliente,
       canal_id: servicoOriginal.canal_id || '', 
@@ -734,9 +701,7 @@ const handleEnviarEmail = async () => {
       if (filtros.dataFim && s.data > filtros.dataFim) return false;
       if (filtros.solicitantes && filtros.solicitantes.length > 0) { const solNome = (s.solicitante || '').trim(); if (!filtros.solicitantes.includes(solNome)) return false; }
       
-      // --- NOVO FILTRO DE CONSULTORES ---
       if (filtrosConsultores.length > 0) {
-         // O ID do usuário no banco é 'user_id'
          if (!filtrosConsultores.includes(s.user_id)) return false;
       }
 
@@ -823,7 +788,6 @@ const handleEnviarEmail = async () => {
               {activeTab === 'admin-finance' && <><Wallet className="text-yellow-600 dark:text-yellow-400" /> Financeiro</>}
               {activeTab === 'team' && <><Users className="text-indigo-600 dark:text-indigo-400" /> Gestão de Equipe</>}
               {activeTab === 'admin-plans' && <><FileText className="text-yellow-600 dark:text-yellow-400" /> Planos & Preços</>}
-              
               {activeTab === 'channels' && <><Building2 className="text-indigo-600 dark:text-indigo-400" /> Canais & Parceiros</>}
             </h1>
           </div>
@@ -876,7 +840,6 @@ const handleEnviarEmail = async () => {
 
                     {activeTab === 'servicos' && (
                         <div className="space-y-6">
-                            {/* --- NOVOS TOTALIZADORES (SUMMARY BAR) --- */}
                             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                                 <div className="bg-white dark:bg-gray-800 p-4 rounded-xl border border-gray-100 dark:border-gray-700 flex items-center justify-between shadow-sm">
                                     <div>
@@ -908,7 +871,6 @@ const handleEnviarEmail = async () => {
                                     </div>
                                 </div>
                             </div>
-                            {/* --- FIM DOS TOTALIZADORES --- */}
 
                             <div className="bg-white dark:bg-gray-800 p-6 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 space-y-4">
                                 <div className="flex justify-between items-center">
@@ -936,7 +898,57 @@ const handleEnviarEmail = async () => {
                                 </div>
                                 <div className="flex justify-end gap-3 pt-2">
                                     <button onClick={handleExportarExcel} className="flex items-center gap-2 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700 px-4 py-2 rounded-lg text-sm font-medium transition-colors" title="Exportar Excel"><FileText size={18} className="text-green-600 dark:text-green-400" /> Excel</button>
-                                    <button onClick={handleGerarPDF} className="flex items-center gap-2 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700 px-4 py-2 rounded-lg text-sm font-medium transition-colors" title="Gerar PDF"><FileText size={18} className="text-red-600 dark:text-red-400" /> PDF</button>
+                                    
+                                   
+                                    {/* --- BOTÃO PDF COM DROPDOWN PREMIUM --- */}
+                            <div className="relative" ref={pdfMenuRef}>
+                                <button 
+                                    onClick={() => setShowPdfMenu(!showPdfMenu)} 
+                                    className={`flex items-center gap-2 border px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200
+                                        ${showPdfMenu 
+                                            ? 'bg-indigo-50 border-indigo-200 text-indigo-700 dark:bg-indigo-900/30 dark:border-indigo-700 dark:text-indigo-300 ring-2 ring-indigo-100 dark:ring-indigo-900/50' 
+                                            : 'bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700 hover:border-gray-300'
+                                        }`}
+                                    title="Opções de PDF"
+                                >
+                                    <FileText size={18} className={showPdfMenu ? "text-indigo-600" : "text-red-600 dark:text-red-400"} /> 
+                                    <span>PDF</span>
+                                    <ChevronDown size={14} className={`transition-transform duration-300 ${showPdfMenu ? 'rotate-180' : ''}`}/>
+                                </button>
+
+                                {showPdfMenu && (
+                                    <div className="absolute right-0 top-full mt-2 w-64 bg-white dark:bg-gray-800 rounded-xl shadow-2xl border border-gray-100 dark:border-gray-700 overflow-hidden z-50 animate-in fade-in zoom-in-95 duration-200 origin-top-right">
+                                        <div className="p-2 space-y-1">
+                                            <button 
+                                                onClick={() => handleGerarPDF(false)}
+                                                className="w-full text-left px-3 py-3 hover:bg-gray-50 dark:hover:bg-gray-700/50 rounded-lg flex items-center gap-3 transition-colors group"
+                                            >
+                                                <div className="p-2 bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400 rounded-lg group-hover:bg-green-200 dark:group-hover:bg-green-900/50 transition-colors">
+                                                    <DollarSign size={18} />
+                                                </div>
+                                                <div>
+                                                    <p className="text-sm font-bold text-gray-800 dark:text-white leading-tight">Relatório Completo</p>
+                                                    <p className="text-[10px] text-gray-500 dark:text-gray-400 mt-0.5">Inclui valores financeiros (R$)</p>
+                                                </div>
+                                            </button>
+
+                                            <button 
+                                                onClick={() => handleGerarPDF(true)}
+                                                className="w-full text-left px-3 py-3 hover:bg-gray-50 dark:hover:bg-gray-700/50 rounded-lg flex items-center gap-3 transition-colors group"
+                                            >
+                                                <div className="p-2 bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 rounded-lg group-hover:bg-blue-200 dark:group-hover:bg-blue-900/50 transition-colors">
+                                                    <Clock size={18} />
+                                                </div>
+                                                <div>
+                                                    <p className="text-sm font-bold text-gray-800 dark:text-white leading-tight">Apenas Horas</p>
+                                                    <p className="text-[10px] text-gray-500 dark:text-gray-400 mt-0.5">Para Canais e Parceiros</p>
+                                                </div>
+                                            </button>
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+
                                     <button onClick={handleEnviarEmail} disabled={emailEnviando} className={`flex items-center gap-2 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${emailEnviando ? 'opacity-50 cursor-not-allowed' : ''}`} title="Enviar por Email">
                                         {emailEnviando ? 'Enviando...' : <><Mail size={18} className="text-blue-600 dark:text-blue-400" /> Enviar</>}
                                     </button>

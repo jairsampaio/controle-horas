@@ -6,7 +6,8 @@ const formatCurrency = (value) => {
   return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value);
 };
 
-const gerarRelatorioPDF = (servicos, filtros, nomeConsultor) => {
+// ADICIONADO O PARÂMETRO 'semValores' AQUI
+const gerarRelatorioPDF = (servicos, filtros, nomeConsultor, semValores = false) => {
   // 'l' = landscape (paisagem), 'mm' = milímetros, 'a4' = formato
   const doc = new jsPDF('l', 'mm', 'a4');
 
@@ -19,7 +20,10 @@ const gerarRelatorioPDF = (servicos, filtros, nomeConsultor) => {
   doc.setTextColor(255, 255, 255);
   doc.setFontSize(16);
   doc.setFont('helvetica', 'bold');
-  doc.text("Relatório de Serviços Prestados", 14, 15);
+  
+  // MUDANÇA: Título dinâmico
+  const tituloRelatorio = semValores ? "Relatório de Atividades (Horas)" : "Relatório de Serviços Prestados";
+  doc.text(tituloRelatorio, 14, 15);
 
   // --- 2. INFORMAÇÕES DO RELATÓRIO ---
   doc.setTextColor(40, 40, 40); // Cinza escuro
@@ -49,21 +53,29 @@ const gerarRelatorioPDF = (servicos, filtros, nomeConsultor) => {
 
   // Data de Emissão (Canto direito - ajustado para Paisagem 280mm)
   doc.setFontSize(9);
-  doc.setTextColor(255, 255, 255); // <--- ADICIONE ISSO AQUI (BRANCO)
+  doc.setTextColor(255, 255, 255); 
   doc.text(`Emissão: ${new Date().toLocaleDateString('pt-BR')} às ${new Date().toLocaleTimeString('pt-BR')}`, 283, 15, { align: 'right', baseline: 'middle' });
-  doc.setTextColor(255, 255, 255); // Volta pra branco só pra garantir se for escrever no header
+  doc.setTextColor(255, 255, 255); 
 
   // --- 3. TABELA DE SERVIÇOS ---
+  
+  // MUDANÇA: Definição dinâmica das colunas
   const tableColumn = [
     "Data", 
     "Cliente", 
     "OS/OP/DPC",  
     "Atividade", 
     "Solicitante",
-    "Horas", 
-    "Valor", 
-    "Status"
+    "Horas"
   ];
+
+  // Só adiciona a coluna Valor se NÃO for o modo 'semValores'
+  if (!semValores) {
+      tableColumn.push("Valor");
+  }
+  
+  // Status sempre vai no final
+  tableColumn.push("Status");
 
   const tableRows = [];
   let totalHoras = 0;
@@ -82,18 +94,43 @@ const gerarRelatorioPDF = (servicos, filtros, nomeConsultor) => {
     // Ajuste de fuso horário simples
     const dataFormatada = servico.data ? servico.data.split('T')[0].split('-').reverse().join('/') : '-';
 
+    // MUDANÇA: Montagem dinâmica da linha
     const rowData = [
       dataFormatada, 
       servico.cliente || '-',
       servico.os_op_dpc || '-', 
       servico.atividade || '',
       servico.solicitante || '-',
-      horas.toFixed(2), 
-      formatCurrency(valor),
-      servico.status || 'Pendente'
+      horas.toFixed(2)
     ];
+
+    if (!semValores) {
+        rowData.push(formatCurrency(valor));
+    }
+
+    rowData.push(servico.status || 'Pendente');
+    
     tableRows.push(rowData);
   });
+
+  // MUDANÇA: Definição dinâmica dos estilos das colunas (índices mudam se tirar coluna)
+  const columnStylesConfig = {
+      0: { cellWidth: 22, halign: 'center' }, // Data
+      1: { cellWidth: 35, fontStyle: 'bold' }, // Cliente
+      2: { cellWidth: 25, halign: 'center', fontStyle: 'bold', textColor: [70, 70, 70] }, // OS
+      3: { cellWidth: 'auto' }, // Atividade
+      4: { cellWidth: 30 }, // Solicitante
+      5: { cellWidth: 18, halign: 'center' } // Horas
+  };
+
+  if (!semValores) {
+      // Configuração Padrão (Com Valor)
+      columnStylesConfig[6] = { cellWidth: 28, halign: 'right' }; // Valor
+      columnStylesConfig[7] = { cellWidth: 25, halign: 'center', fontStyle: 'bold' }; // Status
+  } else {
+      // Configuração Sem Valor (Status é a coluna 6)
+      columnStylesConfig[6] = { cellWidth: 25, halign: 'center', fontStyle: 'bold' }; // Status
+  }
 
   autoTable(doc, {
     startY: 55,
@@ -101,7 +138,7 @@ const gerarRelatorioPDF = (servicos, filtros, nomeConsultor) => {
     body: tableRows,
     theme: 'grid',
     styles: {
-      fontSize: 9, // Aumentei um pouco pois paisagem cabe mais
+      fontSize: 9, 
       cellPadding: 3,
       font: 'helvetica',
       textColor: [50, 50, 50],
@@ -110,30 +147,24 @@ const gerarRelatorioPDF = (servicos, filtros, nomeConsultor) => {
       lineWidth: 0.1
     },
     headStyles: {
-      fillColor: [79, 70, 229], // Indigo
+      fillColor: [79, 70, 229], 
       textColor: [255, 255, 255],
       fontStyle: 'bold',
       halign: 'center'
     },
-    columnStyles: {
-      0: { cellWidth: 22, halign: 'center' }, // Data
-      1: { cellWidth: 35, fontStyle: 'bold' }, // Cliente
-      2: { cellWidth: 25, halign: 'center', fontStyle: 'bold', textColor: [70, 70, 70] }, // OS
-      3: { cellWidth: 'auto' }, // Atividade (Automático para preencher espaço)
-      4: { cellWidth: 30 }, // Solicitante
-      5: { cellWidth: 18, halign: 'center' }, // Horas
-      6: { cellWidth: 28, halign: 'right' }, // Valor
-      7: { cellWidth: 25, halign: 'center', fontStyle: 'bold' } // Status
-    },
+    columnStyles: columnStylesConfig, // Usa a config dinâmica
     alternateRowStyles: {
-      fillColor: [248, 250, 252] // Cinza muito suave
+      fillColor: [248, 250, 252] 
     },
     didParseCell: function(data) {
-        if (data.section === 'body' && data.column.index === 7) {
+        // MUDANÇA: Identificar dinamicamente qual é a coluna de status
+        const indexStatus = semValores ? 6 : 7;
+
+        if (data.section === 'body' && data.column.index === indexStatus) {
             const status = data.cell.raw;
-            if (status === 'Pago' || status === 'NF Emitida') data.cell.styles.textColor = [22, 163, 74]; // Verde
-            else if (status === 'Pendente') data.cell.styles.textColor = [234, 88, 12]; // Laranja
-            else if (status === 'Aprovado') data.cell.styles.textColor = [37, 99, 235]; // Azul
+            if (status === 'Pago' || status === 'NF Emitida') data.cell.styles.textColor = [22, 163, 74]; 
+            else if (status === 'Pendente') data.cell.styles.textColor = [234, 88, 12]; 
+            else if (status === 'Aprovado') data.cell.styles.textColor = [37, 99, 235]; 
             else data.cell.styles.textColor = [100, 100, 100];
         }
     }
@@ -142,13 +173,12 @@ const gerarRelatorioPDF = (servicos, filtros, nomeConsultor) => {
   // --- 4. RODAPÉ DE TOTAIS ---
   let finalY = doc.lastAutoTable.finalY + 10;
   
-  // Se estiver muito no final da página (A4 paisagem tem ~210mm de altura), quebra
   if (finalY > 180) {
       doc.addPage();
       finalY = 20;
   }
 
-  // Caixa de Totais (Posicionada à direita na paisagem: X ~215)
+  // Caixa de Totais 
   doc.setDrawColor(220, 220, 220);
   doc.setFillColor(250, 250, 250);
   doc.roundedRect(215, finalY, 70, 24, 2, 2, 'FD'); 
@@ -156,22 +186,30 @@ const gerarRelatorioPDF = (servicos, filtros, nomeConsultor) => {
   doc.setFontSize(10);
   doc.setTextColor(100, 100, 100);
   doc.text("Total de Horas:", 220, finalY + 8);
-  doc.text("Valor Total:", 220, finalY + 16);
+  
+  // MUDANÇA: Só escreve o label "Valor Total" se não for o modo sem valores
+  if (!semValores) {
+      doc.text("Valor Total:", 220, finalY + 16);
+  }
 
   doc.setFontSize(12);
   doc.setTextColor(0, 0, 0);
   doc.setFont('helvetica', 'bold');
   doc.text(`${totalHoras.toFixed(2)}h`, 280, finalY + 8, { align: 'right' });
-  doc.text(`${formatCurrency(totalValor)}`, 280, finalY + 16, { align: 'right' });
+  
+  // MUDANÇA: Só escreve o valor se não for o modo sem valores
+  if (!semValores) {
+      doc.text(`${formatCurrency(totalValor)}`, 280, finalY + 16, { align: 'right' });
+  }
 
-  // Rodapé da Página (Paginação Centralizada em 297mm/2)
+  // Rodapé da Página 
   const pageCount = doc.internal.getNumberOfPages();
   for (let i = 1; i <= pageCount; i++) {
     doc.setPage(i);
     doc.setFontSize(8);
     doc.setTextColor(150, 150, 150);
     const footerText = `Página ${i} de ${pageCount} | ConsultFlow Sistema de Gestão`;
-    doc.text(footerText, 148, 200, { align: 'center' }); // 148 é o meio da folha paisagem
+    doc.text(footerText, 148, 200, { align: 'center' }); 
   }
 
   return doc.output('blob');
