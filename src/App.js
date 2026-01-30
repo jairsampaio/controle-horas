@@ -1,5 +1,6 @@
 /* eslint-disable no-restricted-globals */
 import gerarRelatorioPDF from "./utils/gerarRelatorioPDF";
+import gerarRelatorioExcel from "./utils/gerarRelatorioExcel"; // Importação do novo utilitário
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { 
   Clock, DollarSign, FileText, Plus, Filter, Users, Mail,
@@ -42,15 +43,15 @@ const App = () => {
   const [canais, setCanais] = useState([]); 
   const [loading, setLoading] = useState(true);
   
-  // Inicia lendo da memória do navegador. Se não tiver nada, vai pro dashboard.
+  // Inicia lendo da memória do navegador
   const [activeTab, setActiveTab] = useState(() => {
       return localStorage.getItem('lastActiveTab') || 'dashboard';
   });
 
-  // Sempre que mudar a aba, salva na memória
   useEffect(() => {
       localStorage.setItem('lastActiveTab', activeTab);
   }, [activeTab]);
+  
   const [viewMode, setViewMode] = useState('list'); 
   const [selectedTenantId, setSelectedTenantId] = useState(null);
 
@@ -81,15 +82,15 @@ const App = () => {
   
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   
-  // NOVO ESTADO PARA FILTRO DE CONSULTORES (Elevado do ServicesTable)
+  // Filtros de Consultores e Checkbox
   const [filtrosConsultores, setFiltrosConsultores] = useState([]);
-
-  // NOVO ESTADO PARA SELEÇÃO DE SERVIÇOS (CHECKBOX)
   const [selectedIds, setSelectedIds] = useState([]);
 
-  // ESTADO PARA O MENU PDF (DROPDOWN)
+  // ESTADOS PARA OS MENUS DROPDOWN (PDF E EXCEL)
   const [showPdfMenu, setShowPdfMenu] = useState(false);
+  const [showExcelMenu, setShowExcelMenu] = useState(false);
   const pdfMenuRef = useRef(null);
+  const excelMenuRef = useRef(null);
 
   const [filtros, setFiltros] = useState({
     canal: [], 
@@ -130,11 +131,14 @@ const App = () => {
     'Pago': { color: 'bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-300 border-green-200 dark:border-green-800', icon: DollarSign, label: 'Pago' }
   };
 
-  // Fecha o menu PDF ao clicar fora
+  // Fecha os menus ao clicar fora
   useEffect(() => {
     const handleClickOutside = (event) => {
         if (pdfMenuRef.current && !pdfMenuRef.current.contains(event.target)) {
             setShowPdfMenu(false);
+        }
+        if (excelMenuRef.current && !excelMenuRef.current.contains(event.target)) {
+            setShowExcelMenu(false);
         }
     };
     document.addEventListener("mousedown", handleClickOutside);
@@ -143,13 +147,11 @@ const App = () => {
 
   useEffect(() => {
     const carregarSolicitantesFiltro = async () => {
-      
       if (filtros.cliente.length === 1) {
           const nomeCliente = filtros.cliente[0];
           const clienteObj = clientes.find(c => c.nome === nomeCliente);
           if (clienteObj) {
             const { data } = await supabase.from('solicitantes').select('nome').eq('cliente_id', clienteObj.id).order('nome', { ascending: true });
-            
             if (data) {
                 const nomesUnicos = [...new Set(data.map(s => s.nome.trim()))];
                 setTodosSolicitantesDoCliente(nomesUnicos);
@@ -383,6 +385,7 @@ const App = () => {
       let error;
 
       if (editingService) {
+        // --- BLINDAGEM DE EDIÇÃO ---
         console.log("ID do serviço a editar:", editingService.id);
 
         if (!editingService.id) {
@@ -396,6 +399,7 @@ const App = () => {
             
         error = updateError;
       } else {
+        // --- CRIAÇÃO ---
         const { error: insertError } = await supabase
             .from('servicos_prestados')
             .insert([dadosParaSalvar]);
@@ -523,7 +527,8 @@ const App = () => {
     setShowPdfMenu(false); // Fecha menu
   };
 
-  const handleExportarExcel = () => {
+  // --- EXCEL COM SUPORTE A SEM VALORES ---
+  const handleExportarExcel = (semValores = false) => {
     const baseDados = servicosFiltradosData;
     const dadosParaExportar = selectedIds.length > 0 
         ? baseDados.filter(s => selectedIds.includes(s.id)) 
@@ -534,20 +539,13 @@ const App = () => {
         return;
     }
 
-    const dados = dadosParaExportar.map(s => ({
-        Data: new Date(s.data + 'T00:00:00').toLocaleDateString('pt-BR'),
-        Canal: s.canais?.nome || 'Direto',
-        Cliente: s.cliente,
-        Consultor: s.profiles?.nome || 'N/A',
-        Atividade: s.atividade,
-        'OS/OP/DPC': s.os_op_dpc || '-',
-        'Qtd Horas': parseFloat(s.qtd_horas).toFixed(2).replace('.', ','),
-        'Valor Total': parseFloat(s.valor_total).toFixed(2).replace('.', ','),
-        Status: s.status,
-        Solicitante: s.solicitante || '-',
-        'Nota Fiscal': s.numero_nfs || '-'
-    }));
-    const ws = XLSX.utils.json_to_sheet(dados); const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, "Serviços"); XLSX.writeFile(wb, `Relatorio_Servicos_${new Date().toISOString().split('T')[0]}.xlsx`); showToast('Planilha Excel gerada com sucesso!', 'sucesso');
+    const nomeParaRelatorio = nomeConsultor || session?.user?.email || 'Consultor';
+
+    // Chama o novo utilitário
+    gerarRelatorioExcel(dadosParaExportar, filtros, nomeParaRelatorio, semValores);
+    
+    showToast('Planilha Excel gerada com sucesso!', 'sucesso');
+    setShowExcelMenu(false);
   };
 
 const handleEnviarEmail = async () => {
@@ -645,10 +643,10 @@ const handleEnviarEmail = async () => {
   };
   const resetClienteForm = () => { setClienteFormData({ nome: '', email: '', telefone: '', ativo: true }); };
   
-const editarServico = (servico) => { 
+  const editarServico = (servico) => { 
     setEditingService(servico); 
     setFormData({
-      id: servico.id, // <--- AQUI ESTAVA FALTANDO! (Obrigatório para o Update)
+      id: servico.id, // --- AQUI ESTAVA FALTANDO E AGORA FOI CORRIGIDO ---
       data: servico.data,
       hora_inicial: servico.hora_inicial,
       hora_final: servico.hora_final,
@@ -661,7 +659,7 @@ const editarServico = (servico) => {
       numero_nfs: servico.numero_nfs || '',
       os_op_dpc: servico.os_op_dpc || '',
       observacoes: servico.observacoes || '',
-      demanda_id: servico.demanda_id || null // Garante vínculo na edição
+      demanda_id: servico.demanda_id || null 
     });
     setShowModal(true); 
   };
@@ -788,6 +786,7 @@ const editarServico = (servico) => {
               {activeTab === 'admin-finance' && <><Wallet className="text-yellow-600 dark:text-yellow-400" /> Financeiro</>}
               {activeTab === 'team' && <><Users className="text-indigo-600 dark:text-indigo-400" /> Gestão de Equipe</>}
               {activeTab === 'admin-plans' && <><FileText className="text-yellow-600 dark:text-yellow-400" /> Planos & Preços</>}
+              
               {activeTab === 'channels' && <><Building2 className="text-indigo-600 dark:text-indigo-400" /> Canais & Parceiros</>}
             </h1>
           </div>
@@ -840,6 +839,7 @@ const editarServico = (servico) => {
 
                     {activeTab === 'servicos' && (
                         <div className="space-y-6">
+                            {/* --- NOVOS TOTALIZADORES (SUMMARY BAR) --- */}
                             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                                 <div className="bg-white dark:bg-gray-800 p-4 rounded-xl border border-gray-100 dark:border-gray-700 flex items-center justify-between shadow-sm">
                                     <div>
@@ -871,6 +871,7 @@ const editarServico = (servico) => {
                                     </div>
                                 </div>
                             </div>
+                            {/* --- FIM DOS TOTALIZADORES --- */}
 
                             <div className="bg-white dark:bg-gray-800 p-6 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 space-y-4">
                                 <div className="flex justify-between items-center">
@@ -897,57 +898,104 @@ const editarServico = (servico) => {
                                     </div>
                                 </div>
                                 <div className="flex justify-end gap-3 pt-2">
-                                    <button onClick={handleExportarExcel} className="flex items-center gap-2 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700 px-4 py-2 rounded-lg text-sm font-medium transition-colors" title="Exportar Excel"><FileText size={18} className="text-green-600 dark:text-green-400" /> Excel</button>
                                     
-                                   
-                                    {/* --- BOTÃO PDF COM DROPDOWN PREMIUM --- */}
-                            <div className="relative" ref={pdfMenuRef}>
-                                <button 
-                                    onClick={() => setShowPdfMenu(!showPdfMenu)} 
-                                    className={`flex items-center gap-2 border px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200
-                                        ${showPdfMenu 
-                                            ? 'bg-indigo-50 border-indigo-200 text-indigo-700 dark:bg-indigo-900/30 dark:border-indigo-700 dark:text-indigo-300 ring-2 ring-indigo-100 dark:ring-indigo-900/50' 
-                                            : 'bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700 hover:border-gray-300'
-                                        }`}
-                                    title="Opções de PDF"
-                                >
-                                    <FileText size={18} className={showPdfMenu ? "text-indigo-600" : "text-red-600 dark:text-red-400"} /> 
-                                    <span>PDF</span>
-                                    <ChevronDown size={14} className={`transition-transform duration-300 ${showPdfMenu ? 'rotate-180' : ''}`}/>
-                                </button>
+                                    {/* --- BOTÃO EXCEL COM DROPDOWN PREMIUM --- */}
+                                    <div className="relative" ref={excelMenuRef}>
+                                        <button 
+                                            onClick={() => setShowExcelMenu(!showExcelMenu)} 
+                                            className={`flex items-center gap-2 border px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200
+                                                ${showExcelMenu
+                                                    ? 'bg-green-50 border-green-200 text-green-700 dark:bg-green-900/30 dark:border-green-700 dark:text-green-300 ring-2 ring-green-100 dark:ring-green-900/50' 
+                                                    : 'bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700 hover:border-gray-300'
+                                                }`}
+                                            title="Opções de Excel"
+                                        >
+                                            <FileText size={18} className={showExcelMenu ? "text-green-600" : "text-green-600 dark:text-green-400"} /> 
+                                            <span>Excel</span>
+                                            <ChevronDown size={14} className={`transition-transform duration-300 ${showExcelMenu ? 'rotate-180' : ''}`}/>
+                                        </button>
 
-                                {showPdfMenu && (
-                                    <div className="absolute right-0 top-full mt-2 w-64 bg-white dark:bg-gray-800 rounded-xl shadow-2xl border border-gray-100 dark:border-gray-700 overflow-hidden z-50 animate-in fade-in zoom-in-95 duration-200 origin-top-right">
-                                        <div className="p-2 space-y-1">
-                                            <button 
-                                                onClick={() => handleGerarPDF(false)}
-                                                className="w-full text-left px-3 py-3 hover:bg-gray-50 dark:hover:bg-gray-700/50 rounded-lg flex items-center gap-3 transition-colors group"
-                                            >
-                                                <div className="p-2 bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400 rounded-lg group-hover:bg-green-200 dark:group-hover:bg-green-900/50 transition-colors">
-                                                    <DollarSign size={18} />
-                                                </div>
-                                                <div>
-                                                    <p className="text-sm font-bold text-gray-800 dark:text-white leading-tight">Relatório Completo</p>
-                                                    <p className="text-[10px] text-gray-500 dark:text-gray-400 mt-0.5">Inclui valores financeiros (R$)</p>
-                                                </div>
-                                            </button>
+                                        {showExcelMenu && (
+                                            <div className="absolute right-0 top-full mt-2 w-48 bg-white dark:bg-gray-800 rounded-xl shadow-2xl border border-gray-100 dark:border-gray-700 overflow-hidden z-50 animate-in fade-in zoom-in-95 duration-200 origin-top-right">
+                                                <div className="p-2 space-y-1">
+                                                    <button 
+                                                        onClick={() => handleExportarExcel(false)}
+                                                        className="w-full text-left px-3 py-3 hover:bg-gray-50 dark:hover:bg-gray-700/50 rounded-lg flex items-center gap-3 transition-colors group"
+                                                    >
+                                                        <div className="p-2 bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400 rounded-lg group-hover:bg-green-200 dark:group-hover:bg-green-900/50 transition-colors">
+                                                            <DollarSign size={18} />
+                                                        </div>
+                                                        <div>
+                                                            <p className="text-sm font-bold text-gray-800 dark:text-white leading-tight">Completo</p>
+                                                            <p className="text-[10px] text-gray-500 dark:text-gray-400 mt-0.5">Com valores (R$)</p>
+                                                        </div>
+                                                    </button>
 
-                                            <button 
-                                                onClick={() => handleGerarPDF(true)}
-                                                className="w-full text-left px-3 py-3 hover:bg-gray-50 dark:hover:bg-gray-700/50 rounded-lg flex items-center gap-3 transition-colors group"
-                                            >
-                                                <div className="p-2 bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 rounded-lg group-hover:bg-blue-200 dark:group-hover:bg-blue-900/50 transition-colors">
-                                                    <Clock size={18} />
+                                                    <button 
+                                                        onClick={() => handleExportarExcel(true)}
+                                                        className="w-full text-left px-3 py-3 hover:bg-gray-50 dark:hover:bg-gray-700/50 rounded-lg flex items-center gap-3 transition-colors group"
+                                                    >
+                                                        <div className="p-2 bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 rounded-lg group-hover:bg-blue-200 dark:group-hover:bg-blue-900/50 transition-colors">
+                                                            <Clock size={18} />
+                                                        </div>
+                                                        <div>
+                                                            <p className="text-sm font-bold text-gray-800 dark:text-white leading-tight">Apenas Horas</p>
+                                                            <p className="text-[10px] text-gray-500 dark:text-gray-400 mt-0.5">Para Canais e Parceiros</p>
+                                                        </div>
+                                                    </button>
                                                 </div>
-                                                <div>
-                                                    <p className="text-sm font-bold text-gray-800 dark:text-white leading-tight">Apenas Horas</p>
-                                                    <p className="text-[10px] text-gray-500 dark:text-gray-400 mt-0.5">Para Canais e Parceiros</p>
-                                                </div>
-                                            </button>
-                                        </div>
+                                            </div>
+                                        )}
                                     </div>
-                                )}
-                            </div>
+
+                                    {/* --- BOTÃO PDF COM DROPDOWN PREMIUM --- */}
+                                    <div className="relative" ref={pdfMenuRef}>
+                                        <button 
+                                            onClick={() => setShowPdfMenu(!showPdfMenu)} 
+                                            className={`flex items-center gap-2 border px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200
+                                                ${showPdfMenu 
+                                                    ? 'bg-indigo-50 border-indigo-200 text-indigo-700 dark:bg-indigo-900/30 dark:border-indigo-700 dark:text-indigo-300 ring-2 ring-indigo-100 dark:ring-indigo-900/50' 
+                                                    : 'bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700 hover:border-gray-300'
+                                                }`}
+                                            title="Opções de PDF"
+                                        >
+                                            <FileText size={18} className={showPdfMenu ? "text-indigo-600" : "text-red-600 dark:text-red-400"} /> 
+                                            <span>PDF</span>
+                                            <ChevronDown size={14} className={`transition-transform duration-300 ${showPdfMenu ? 'rotate-180' : ''}`}/>
+                                        </button>
+
+                                        {showPdfMenu && (
+                                            <div className="absolute right-0 top-full mt-2 w-48 bg-white dark:bg-gray-800 rounded-xl shadow-2xl border border-gray-100 dark:border-gray-700 overflow-hidden z-50 animate-in fade-in zoom-in-95 duration-200 origin-top-right">
+                                                <div className="p-2 space-y-1">
+                                                    <button 
+                                                        onClick={() => handleGerarPDF(false)}
+                                                        className="w-full text-left px-3 py-3 hover:bg-gray-50 dark:hover:bg-gray-700/50 rounded-lg flex items-center gap-3 transition-colors group"
+                                                    >
+                                                        <div className="p-2 bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400 rounded-lg group-hover:bg-green-200 dark:group-hover:bg-green-900/50 transition-colors">
+                                                            <DollarSign size={18} />
+                                                        </div>
+                                                        <div>
+                                                            <p className="text-sm font-bold text-gray-800 dark:text-white leading-tight">Relatório Completo</p>
+                                                            <p className="text-[10px] text-gray-500 dark:text-gray-400 mt-0.5">Inclui valores financeiros (R$)</p>
+                                                        </div>
+                                                    </button>
+
+                                                    <button 
+                                                        onClick={() => handleGerarPDF(true)}
+                                                        className="w-full text-left px-3 py-3 hover:bg-gray-50 dark:hover:bg-gray-700/50 rounded-lg flex items-center gap-3 transition-colors group"
+                                                    >
+                                                        <div className="p-2 bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 rounded-lg group-hover:bg-blue-200 dark:group-hover:bg-blue-900/50 transition-colors">
+                                                            <Clock size={18} />
+                                                        </div>
+                                                        <div>
+                                                            <p className="text-sm font-bold text-gray-800 dark:text-white leading-tight">Apenas Horas</p>
+                                                            <p className="text-[10px] text-gray-500 dark:text-gray-400 mt-0.5">Para Canais e Parceiros</p>
+                                                        </div>
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        )}
+                                    </div>
 
                                     <button onClick={handleEnviarEmail} disabled={emailEnviando} className={`flex items-center gap-2 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${emailEnviando ? 'opacity-50 cursor-not-allowed' : ''}`} title="Enviar por Email">
                                         {emailEnviando ? 'Enviando...' : <><Mail size={18} className="text-blue-600 dark:text-blue-400" /> Enviar</>}
