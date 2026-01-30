@@ -1,11 +1,11 @@
 /* eslint-disable no-restricted-globals */
 import gerarRelatorioPDF from "./utils/gerarRelatorioPDF";
-import gerarRelatorioExcel from "./utils/gerarRelatorioExcel"; // Importação do novo utilitário
+import gerarRelatorioExcel from "./utils/gerarRelatorioExcel"; 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { 
   Clock, DollarSign, FileText, Plus, Filter, Users, Mail,
   LayoutDashboard, Briefcase, Hourglass, Timer, FileCheck, 
-  Building2, Menu, Eye, EyeOff, ShieldCheck, Wallet, LayoutList, Kanban, Target, Calendar, CheckCircle, ChevronDown
+  Building2, Menu, Eye, EyeOff, ShieldCheck, Wallet, LayoutList, Kanban, Target, Calendar, CheckCircle, ChevronDown, Layers
 } from 'lucide-react'; 
 import supabase from './services/supabase'; 
 import StatusCard from './components/StatusCard';
@@ -41,9 +41,13 @@ const App = () => {
   const [servicos, setServicos] = useState([]);
   const [clientes, setClientes] = useState([]);
   const [canais, setCanais] = useState([]); 
+  
+  // NOVOS ESTADOS PARA OS FILTROS
+  const [listaDemandas, setListaDemandas] = useState([]); 
+  const [listaSolicitantesGeral, setListaSolicitantesGeral] = useState([]); 
+
   const [loading, setLoading] = useState(true);
   
-  // Inicia lendo da memória do navegador
   const [activeTab, setActiveTab] = useState(() => {
       return localStorage.getItem('lastActiveTab') || 'dashboard';
   });
@@ -82,24 +86,42 @@ const App = () => {
   
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   
-  // Filtros de Consultores e Checkbox
   const [filtrosConsultores, setFiltrosConsultores] = useState([]);
   const [selectedIds, setSelectedIds] = useState([]);
 
-  // ESTADOS PARA OS MENUS DROPDOWN (PDF E EXCEL)
+  // ESTADO PARA O MENU PDF E EXCEL
   const [showPdfMenu, setShowPdfMenu] = useState(false);
   const [showExcelMenu, setShowExcelMenu] = useState(false);
   const pdfMenuRef = useRef(null);
   const excelMenuRef = useRef(null);
 
-  const [filtros, setFiltros] = useState({
-    canal: [], 
-    cliente: [],
-    status: [], 
-    dataInicio: '',
-    dataFim: '',
-    solicitantes: []
+  // --- ALTERAÇÃO 1: INICIALIZAÇÃO DOS FILTROS COM LOCALSTORAGE ---
+  const [filtros, setFiltros] = useState(() => {
+    const filtrosSalvos = localStorage.getItem('filtrosConsultFlow');
+    if (filtrosSalvos) {
+        try {
+            return JSON.parse(filtrosSalvos);
+        } catch (e) {
+            console.error("Erro ao ler filtros salvos", e);
+        }
+    }
+    // Valor padrão se não houver nada salvo
+    return {
+        canal: [], 
+        cliente: [],
+        status: [], 
+        demanda: [], 
+        dataInicio: '',
+        dataFim: '',
+        solicitantes: []
+    };
   });
+
+  // Salva filtros no localStorage sempre que mudarem
+  useEffect(() => {
+    localStorage.setItem('filtrosConsultFlow', JSON.stringify(filtros));
+  }, [filtros]);
+  // -------------------------------------------------------------
 
   const [formData, setFormData] = useState({
     data: new Date().toISOString().split('T')[0],
@@ -131,7 +153,6 @@ const App = () => {
     'Pago': { color: 'bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-300 border-green-200 dark:border-green-800', icon: DollarSign, label: 'Pago' }
   };
 
-  // Fecha os menus ao clicar fora
   useEffect(() => {
     const handleClickOutside = (event) => {
         if (pdfMenuRef.current && !pdfMenuRef.current.contains(event.target)) {
@@ -147,11 +168,13 @@ const App = () => {
 
   useEffect(() => {
     const carregarSolicitantesFiltro = async () => {
+      
       if (filtros.cliente.length === 1) {
           const nomeCliente = filtros.cliente[0];
           const clienteObj = clientes.find(c => c.nome === nomeCliente);
           if (clienteObj) {
             const { data } = await supabase.from('solicitantes').select('nome').eq('cliente_id', clienteObj.id).order('nome', { ascending: true });
+            
             if (data) {
                 const nomesUnicos = [...new Set(data.map(s => s.nome.trim()))];
                 setTodosSolicitantesDoCliente(nomesUnicos);
@@ -285,9 +308,10 @@ const App = () => {
       const meuId = userProfile.consultoria_id;
       if (!meuId) return;
 
+      // 1. CARREGAR SERVIÇOS (COM DEMANDAS VINCULADAS)
       let query = supabase
         .from('servicos_prestados')
-        .select('*, canais(nome), profiles(nome)')
+        .select('*, canais(nome), profiles(nome), demandas(codigo, titulo)')
         .eq('consultoria_id', meuId);
 
       const isChefe = userProfile.role === 'admin' || userProfile.role === 'dono' || userProfile.cargo === 'admin' || userProfile.cargo === 'dono';
@@ -297,27 +321,50 @@ const App = () => {
       }
 
       const { data: dataServicos, error: errorServicos } = await query.order('data', { ascending: false });
- 
       if (errorServicos) throw errorServicos;
       setServicos(dataServicos);
 
+      // 2. CARREGAR CLIENTES
       const { data: dataClientes, error: errorClientes } = await supabase
         .from('clientes')
         .select('*') 
         .eq('consultoria_id', meuId) 
         .order('nome', { ascending: true });
- 
       if (errorClientes) throw errorClientes;
       setClientes(dataClientes);
 
+      // 3. CARREGAR CANAIS
       const { data: dataCanais, error: errorCanais } = await supabase
         .from('canais')
         .select('*')
         .eq('ativo', true)
         .eq('consultoria_id', meuId)
         .order('nome', { ascending: true });
-  
       if (!errorCanais) setCanais(dataCanais);
+
+      // 4. CARREGAR TODAS AS DEMANDAS (PARA O FILTRO)
+      const { data: dataDemandas } = await supabase
+        .from('demandas')
+        .select('id, codigo, titulo')
+        .eq('consultoria_id', meuId)
+        .neq('status', 'Cancelada') 
+        .order('created_at', { ascending: false });
+      if (dataDemandas) setListaDemandas(dataDemandas);
+
+      // 5. CARREGAR TODOS OS SOLICITANTES (PARA O FILTRO LIVRE)
+      if (dataClientes && dataClientes.length > 0) {
+          const idsClientes = dataClientes.map(c => c.id);
+          const { data: dataSolicitantes } = await supabase
+            .from('solicitantes')
+            .select('id, nome, cliente_id')
+            .in('cliente_id', idsClientes)
+            .eq('ativo', true)
+            .order('nome');
+          
+          if (dataSolicitantes) {
+              setListaSolicitantesGeral(dataSolicitantes);
+          }
+      }
 
     } catch (error) { 
       console.error('Erro ao carregar dados:', error); 
@@ -367,6 +414,38 @@ const App = () => {
     return () => window.removeEventListener('popstate', handlePopState);
   }, [activeTab, showModal, showClienteModal, showSolicitantesModal, showConfigModal]);
 
+  // --- ALTERAÇÃO 2: FUNÇÃO DE UPDATE EM MASSA ---
+  const handleBulkStatusUpdate = async (novoStatus) => {
+    if (selectedIds.length === 0) return;
+
+    if (!confirm(`Tem certeza que deseja alterar o status de ${selectedIds.length} serviços para "${novoStatus}"?`)) {
+        return;
+    }
+
+    try {
+        setLoading(true);
+        const { error } = await supabase
+            .from('servicos_prestados')
+            .update({ status: novoStatus })
+            .in('id', selectedIds);
+
+        if (error) throw error;
+
+        showToast(`${selectedIds.length} serviços atualizados com sucesso!`, 'sucesso');
+        
+        // Limpa seleção e recarrega
+        setSelectedIds([]);
+        await carregarDados();
+
+    } catch (error) {
+        console.error("Erro no update em massa:", error);
+        showToast("Erro ao atualizar serviços em massa.", 'erro');
+    } finally {
+        setLoading(false);
+    }
+  };
+  // ---------------------------------------------
+
   const salvarServico = async () => {
     try {
       console.log("--- Iniciando Salvamento ---");
@@ -385,7 +464,6 @@ const App = () => {
       let error;
 
       if (editingService) {
-        // --- BLINDAGEM DE EDIÇÃO ---
         console.log("ID do serviço a editar:", editingService.id);
 
         if (!editingService.id) {
@@ -399,7 +477,6 @@ const App = () => {
             
         error = updateError;
       } else {
-        // --- CRIAÇÃO ---
         const { error: insertError } = await supabase
             .from('servicos_prestados')
             .insert([dadosParaSalvar]);
@@ -500,7 +577,6 @@ const App = () => {
   const blobToBase64 = (blob) => { return new Promise((resolve, reject) => { const reader = new FileReader(); reader.onloadend = () => resolve(reader.result); reader.onerror = reject; reader.readAsDataURL(blob); }); };
   const showToast = (mensagem, tipo = 'sucesso') => { setToast({ visivel: true, mensagem: mensagem, tipo: tipo }); setTimeout(() => { setToast(prev => ({ ...prev, visivel: false })); }, 3000); };
 
-  // --- PDF COM SUPORTE A SEM VALORES ---
   const handleGerarPDF = (semValores = false) => {
     const baseDados = servicosFiltradosData;
     const dadosParaRelatorio = selectedIds.length > 0 
@@ -514,7 +590,6 @@ const App = () => {
 
     const nomeParaRelatorio = nomeConsultor || profileData?.nome || session?.user?.email || 'Consultor';
     
-    // Passando o parâmetro semValores
     const pdfBlob = gerarRelatorioPDF(dadosParaRelatorio, filtros, nomeParaRelatorio, semValores);
     
     const url = URL.createObjectURL(pdfBlob);
@@ -524,10 +599,9 @@ const App = () => {
     a.click();
     URL.revokeObjectURL(url);
     
-    setShowPdfMenu(false); // Fecha menu
+    setShowPdfMenu(false); 
   };
 
-  // --- EXCEL COM SUPORTE A SEM VALORES ---
   const handleExportarExcel = (semValores = false) => {
     const baseDados = servicosFiltradosData;
     const dadosParaExportar = selectedIds.length > 0 
@@ -540,8 +614,6 @@ const App = () => {
     }
 
     const nomeParaRelatorio = nomeConsultor || session?.user?.email || 'Consultor';
-
-    // Chama o novo utilitário
     gerarRelatorioExcel(dadosParaExportar, filtros, nomeParaRelatorio, semValores);
     
     showToast('Planilha Excel gerada com sucesso!', 'sucesso');
@@ -646,7 +718,7 @@ const handleEnviarEmail = async () => {
   const editarServico = (servico) => { 
     setEditingService(servico); 
     setFormData({
-      id: servico.id, // --- AQUI ESTAVA FALTANDO E AGORA FOI CORRIGIDO ---
+      id: servico.id,
       data: servico.data,
       hora_inicial: servico.hora_inicial,
       hora_final: servico.hora_final,
@@ -697,7 +769,18 @@ const handleEnviarEmail = async () => {
       if (filtros.status.length > 0) { if (!filtros.status.includes(s.status)) return false; }
       if (filtros.dataInicio && s.data < filtros.dataInicio) return false;
       if (filtros.dataFim && s.data > filtros.dataFim) return false;
-      if (filtros.solicitantes && filtros.solicitantes.length > 0) { const solNome = (s.solicitante || '').trim(); if (!filtros.solicitantes.includes(solNome)) return false; }
+      
+      // Filtro Solicitante (AGORA LIVRE)
+      if (filtros.solicitantes && filtros.solicitantes.length > 0) { 
+          const solNome = (s.solicitante || '').trim(); 
+          if (!filtros.solicitantes.includes(solNome)) return false; 
+      }
+      
+      // Filtro Demanda (NOVO)
+      if (filtros.demanda && filtros.demanda.length > 0) {
+          const nomeDemanda = s.demandas ? `#${s.demandas.codigo} - ${s.demandas.titulo}` : 'Sem Demanda';
+          if (!filtros.demanda.includes(nomeDemanda)) return false;
+      }
       
       if (filtrosConsultores.length > 0) {
          if (!filtrosConsultores.includes(s.user_id)) return false;
@@ -726,6 +809,20 @@ const handleEnviarEmail = async () => {
   const servicosFiltradosData = servicosFiltrados(); 
   const clientesParaTabela = filtrarClientes(clientes);
 
+  // PREPARAR OPÇÕES PARA OS FILTROS
+  const opcoesCanais = ['Direto', ...canais.map(c => c.nome)];
+  const opcoesClientes = clientes.map(c => c.nome);
+  const opcoesStatus = ['Pendente', 'Em aprovação', 'Aprovado', 'NF Emitida', 'Pago'];
+  
+  // Opções Solicitantes (Agora pega a lista geral carregada)
+  const opcoesSolicitantes = [...new Set(listaSolicitantesGeral.map(s => s.nome.trim()))];
+
+  // Opções Demandas (Formatadas)
+  const opcoesDemandas = listaDemandas.map(d => `#${d.codigo} - ${d.titulo}`);
+  opcoesDemandas.push('Sem Demanda');
+
+  const clientesAtivos = clientes.filter(c => c.ativo !== false);
+
   const stats = {
     totalHoras: servicosFiltradosData.reduce((sum, s) => sum + parseFloat(s.qtd_horas || 0), 0),
     totalValor: servicosFiltradosData.reduce((sum, s) => sum + parseFloat(s.valor_total || 0), 0),
@@ -735,11 +832,6 @@ const handleEnviarEmail = async () => {
 
   if (loading && !session) return <div className="min-h-screen bg-white dark:bg-gray-950 flex items-center justify-center"><div className="animate-spin rounded-full h-16 w-16 border-t-2 border-b-2 border-indigo-600"></div></div>;
   if (!session) return <Auth />;
-
-  const opcoesCanais = ['Direto', ...canais.map(c => c.nome)];
-  const opcoesClientes = clientes.map(c => c.nome);
-  const opcoesStatus = ['Pendente', 'Em aprovação', 'Aprovado', 'NF Emitida', 'Pago'];
-  const clientesAtivos = clientes.filter(c => c.ativo !== false);
 
   if (accessDeniedType) {
       return (
@@ -786,7 +878,6 @@ const handleEnviarEmail = async () => {
               {activeTab === 'admin-finance' && <><Wallet className="text-yellow-600 dark:text-yellow-400" /> Financeiro</>}
               {activeTab === 'team' && <><Users className="text-indigo-600 dark:text-indigo-400" /> Gestão de Equipe</>}
               {activeTab === 'admin-plans' && <><FileText className="text-yellow-600 dark:text-yellow-400" /> Planos & Preços</>}
-              
               {activeTab === 'channels' && <><Building2 className="text-indigo-600 dark:text-indigo-400" /> Canais & Parceiros</>}
             </h1>
           </div>
@@ -839,7 +930,6 @@ const handleEnviarEmail = async () => {
 
                     {activeTab === 'servicos' && (
                         <div className="space-y-6">
-                            {/* --- NOVOS TOTALIZADORES (SUMMARY BAR) --- */}
                             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                                 <div className="bg-white dark:bg-gray-800 p-4 rounded-xl border border-gray-100 dark:border-gray-700 flex items-center justify-between shadow-sm">
                                     <div>
@@ -871,7 +961,6 @@ const handleEnviarEmail = async () => {
                                     </div>
                                 </div>
                             </div>
-                            {/* --- FIM DOS TOTALIZADORES --- */}
 
                             <div className="bg-white dark:bg-gray-800 p-6 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 space-y-4">
                                 <div className="flex justify-between items-center">
@@ -889,17 +978,56 @@ const handleEnviarEmail = async () => {
                                     <div className="col-span-full md:col-span-3 lg:col-span-3 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                                         <MultiSelect options={opcoesCanais} selected={filtros.canal} onChange={(novos) => setFiltros({...filtros, canal: novos})} placeholder="Canais..." />
                                         <MultiSelect options={opcoesClientes} selected={filtros.cliente} onChange={(novos) => setFiltros({...filtros, cliente: novos})} placeholder="Clientes..." />
-                                        <MultiSelect options={todosSolicitantesDoCliente} selected={filtros.solicitantes} onChange={(novos) => setFiltros({...filtros, solicitantes: novos})} placeholder={filtros.cliente.length === 1 ? "Solicitantes..." : (filtros.cliente.length > 1 ? "Selecione 1 Cliente" : "Selecione Cliente")} />
+                                        
+                                        {/* FILTRO SOLICITANTE - AGORA LIVRE E COM TODAS AS OPÇÕES */}
+                                        <MultiSelect 
+                                            options={opcoesSolicitantes} 
+                                            selected={filtros.solicitantes} 
+                                            onChange={(novos) => setFiltros({...filtros, solicitantes: novos})} 
+                                            placeholder="Solicitantes..." 
+                                        />
+                                        
+                                        {/* FILTRO STATUS */}
                                         <MultiSelect options={opcoesStatus} selected={filtros.status} onChange={(novos) => setFiltros({...filtros, status: novos})} placeholder="Status..." />
+                                        
+                                        {/* FILTRO DEMANDA (NOVO) */}
+                                        <MultiSelect 
+                                            options={opcoesDemandas} 
+                                            selected={filtros.demanda} 
+                                            onChange={(novos) => setFiltros({...filtros, demanda: novos})} 
+                                            placeholder="Demandas..." 
+                                        />
                                     </div>
                                     <div className="col-span-full md:col-span-2 lg:col-span-2 grid grid-cols-2 gap-4">
                                         <input type="date" value={filtros.dataInicio} onChange={(e) => setFiltros({...filtros, dataInicio: e.target.value})} className="border border-gray-200 dark:border-gray-700 dark:bg-gray-900 dark:text-white rounded-lg px-3 pb-2 pt-5 text-sm focus:ring-2 focus:ring-indigo-500 outline-none w-full h-[46px]" />
                                         <input type="date" value={filtros.dataFim} onChange={(e) => setFiltros({...filtros, dataFim: e.target.value})} className="border border-gray-200 dark:border-gray-700 dark:bg-gray-900 dark:text-white rounded-lg px-3 pb-2 pt-5 text-sm focus:ring-2 focus:ring-indigo-500 outline-none w-full h-[46px]" />
                                     </div>
                                 </div>
-                                <div className="flex justify-end gap-3 pt-2">
+                                <div className="flex justify-end gap-3 pt-2 items-center">
                                     
-                                    {/* --- BOTÃO EXCEL COM DROPDOWN PREMIUM --- */}
+                                    {/* --- BARRA DE AÇÕES EM MASSA --- */}
+                                    {selectedIds.length > 0 && (
+                                        <div className="flex items-center gap-2 mr-auto bg-indigo-50 dark:bg-indigo-900/20 px-3 py-1.5 rounded-lg border border-indigo-100 dark:border-indigo-800 animate-in fade-in slide-in-from-left-5">
+                                            <span className="text-xs font-bold text-indigo-700 dark:text-indigo-300 whitespace-nowrap">{selectedIds.length} selecionado(s)</span>
+                                            <div className="h-4 w-px bg-indigo-200 dark:bg-indigo-700 mx-1"></div>
+                                            <select 
+                                                className="text-sm bg-transparent border-none focus:ring-0 text-gray-700 dark:text-gray-200 font-medium cursor-pointer py-0 pl-0 pr-6"
+                                                onChange={(e) => {
+                                                    if(e.target.value) handleBulkStatusUpdate(e.target.value);
+                                                    e.target.value = ""; // Reset select
+                                                }}
+                                            >
+                                                <option value="">Alterar Status...</option>
+                                                <option value="Pendente">Pendente</option>
+                                                <option value="Em aprovação">Em aprovação</option>
+                                                <option value="Aprovado">Aprovado</option>
+                                                <option value="NF Emitida">NF Emitida</option>
+                                                <option value="Pago">Pago</option>
+                                            </select>
+                                        </div>
+                                    )}
+
+                                    {/* EXCEL DROPDOWN */}
                                     <div className="relative" ref={excelMenuRef}>
                                         <button 
                                             onClick={() => setShowExcelMenu(!showExcelMenu)} 
@@ -948,7 +1076,7 @@ const handleEnviarEmail = async () => {
                                         )}
                                     </div>
 
-                                    {/* --- BOTÃO PDF COM DROPDOWN PREMIUM --- */}
+                                    {/* PDF DROPDOWN */}
                                     <div className="relative" ref={pdfMenuRef}>
                                         <button 
                                             onClick={() => setShowPdfMenu(!showPdfMenu)} 
