@@ -4,11 +4,11 @@ import { createClient } from '@supabase/supabase-js';
 import { 
   Users, UserPlus, CheckCircle, X, Edit, Ban, Key, 
   Phone, DollarSign, Lock, LayoutGrid, List, Mail, User, 
-  Briefcase, Hash, CreditCard, Building, Landmark, AlertTriangle, Search
+  Briefcase, Hash, CreditCard, Building, Landmark, AlertTriangle, Search, HeartPulse
 } from 'lucide-react';
 import supabase from '../services/supabase';
 
-// --- HELPERS (Mantidos e Otimizados) ---
+// --- HELPERS ---
 const maskPhone = (value) => {
   if (!value) return "";
   return value
@@ -24,18 +24,17 @@ const maskCurrency = (value) => {
   v = (Number(v) / 100).toFixed(2) + "";
   v = v.replace(".", ",");
   v = v.replace(/(\d)(?=(\d{3})+(?!\d))/g, "$1.");
-  return `R$ ${v}`; // Adicionei o prefixo visual
+  return `R$ ${v}`; 
 };
 
 const parseCurrency = (value) => {
   if (!value) return 0;
   if (typeof value === 'number') return value;
-  // Remove R$, espaços e converte
   const clean = String(value).replace('R$', '').trim().replace(/\./g, '').replace(',', '.');
   return parseFloat(clean) || 0;
 };
 
-// --- COMPONENTES AUXILIARES (Definidos FORA para evitar bugs de renderização) ---
+// --- COMPONENTES AUXILIARES ---
 
 const ActionButtons = ({ member, onEdit, onReset, onStatus }) => (
   <div className="flex gap-1 justify-end items-center" onClick={(e) => e.stopPropagation()}>
@@ -65,23 +64,28 @@ const RoleBadge = ({ role }) => {
 // --- COMPONENTE PRINCIPAL ---
 
 const TeamManagement = ({ showToast }) => {
-  const [members, setMembers] = useState([]);
-  const [loading, setLoading] = useState(true);
+  // 1. INICIALIZAÇÃO COM CACHE (Evita tela branca)
+  const [members, setMembers] = useState(() => {
+      const saved = localStorage.getItem('team_members_cache');
+      return saved ? JSON.parse(saved) : [];
+  });
+
+  // 2. LOADING INTELIGENTE (Só mostra spinner se não tiver nada no cache)
+  const [loading, setLoading] = useState(() => {
+      return !localStorage.getItem('team_members_cache');
+  });
+
   const [currentUserRole, setCurrentUserRole] = useState(null);
   
-  // View & Filter States
   const [viewMode, setViewMode] = useState(() => localStorage.getItem('teamViewMode') || 'grid');
   const [searchTerm, setSearchTerm] = useState('');
 
-  // Modals
   const [createModalOpen, setCreateModalOpen] = useState(false);
   const [editModalOpen, setEditModalOpen] = useState(false);
   const [resetModalOpen, setResetModalOpen] = useState(false);
 
-  // Loadings
   const [actionLoading, setActionLoading] = useState(false);
 
-  // Data States
   const [editingMember, setEditingMember] = useState(null);
   const [memberToReset, setMemberToReset] = useState(null);
   const [resetPassword, setResetPassword] = useState('');
@@ -90,6 +94,7 @@ const TeamManagement = ({ showToast }) => {
     nome: '', email: '', senha: '', 
     whatsapp: '', valor_hora: '', 
     banco: '', agencia: '', conta: '', chave_pix: '',
+    nome_emergencia: '', telefone_emergencia: '', 
     role: 'consultor'
   });
 
@@ -97,9 +102,11 @@ const TeamManagement = ({ showToast }) => {
     localStorage.setItem('teamViewMode', viewMode);
   }, [viewMode]);
 
-// Envolvido em useCallback para ser dependência segura
-  const loadData = useCallback(async () => {
-    setLoading(true);
+  // 3. FUNÇÃO DE CARREGAMENTO "SILENCIOSA"
+  const loadData = useCallback(async (silencioso = false) => {
+    // Se não for silencioso, ativa o spinner (apenas se não tiver cache)
+    if (!silencioso) setLoading(true);
+    
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
@@ -119,17 +126,26 @@ const TeamManagement = ({ showToast }) => {
         .eq('consultoria_id', userProfile.consultoria_id)
         .order('nome', { ascending: true });
 
-      setMembers(membersData || []);
+      if (membersData) {
+          setMembers(membersData);
+          // ATUALIZA O CACHE PARA A PRÓXIMA VEZ
+          localStorage.setItem('team_members_cache', JSON.stringify(membersData));
+      }
     } catch (error) {
       console.error('Erro ao carregar equipe:', error);
       if (showToast) showToast("Erro ao carregar dados.", 'erro');
     } finally {
       setLoading(false);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []); // <--- ARRAY VAZIO: Garante que a função é estável e não gera loop
+  }, [showToast]);
 
-  useEffect(() => { loadData(); }, [loadData]);
+  // 4. USE EFFECT INTELIGENTE
+  useEffect(() => {
+      // Se já temos membros no state (vds do cache), carregamos em modo silencioso (true)
+      // Se a lista está vazia, carregamos com loading normal (false)
+      const temDados = members.length > 0;
+      loadData(temDados); 
+  }, [loadData]); // Removida dependência 'members' para evitar loop
 
   // --- HANDLERS ---
 
@@ -140,12 +156,9 @@ const TeamManagement = ({ showToast }) => {
     try {
       if (newMember.senha.length < 6) throw new Error("A senha deve ter no mínimo 6 caracteres.");
 
-      // CRIAÇÃO DE CLIENTE TEMPORÁRIO (Necessário para criar user sem deslogar o admin)
-      // ATENÇÃO: O ideal é usar variáveis de ambiente para a URL e KEY
-      // Se não tiver variáveis, use as strings hardcoded APENAS SE FOR SEGURO (Anon Key)
       const tempClient = createClient(
         process.env.REACT_APP_SUPABASE_URL || 'https://ubwutmslwlefviiabysc.supabase.co', 
-        process.env.REACT_APP_SUPABASE_ANON_KEY || 'SUA_CHAVE_ANONIMA_AQUI', // <--- COLOQUE A CHAVE ANON AQUI SE NÃO TIVER ENV
+        process.env.REACT_APP_SUPABASE_ANON_KEY || 'SUA_CHAVE_ANONIMA_AQUI',
         { auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false } }
       );
 
@@ -158,7 +171,6 @@ const TeamManagement = ({ showToast }) => {
       if (authError) throw authError;
       if (!authData.user) throw new Error("Erro ao criar usuário no Auth.");
 
-      // Vincula na tabela profiles (via Trigger ou RPC, aqui usamos RPC conforme seu código)
       const { data: rpcData, error: rpcError } = await supabase.rpc('vincular_funcionario_criado', {
         email_func: newMember.email.trim(),
         nome_func: newMember.nome,
@@ -168,7 +180,6 @@ const TeamManagement = ({ showToast }) => {
       if (rpcError) throw rpcError;
       if (rpcData && rpcData.status === 'erro') throw new Error(rpcData.msg);
 
-      // Atualiza dados complementares
       const { error: updateError } = await supabase
         .from('profiles')
         .update({
@@ -177,7 +188,9 @@ const TeamManagement = ({ showToast }) => {
           banco: newMember.banco,
           agencia: newMember.agencia,
           conta: newMember.conta,
-          chave_pix: newMember.chave_pix
+          chave_pix: newMember.chave_pix,
+          nome_emergencia: newMember.nome_emergencia,
+          telefone_emergencia: newMember.telefone_emergencia
         })
         .eq('email', newMember.email.trim());
 
@@ -185,8 +198,10 @@ const TeamManagement = ({ showToast }) => {
 
       if (showToast) showToast(`Membro criado com sucesso!`, 'sucesso');
       setCreateModalOpen(false);
-      setNewMember({ nome: '', email: '', senha: '', whatsapp: '', valor_hora: '', banco: '', agencia: '', conta: '', chave_pix: '', role: 'consultor' });
-      loadData();
+      setNewMember({ nome: '', email: '', senha: '', whatsapp: '', valor_hora: '', banco: '', agencia: '', conta: '', chave_pix: '', nome_emergencia: '', telefone_emergencia: '', role: 'consultor' });
+      
+      // Atualiza silenciosamente
+      loadData(true);
 
     } catch (error) {
       console.error(error);
@@ -199,7 +214,6 @@ const TeamManagement = ({ showToast }) => {
   };
 
   const openEditModal = (member) => {
-    // Formata para exibição (R$ 100,00)
     const valorFormatado = member.valor_hora ? maskCurrency(member.valor_hora.toFixed(2)) : '';
     setEditingMember({ ...member, valor_hora: valorFormatado });
     setEditModalOpen(true);
@@ -219,14 +233,18 @@ const TeamManagement = ({ showToast }) => {
                 banco: editingMember.banco,
                 agencia: editingMember.agencia,
                 conta: editingMember.conta,
-                chave_pix: editingMember.chave_pix
+                chave_pix: editingMember.chave_pix,
+                nome_emergencia: editingMember.nome_emergencia,
+                telefone_emergencia: editingMember.telefone_emergencia
             })
             .eq('id', editingMember.id);
 
         if (error) throw error;
         if (showToast) showToast("Dados atualizados!", 'sucesso');
         setEditModalOpen(false);
-        loadData();
+        
+        // Atualiza silenciosamente
+        loadData(true);
     } catch (error) {
         console.error(error);
         if (showToast) showToast("Erro ao atualizar.", 'erro');
@@ -242,7 +260,8 @@ const TeamManagement = ({ showToast }) => {
       try {
         await supabase.from('profiles').update({ ativo: novoStatus }).eq('id', member.id);
         if (showToast) showToast(`Status alterado.`, 'sucesso');
-        loadData();
+        // Atualiza silenciosamente
+        loadData(true);
       } catch (error) { console.error(error); }
   };
 
@@ -272,7 +291,6 @@ const TeamManagement = ({ showToast }) => {
       }
   };
 
-  // Filtragem
   const filteredMembers = members.filter(member => {
     const searchLower = searchTerm.toLowerCase();
     const nome = member.nome ? member.nome.toLowerCase() : '';
@@ -280,7 +298,6 @@ const TeamManagement = ({ showToast }) => {
     return nome.includes(searchLower) || email.includes(searchLower);
   });
 
-  // Função genérica para inputs do modal (evita repetição)
   const handleInputChange = (field, value, isNew = false) => {
       if (isNew) {
           setNewMember(prev => ({ ...prev, [field]: value }));
@@ -289,8 +306,8 @@ const TeamManagement = ({ showToast }) => {
       }
   };
 
-  const handlePhoneChange = (e, setter, state) => {
-    setter({ ...state, whatsapp: maskPhone(e.target.value) });
+  const handlePhoneChange = (e, setter, state, field = 'whatsapp') => {
+    setter({ ...state, [field]: maskPhone(e.target.value) });
   };
 
   const handleCurrencyChange = (e, setter, state) => {
@@ -385,7 +402,7 @@ const TeamManagement = ({ showToast }) => {
                 ))}
             </div>
 
-            {/* --- LIST VIEW (CORRIGIDO) --- */}
+            {/* --- LIST VIEW --- */}
             {viewMode === 'list' && (
                 <div className="hidden md:block bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden animate-fade-in">
                     <table className="w-full text-sm text-left">
@@ -448,8 +465,8 @@ const TeamManagement = ({ showToast }) => {
         <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in w-screen h-screen">
           <div className="bg-white dark:bg-gray-900 w-full max-w-3xl rounded-2xl shadow-2xl flex flex-col max-h-[90vh] border border-gray-200 dark:border-gray-800">
             
-            {/* Header */}
-            <div className="p-6 border-b border-gray-100 dark:border-gray-800 flex justify-between items-center bg-gray-50/50 dark:bg-gray-900/50">
+            {/* Header (Fixo) */}
+            <div className="p-6 border-b border-gray-100 dark:border-gray-800 flex justify-between items-center bg-gray-50/50 dark:bg-gray-900/50 shrink-0">
                 <div>
                     <h3 className="font-bold text-xl text-gray-800 dark:text-white flex items-center gap-2">
                         {createModalOpen ? <UserPlus className="text-indigo-600"/> : <Edit className="text-blue-600"/>}
@@ -460,7 +477,8 @@ const TeamManagement = ({ showToast }) => {
                 <button onClick={() => { setCreateModalOpen(false); setEditModalOpen(false); }} className="text-gray-400 hover:text-gray-600 p-2 hover:bg-gray-200 rounded-full transition-colors"><X size={20}/></button>
             </div>
             
-            <div className="p-8 overflow-y-auto custom-scrollbar flex-1">
+            {/* Conteúdo com Scroll (Flex-1 + min-h-0) */}
+            <div className="p-6 overflow-y-auto custom-scrollbar flex-1 min-h-0">
                 <form id="memberForm" onSubmit={createModalOpen ? handleCreateMember : handleUpdateMember} className="space-y-8">
                     
                     {/* SEÇÃO IDENTIDADE */}
@@ -520,6 +538,35 @@ const TeamManagement = ({ showToast }) => {
                         </div>
                     </div>
 
+                    {/* SEÇÃO EMERGÊNCIA */}
+                    <div>
+                        <h4 className="text-xs font-bold text-red-500 dark:text-red-400 uppercase tracking-wider mb-4 flex items-center gap-2">
+                            <HeartPulse size={14}/> Contato de Emergência
+                        </h4>
+                        <div className="grid md:grid-cols-2 gap-6 bg-red-50 dark:bg-red-900/10 p-4 rounded-xl border border-red-100 dark:border-red-900/30">
+                            <div className="relative">
+                                <User size={18} className="absolute left-3 top-3.5 text-red-400" />
+                                <input 
+                                    type="text" 
+                                    value={createModalOpen ? newMember.nome_emergencia : editingMember?.nome_emergencia} 
+                                    onChange={e => handleInputChange('nome_emergencia', e.target.value, createModalOpen)} 
+                                    className="w-full border border-red-200 dark:border-red-900/50 rounded-xl pl-10 pr-4 py-3 bg-white dark:bg-gray-800 text-gray-900 dark:text-white outline-none focus:ring-2 focus:ring-red-500" 
+                                    placeholder="Nome do Contato" 
+                                />
+                            </div>
+                            <div className="relative">
+                                <Phone size={18} className="absolute left-3 top-3.5 text-red-400" />
+                                <input 
+                                    type="text" 
+                                    value={createModalOpen ? newMember.telefone_emergencia : editingMember?.telefone_emergencia} 
+                                    onChange={e => createModalOpen ? handlePhoneChange(e, setNewMember, newMember, 'telefone_emergencia') : handlePhoneChange(e, setEditingMember, editingMember, 'telefone_emergencia')} 
+                                    className="w-full border border-red-200 dark:border-red-900/50 rounded-xl pl-10 pr-4 py-3 bg-white dark:bg-gray-800 text-gray-900 dark:text-white outline-none focus:ring-2 focus:ring-red-500" 
+                                    placeholder="Telefone de Emergência" 
+                                />
+                            </div>
+                        </div>
+                    </div>
+
                     <div className="h-px bg-gray-100 dark:bg-gray-800 my-4" />
 
                     {/* SEÇÃO FINANCEIRO */}
@@ -535,7 +582,7 @@ const TeamManagement = ({ showToast }) => {
                                     value={createModalOpen ? newMember.whatsapp : editingMember?.whatsapp} 
                                     onChange={e => createModalOpen ? handlePhoneChange(e, setNewMember, newMember) : handlePhoneChange(e, setEditingMember, editingMember)} 
                                     className="w-full border dark:border-gray-700 rounded-xl pl-10 pr-4 py-3 bg-white dark:bg-gray-800 text-gray-900 dark:text-white outline-none focus:ring-2 focus:ring-green-500" 
-                                    placeholder="WhatsApp" 
+                                    placeholder="WhatsApp Pessoal" 
                                 />
                             </div>
                             <div className="relative">
@@ -613,7 +660,8 @@ const TeamManagement = ({ showToast }) => {
                 </form>
             </div>
 
-            <div className="p-6 border-t border-gray-100 dark:border-gray-800 bg-gray-50 dark:bg-gray-900 flex justify-end gap-3 rounded-b-2xl">
+            {/* Footer (Fixo) */}
+            <div className="p-6 border-t border-gray-100 dark:border-gray-800 bg-gray-50 dark:bg-gray-900 flex justify-end gap-3 rounded-b-2xl shrink-0">
                 <button onClick={() => { setCreateModalOpen(false); setEditModalOpen(false); }} className="px-6 py-2.5 rounded-xl text-gray-500 font-bold text-sm hover:bg-gray-200 dark:hover:bg-gray-800 transition-colors">Cancelar</button>
                 <button onClick={() => document.getElementById('memberForm').requestSubmit()} disabled={actionLoading} className="px-8 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-sm shadow-lg shadow-indigo-200 dark:shadow-none transition-all hover:scale-105 active:scale-95 flex items-center gap-2">
                     {createModalOpen ? (actionLoading ? 'Criando...' : 'Confirmar Cadastro') : (actionLoading ? 'Salvando...' : 'Salvar Alterações')}
