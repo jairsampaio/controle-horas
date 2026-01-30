@@ -84,6 +84,9 @@ const App = () => {
   // NOVO ESTADO PARA FILTRO DE CONSULTORES (Elevado do ServicesTable)
   const [filtrosConsultores, setFiltrosConsultores] = useState([]);
 
+  // NOVO ESTADO PARA SELEÇÃO DE SERVIÇOS (CHECKBOX)
+  const [selectedIds, setSelectedIds] = useState([]);
+
   const [filtros, setFiltros] = useState({
     canal: [], 
     cliente: [],
@@ -491,7 +494,17 @@ const App = () => {
   const showToast = (mensagem, tipo = 'sucesso') => { setToast({ visivel: true, mensagem: mensagem, tipo: tipo }); setTimeout(() => { setToast(prev => ({ ...prev, visivel: false })); }, 3000); };
 
   const handleGerarPDF = () => {
-    const dadosParaRelatorio = servicosFiltrados(); 
+    // LÓGICA NOVA: Se tiver itens selecionados, usa eles. Se não, usa todos do filtro.
+    const baseDados = servicosFiltradosData;
+    const dadosParaRelatorio = selectedIds.length > 0 
+        ? baseDados.filter(s => selectedIds.includes(s.id)) 
+        : baseDados;
+
+    if (dadosParaRelatorio.length === 0) {
+        showToast("Nenhum serviço disponível para gerar o relatório.", "erro");
+        return;
+    }
+
     const nomeParaRelatorio = nomeConsultor || profileData?.nome || session?.user?.email || 'Consultor';
     const pdfBlob = gerarRelatorioPDF(dadosParaRelatorio, filtros, nomeParaRelatorio);
     const url = URL.createObjectURL(pdfBlob);
@@ -502,8 +515,20 @@ const App = () => {
     URL.revokeObjectURL(url);
   };
 
-  const handleExportarExcel = () => {
-    const dados = servicosFiltradosData.map(s => ({
+const handleExportarExcel = () => {
+    // 1. LÓGICA DE SELEÇÃO (Igual ao PDF)
+    const baseDados = servicosFiltradosData;
+    const dadosParaExportar = selectedIds.length > 0 
+        ? baseDados.filter(s => selectedIds.includes(s.id)) 
+        : baseDados;
+
+    if (dadosParaExportar.length === 0) {
+        showToast("Nenhum serviço disponível para exportar.", "erro");
+        return;
+    }
+
+    // 2. Mapeamento usando a lista correta (dadosParaExportar)
+    const dados = dadosParaExportar.map(s => ({
         Data: new Date(s.data + 'T00:00:00').toLocaleDateString('pt-BR'),
         Canal: s.canais?.nome || 'Direto',
         Cliente: s.cliente,
@@ -516,58 +541,91 @@ const App = () => {
         Solicitante: s.solicitante || '-',
         'Nota Fiscal': s.numero_nfs || '-'
     }));
-    const ws = XLSX.utils.json_to_sheet(dados); const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, "Serviços"); XLSX.writeFile(wb, `Relatorio_Servicos_${new Date().toISOString().split('T')[0]}.xlsx`); showToast('Planilha Excel gerada com sucesso!', 'sucesso');
+
+    const ws = XLSX.utils.json_to_sheet(dados); 
+    const wb = XLSX.utils.book_new(); 
+    XLSX.utils.book_append_sheet(wb, ws, "Serviços"); 
+    XLSX.writeFile(wb, `Relatorio_Servicos_${new Date().toISOString().split('T')[0]}.xlsx`); 
+    showToast('Planilha Excel gerada com sucesso!', 'sucesso');
   };
 
-  const handleEnviarEmail = async () => {
+const handleEnviarEmail = async () => {
+    // 1. Validações Iniciais
     if (!filtros.cliente || filtros.cliente.length === 0) { showToast("Selecione um cliente no filtro.", "erro"); return; }
+    
+    // Define o que será enviado (Seleção ou Tudo filtrado)
+    const dadosParaEnvio = selectedIds.length > 0 
+        ? servicosFiltradosData.filter(s => selectedIds.includes(s.id))
+        : servicosFiltradosData;
+
+    if (dadosParaEnvio.length === 0) { showToast("Não há serviços selecionados para enviar.", "erro"); return; }
+
     const nomeClienteAlvo = filtros.cliente[0];
     const clienteSelecionado = clientes.find(c => c.nome === nomeClienteAlvo);
     
     if (!clienteSelecionado) { showToast("Cliente não encontrado.", "erro"); return; }
-    if (servicosFiltradosData.length === 0) { showToast("Não há serviços listados para enviar.", "erro"); return; }
 
     setEmailEnviando(true);
     try {
+      // Busca emails
       const { data: todosSolicitantes, error } = await supabase.from('solicitantes').select('*').eq('cliente_id', clienteSelecionado.id);
       if (error) throw error;
       
       const pacotesDeEnvio = {};
       let servicosSemDestino = 0;
 
-      servicosFiltradosData.forEach(servico => {
+      // 2. Loop de Agrupamento
+      dadosParaEnvio.forEach(servico => {
+        // Segurança: só processa serviços do cliente filtrado
         if (servico.cliente !== clienteSelecionado.nome) return;
 
         let emailDestino = null;
         let emailCC = null;
 
-        const solicitanteEncontrado = todosSolicitantes.find(s => s.nome.trim().toLowerCase() === (servico.solicitante || '').trim().toLowerCase());
+        // Tenta achar o solicitante (ignorando maiúsculas/minúsculas e espaços)
+        const nomeNoServico = (servico.solicitante || '').trim().toLowerCase();
+        const solicitanteEncontrado = todosSolicitantes.find(s => s.nome.trim().toLowerCase() === nomeNoServico);
 
         if (solicitanteEncontrado) {
+          // Lógica de Hierarquia
           if (solicitanteEncontrado.coordenador_id) {
+            // Se tem chefe, manda pro chefe
             const chefe = todosSolicitantes.find(s => s.id === solicitanteEncontrado.coordenador_id);
             if (chefe && chefe.email) {
               emailDestino = chefe.email;
               if (solicitanteEncontrado.email) emailCC = solicitanteEncontrado.email;
             }
           } else if (solicitanteEncontrado.email) {
+            // Se não tem chefe, manda pra ele mesmo
             emailDestino = solicitanteEncontrado.email;
           }
         }
 
-        if (!emailDestino) { servicosSemDestino++; return; }
+        // Se não achou email, conta como falha para este item
+        if (!emailDestino) { 
+            console.warn(`Serviço ID ${servico.id}: Sem email para solicitante "${servico.solicitante}"`);
+            servicosSemDestino++; 
+            return; 
+        }
 
-        if (!pacotesDeEnvio[emailDestino]) { pacotesDeEnvio[emailDestino] = { destinatario: emailDestino, servicos: [], ccs: new Set() }; }
+        // Agrupa por destinatário
+        if (!pacotesDeEnvio[emailDestino]) { 
+            pacotesDeEnvio[emailDestino] = { destinatario: emailDestino, servicos: [], ccs: new Set() }; 
+        }
         pacotesDeEnvio[emailDestino].servicos.push(servico);
         if (emailCC) pacotesDeEnvio[emailDestino].ccs.add(emailCC);
       });
 
-      if (Object.keys(pacotesDeEnvio).length === 0) { showToast("Nenhum e-mail de gestor/solicitante encontrado.", "erro"); return; }
+      // 3. Envio
+      if (Object.keys(pacotesDeEnvio).length === 0) { 
+          showToast(`Nenhum email encontrado. Verifique o cadastro dos solicitantes de ${clienteSelecionado.nome}.`, "erro"); 
+          return; 
+      }
 
       let enviados = 0;
       for (const [emailDestino, pacote] of Object.entries(pacotesDeEnvio)) {
         const listaCCs = Array.from(pacote.ccs);
-        showToast(`Enviando para ${emailDestino}...`, "sucesso");
+        showToast(`Enviando para ${emailDestino}...`, "aviso"); // Aviso amarelo enquanto envia
 
         const nomeParaRelatorio = nomeConsultor || session?.user?.email || 'Consultor';
         const pdfBlob = gerarRelatorioPDF(pacote.servicos, filtros, nomeParaRelatorio);
@@ -577,16 +635,30 @@ const App = () => {
         
         const response = await fetch("/api/enviar-email", {
           method: "POST", headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ email: emailDestino, cc: listaCCs, nomeCliente: clienteSelecionado.nome, pdfBase64: pdfBase64, periodo: filtros.dataInicio ? `${new Date(filtros.dataInicio).toLocaleDateString()} a ...` : 'Período Geral' })
+          body: JSON.stringify({ 
+              email: emailDestino, 
+              cc: listaCCs, 
+              nomeCliente: clienteSelecionado.nome, 
+              pdfBase64: pdfBase64, 
+              periodo: filtros.dataInicio ? `${new Date(filtros.dataInicio).toLocaleDateString()} a ...` : 'Período Geral' 
+          })
         });
 
         if (response.ok) enviados++;
       }
 
-      if (servicosSemDestino > 0) { showToast(`Sucesso! ${enviados} emails enviados. (${servicosSemDestino} itens sem contato ignorados)`, "sucesso"); } 
-      else { showToast(`Sucesso Total! ${enviados} email(s) enviados.`, "sucesso"); }
+      if (servicosSemDestino > 0) { 
+          showToast(`Enviados: ${enviados}. Atenção: ${servicosSemDestino} serviços não tinham e-mail cadastrado.`, "aviso"); 
+      } else { 
+          showToast(`Sucesso! ${enviados} pacote(s) de email enviados.`, "sucesso"); 
+      }
 
-    } catch (error) { console.error("Erro:", error); showToast("Erro no processo de envio.", "erro"); } finally { setEmailEnviando(false); }
+    } catch (error) { 
+        console.error("Erro:", error); 
+        showToast("Erro no processo de envio.", "erro"); 
+    } finally { 
+        setEmailEnviando(false); 
+    }
   };
   
   const resetForm = () => { 
@@ -628,31 +700,24 @@ const App = () => {
 
   // --- FUNÇÃO DE DUPLICAÇÃO (NOVO) ---
   const handleDuplicateService = (servicoOriginal) => {
-    // 1. Prepara os dados copiando do original
     const dadosDuplicados = {
-      data: servicoOriginal.data, // Mantém a data original (ou mude para hoje se preferir)
+      data: servicoOriginal.data, 
       hora_inicial: servicoOriginal.hora_inicial,
       hora_final: servicoOriginal.hora_final,
       valor_hora: servicoOriginal.valor_hora,
-      atividade: servicoOriginal.atividade, // Opcional: marca como cópia
+      atividade: servicoOriginal.atividade, // Sem texto "Cópia"
       solicitante: servicoOriginal.solicitante || '',
       cliente: servicoOriginal.cliente,
       canal_id: servicoOriginal.canal_id || '', 
-      status: 'Pendente', // Reseta status para Pendente
-      numero_nfs: '', // Limpa NF
+      status: 'Pendente', 
+      numero_nfs: '', 
       os_op_dpc: servicoOriginal.os_op_dpc || '',
       observacoes: servicoOriginal.observacoes || '',
-      // IMPORTANTE: Mantém o vínculo com a demanda se houver
       demanda_id: servicoOriginal.demanda_id || null 
     };
 
-    // 2. Atualiza o estado do formulário
     setFormData(dadosDuplicados);
-    
-    // 3. Garante que NÃO estamos em modo de edição (ID nulo)
     setEditingService(null); 
-    
-    // 4. Abre o modal
     setShowModal(true);
   };
 
@@ -885,11 +950,13 @@ const App = () => {
                                     onEdit={editarServico} 
                                     onDelete={deletarServico} 
                                     onSort={handleSort} 
-                                    onDuplicate={handleDuplicateService}
                                     sortConfig={sortConfig} 
                                     filtrosConsultores={filtrosConsultores}
                                     setFiltrosConsultores={setFiltrosConsultores}
                                     isAdmin={['admin', 'dono', 'super_admin', 'gestor'].includes(userRole)}
+                                    onDuplicate={handleDuplicateService}
+                                    selectedIds={selectedIds}
+                                    setSelectedIds={setSelectedIds}
                                 />
                             </div>
                             <div className="hidden md:block">
@@ -899,16 +966,14 @@ const App = () => {
                                             onStatusChange={alterarStatusRapido} 
                                             onEdit={editarServico} 
                                             onDelete={deletarServico} 
-                                            
-                                            // ADICIONE ESTA LINHA AQUI:
-                                            onDuplicate={handleDuplicateService} 
-                                            // --------------------------
-
                                             onSort={handleSort} 
                                             sortConfig={sortConfig}
                                             filtrosConsultores={filtrosConsultores}
                                             setFiltrosConsultores={setFiltrosConsultores}
                                             isAdmin={['admin', 'dono', 'super_admin', 'gestor'].includes(userRole)} 
+                                            onDuplicate={handleDuplicateService}
+                                            selectedIds={selectedIds}
+                                            setSelectedIds={setSelectedIds}
                                         />
                                     ) : (
                                         <div className="h-[600px]">
@@ -916,13 +981,10 @@ const App = () => {
                                                 servicos={servicosFiltradosData} 
                                                 onEditService={editarServico} 
                                                 onStatusChange={alterarStatusRapido} 
-                                                
-                                                // SE QUISER NO KANBAN TAMBÉM:
-                                                // onDuplicate={handleDuplicateService}
                                             />
                                         </div>
                                     )}
-                                </div>
+                            </div>
                         </div>
                     )}
 
