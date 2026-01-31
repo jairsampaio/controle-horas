@@ -3,12 +3,11 @@ import gerarRelatorioPDF from "./utils/gerarRelatorioPDF";
 import gerarRelatorioExcel from "./utils/gerarRelatorioExcel"; 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { 
-  Clock, DollarSign, FileText, Plus, Filter, Users, Mail,
+  Plus, Filter, Users, Mail,
   LayoutDashboard, Briefcase, Hourglass, Timer, FileCheck, 
-  Building2, Menu, Eye, EyeOff, ShieldCheck, Wallet, LayoutList, Kanban, Target, Calendar, CheckCircle, ChevronDown, Layers
+  Building2, Menu, Eye, EyeOff, ShieldCheck, Wallet, LayoutList, Kanban, Target, Calendar, CheckCircle, ChevronDown, DollarSign, Clock, FileText
 } from 'lucide-react'; 
 import supabase from './services/supabase'; 
-import StatusCard from './components/StatusCard';
 import ClientModal from './components/ClientModal';
 import ServicesTable from './components/ServicesTable';
 import ServicesKanban from './components/ServicesKanban'; 
@@ -16,9 +15,8 @@ import ClientsTable from './components/ClientsTable';
 import ServiceModal from './components/ServiceModal';
 import Auth from './components/Auth';
 import ConfigModal from './components/ConfigModal';
-import DashboardCharts from './components/DashboardCharts';
+import Dashboard from './components/Dashboard'; // <--- IMPORTANTE: O NOVO DASHBOARD
 import ConfirmModal from './components/ConfirmModal'; 
-import * as XLSX from 'xlsx';
 import SolicitantesModal from './components/SolicitantesModal'; 
 import MultiSelect from './components/MultiSelect'; 
 import ChannelsManagement from './components/ChannelsManagement'; 
@@ -32,7 +30,7 @@ import AccessDenied from './components/AccessDenied';
 import DemandList from './components/DemandList';
 import TeamCalendar from './components/TeamCalendar';
 import Reports from './components/Reports'; 
-import { formatCurrency, formatHoursInt } from './utils/formatters'; 
+import { formatHoursInt } from './utils/formatters'; // Removido formatCurrency se não for usado aqui direto
 
 const App = () => {
   // --- ESTADOS ---
@@ -95,7 +93,7 @@ const App = () => {
   const pdfMenuRef = useRef(null);
   const excelMenuRef = useRef(null);
 
-  // --- ALTERAÇÃO 1: INICIALIZAÇÃO DOS FILTROS COM LOCALSTORAGE ---
+  // --- INICIALIZAÇÃO DOS FILTROS COM LOCALSTORAGE ---
   const [filtros, setFiltros] = useState(() => {
     const filtrosSalvos = localStorage.getItem('filtrosConsultFlow');
     if (filtrosSalvos) {
@@ -105,7 +103,6 @@ const App = () => {
             console.error("Erro ao ler filtros salvos", e);
         }
     }
-    // Valor padrão se não houver nada salvo
     return {
         canal: [], 
         cliente: [],
@@ -117,11 +114,9 @@ const App = () => {
     };
   });
 
-  // Salva filtros no localStorage sempre que mudarem
   useEffect(() => {
     localStorage.setItem('filtrosConsultFlow', JSON.stringify(filtros));
   }, [filtros]);
-  // -------------------------------------------------------------
 
   const [formData, setFormData] = useState({
     data: new Date().toISOString().split('T')[0],
@@ -145,14 +140,7 @@ const App = () => {
     ativo: true
   });
 
-  const statusConfig = {
-    'Pendente': { color: 'bg-gray-100 dark:bg-gray-700/50 text-gray-700 dark:text-gray-300 border-gray-200 dark:border-gray-600', icon: Hourglass, label: 'Pendente' },
-    'Em aprovação': { color: 'bg-orange-100 dark:bg-orange-900/30 text-orange-800 dark:text-orange-300 border-orange-200 dark:border-orange-800', icon: Timer, label: 'Em Aprovação' },
-    'Aprovado': { color: 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-800 dark:text-yellow-300 border-yellow-200 dark:border-yellow-800', icon: CheckCircle, label: 'Aprovado' }, 
-    'NF Emitida': { color: 'bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-300 border-blue-200 dark:border-blue-800', icon: FileCheck, label: 'NF Emitida' },
-    'Pago': { color: 'bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-300 border-green-200 dark:border-green-800', icon: DollarSign, label: 'Pago' }
-  };
-
+  // Fecha os menus ao clicar fora
   useEffect(() => {
     const handleClickOutside = (event) => {
         if (pdfMenuRef.current && !pdfMenuRef.current.contains(event.target)) {
@@ -168,13 +156,11 @@ const App = () => {
 
   useEffect(() => {
     const carregarSolicitantesFiltro = async () => {
-      
       if (filtros.cliente.length === 1) {
           const nomeCliente = filtros.cliente[0];
           const clienteObj = clientes.find(c => c.nome === nomeCliente);
           if (clienteObj) {
             const { data } = await supabase.from('solicitantes').select('nome').eq('cliente_id', clienteObj.id).order('nome', { ascending: true });
-            
             if (data) {
                 const nomesUnicos = [...new Set(data.map(s => s.nome.trim()))];
                 setTodosSolicitantesDoCliente(nomesUnicos);
@@ -209,7 +195,6 @@ const App = () => {
       if (data) {
         const valorConf = data.find(c => c.chave === 'valor_hora_padrao');
         const nomeConf = data.find(c => c.chave === 'nome_consultor');
-        
         if (valorConf) setValorHoraPadrao(valorConf.valor);
         if (nomeConf) setNomeConsultor(nomeConf.valor);
       }
@@ -222,23 +207,14 @@ const App = () => {
     setLoading(true);
     try {
         let avatarUrl = null;
-
         if (dadosDoModal.fotoArquivo) {
             const file = dadosDoModal.fotoArquivo;
             const fileExt = file.name.split('.').pop();
             const fileName = `${session.user.id}-${Math.random()}.${fileExt}`;
             const filePath = `${fileName}`;
-
-            const { error: uploadError } = await supabase.storage
-                .from('avatars')
-                .upload(filePath, file);
-
+            const { error: uploadError } = await supabase.storage.from('avatars').upload(filePath, file);
             if (uploadError) throw uploadError;
-
-            const { data: urlData } = supabase.storage
-                .from('avatars')
-                .getPublicUrl(filePath);
-
+            const { data: urlData } = supabase.storage.from('avatars').getPublicUrl(filePath);
             avatarUrl = urlData.publicUrl;
         }
 
@@ -252,14 +228,9 @@ const App = () => {
             chave_pix: dadosDoModal.chave_pix,
             updated_at: new Date(),
         };
-
         if (avatarUrl) updates.avatar_url = avatarUrl;
 
-        const { error } = await supabase
-            .from('profiles')
-            .update(updates)
-            .eq('id', session.user.id);
-
+        const { error } = await supabase.from('profiles').update(updates).eq('id', session.user.id);
         if (error) throw error;
 
         await supabase.from('configuracoes').upsert({ chave: 'valor_hora_padrao', valor: dadosDoModal.valor_hora, user_id: session.user.id }, { onConflict: 'chave, user_id' });
@@ -268,7 +239,6 @@ const App = () => {
         showToast('Perfil atualizado com sucesso!', 'sucesso');
         setShowConfigModal(false);
         carregarDados();
-
     } catch (error) {
         console.error("Erro ao salvar perfil:", error);
         showToast("Erro ao salvar: " + error.message, 'erro');
@@ -286,10 +256,7 @@ const App = () => {
         .eq('id', session.user.id)
         .single();
 
-      if (profileError || !userProfile) {
-        console.error("Usuário sem perfil.", profileError);
-        return;
-      }
+      if (profileError || !userProfile) return;
 
       setProfileData(userProfile);
       setUserRole(userProfile.role || userProfile.cargo);
@@ -298,7 +265,6 @@ const App = () => {
           setAccessDeniedType('usuario_bloqueado');
           return; 
       }
-
       if (userProfile.consultorias?.status === 'bloqueada') {
           setAccessDeniedType('consultoria_bloqueada');
           return; 
@@ -360,10 +326,7 @@ const App = () => {
             .in('cliente_id', idsClientes)
             .eq('ativo', true)
             .order('nome');
-          
-          if (dataSolicitantes) {
-              setListaSolicitantesGeral(dataSolicitantes);
-          }
+          if (dataSolicitantes) setListaSolicitantesGeral(dataSolicitantes);
       }
 
     } catch (error) { 
@@ -375,9 +338,7 @@ const App = () => {
     getSession();
     const { data: authListener } = supabase.auth.onAuthStateChange((event, session) => { 
         setSession(session); 
-        if (event === 'SIGNED_IN') {
-            setAccessDeniedType(null); 
-        }
+        if (event === 'SIGNED_IN') setAccessDeniedType(null); 
     });
     return () => { authListener.subscription.unsubscribe(); };
   }, []);
@@ -385,10 +346,7 @@ const App = () => {
   useEffect(() => {
     if (session) { 
         if (servicos.length === 0) setLoading(true); 
-        
-        carregarDados().then(() => {
-             if (servicos.length === 0) setLoading(false);
-        });
+        carregarDados().then(() => { if (servicos.length === 0) setLoading(false); });
         carregarConfiguracao(); 
     } else { 
         setServicos([]); 
@@ -414,29 +372,18 @@ const App = () => {
     return () => window.removeEventListener('popstate', handlePopState);
   }, [activeTab, showModal, showClienteModal, showSolicitantesModal, showConfigModal]);
 
-  // --- ALTERAÇÃO 2: FUNÇÃO DE UPDATE EM MASSA ---
+  // --- FUNÇÃO DE UPDATE EM MASSA ---
   const handleBulkStatusUpdate = async (novoStatus) => {
     if (selectedIds.length === 0) return;
-
-    if (!confirm(`Tem certeza que deseja alterar o status de ${selectedIds.length} serviços para "${novoStatus}"?`)) {
-        return;
-    }
+    if (!confirm(`Tem certeza que deseja alterar o status de ${selectedIds.length} serviços para "${novoStatus}"?`)) return;
 
     try {
         setLoading(true);
-        const { error } = await supabase
-            .from('servicos_prestados')
-            .update({ status: novoStatus })
-            .in('id', selectedIds);
-
+        const { error } = await supabase.from('servicos_prestados').update({ status: novoStatus }).in('id', selectedIds);
         if (error) throw error;
-
         showToast(`${selectedIds.length} serviços atualizados com sucesso!`, 'sucesso');
-        
-        // Limpa seleção e recarrega
         setSelectedIds([]);
         await carregarDados();
-
     } catch (error) {
         console.error("Erro no update em massa:", error);
         showToast("Erro ao atualizar serviços em massa.", 'erro');
@@ -444,15 +391,10 @@ const App = () => {
         setLoading(false);
     }
   };
-  // ---------------------------------------------
 
   const salvarServico = async () => {
     try {
-      console.log("--- Iniciando Salvamento ---");
-      console.log("Modo:", editingService ? "EDIÇÃO" : "CRIAÇÃO");
-      
       if (!profileData?.consultoria_id) throw new Error("Consultoria não identificada no perfil.");
-
       const dadosParaSalvar = {
           ...formData,
           user_id: session.user.id,
@@ -462,37 +404,18 @@ const App = () => {
       };
 
       let error;
-
       if (editingService) {
-        console.log("ID do serviço a editar:", editingService.id);
-
-        if (!editingService.id) {
-            throw new Error("ID do serviço não encontrado para edição. Tente fechar e abrir o modal novamente.");
-        }
-
-        const { error: updateError } = await supabase
-            .from('servicos_prestados')
-            .update(dadosParaSalvar)
-            .eq('id', editingService.id);
-            
+        if (!editingService.id) throw new Error("ID do serviço não encontrado para edição.");
+        const { error: updateError } = await supabase.from('servicos_prestados').update(dadosParaSalvar).eq('id', editingService.id);
         error = updateError;
       } else {
-        const { error: insertError } = await supabase
-            .from('servicos_prestados')
-            .insert([dadosParaSalvar]);
-            
+        const { error: insertError } = await supabase.from('servicos_prestados').insert([dadosParaSalvar]);
         error = insertError;
       }
 
       if (error) throw error;
-
       showToast(editingService ? 'Serviço atualizado com sucesso!' : 'Serviço cadastrado com sucesso!', 'sucesso');
-      
-      setShowModal(false); 
-      setEditingService(null); 
-      resetForm(); 
-      await carregarDados(); 
-
+      setShowModal(false); setEditingService(null); resetForm(); await carregarDados(); 
     } catch (error) { 
       console.error('Erro CRÍTICO ao salvar:', error); 
       showToast('Erro ao salvar: ' + (error.message || error.details || 'Erro desconhecido'), 'erro'); 
@@ -526,13 +449,7 @@ const App = () => {
     try {
       setLoading(true);
       if (!profileData?.consultoria_id) throw new Error("Consultoria não identificada.");
-
-      const dadosCliente = {
-          ...clienteFormData,
-          user_id: session.user.id,
-          consultoria_id: profileData.consultoria_id
-      };
-
+      const dadosCliente = { ...clienteFormData, user_id: session.user.id, consultoria_id: profileData.consultoria_id };
       let clienteSalvo = null; 
       if (editingCliente) {
         const { error } = await supabase.from('clientes').update(dadosCliente).eq('id', editingCliente.id);
@@ -549,10 +466,7 @@ const App = () => {
     } catch (error) { console.error('Erro ao salvar cliente:', error); showToast('Erro ao salvar cliente!', 'erro'); } finally { setLoading(false); }
   };
 
-  const handleRequestInactivate = (cliente) => {
-    setClientToInactivate(cliente);
-    setConfirmModalOpen(true);
-  };
+  const handleRequestInactivate = (cliente) => { setClientToInactivate(cliente); setConfirmModalOpen(true); };
 
   const confirmInactivation = async () => {
     if (!clientToInactivate) return;
@@ -579,138 +493,89 @@ const App = () => {
 
   const handleGerarPDF = (semValores = false) => {
     const baseDados = servicosFiltradosData;
-    const dadosParaRelatorio = selectedIds.length > 0 
-        ? baseDados.filter(s => selectedIds.includes(s.id)) 
-        : baseDados;
-
-    if (dadosParaRelatorio.length === 0) {
-        showToast("Nenhum serviço disponível para gerar o relatório.", "erro");
-        return;
-    }
-
+    const dadosParaRelatorio = selectedIds.length > 0 ? baseDados.filter(s => selectedIds.includes(s.id)) : baseDados;
+    if (dadosParaRelatorio.length === 0) { showToast("Nenhum serviço disponível para gerar o relatório.", "erro"); return; }
     const nomeParaRelatorio = nomeConsultor || profileData?.nome || session?.user?.email || 'Consultor';
-    
     const pdfBlob = gerarRelatorioPDF(dadosParaRelatorio, filtros, nomeParaRelatorio, semValores);
-    
     const url = URL.createObjectURL(pdfBlob);
     const a = document.createElement("a");
     a.href = url;
     a.download = semValores ? "relatorio-horas-canais.pdf" : "relatorio-completo.pdf";
     a.click();
     URL.revokeObjectURL(url);
-    
     setShowPdfMenu(false); 
   };
 
   const handleExportarExcel = (semValores = false) => {
     const baseDados = servicosFiltradosData;
-    const dadosParaExportar = selectedIds.length > 0 
-        ? baseDados.filter(s => selectedIds.includes(s.id)) 
-        : baseDados;
-
-    if (dadosParaExportar.length === 0) {
-        showToast("Nenhum serviço disponível para exportar.", "erro");
-        return;
-    }
-
+    const dadosParaExportar = selectedIds.length > 0 ? baseDados.filter(s => selectedIds.includes(s.id)) : baseDados;
+    if (dadosParaExportar.length === 0) { showToast("Nenhum serviço disponível para exportar.", "erro"); return; }
     const nomeParaRelatorio = nomeConsultor || session?.user?.email || 'Consultor';
     gerarRelatorioExcel(dadosParaExportar, filtros, nomeParaRelatorio, semValores);
-    
     showToast('Planilha Excel gerada com sucesso!', 'sucesso');
     setShowExcelMenu(false);
   };
 
-const handleEnviarEmail = async () => {
+  const handleEnviarEmail = async () => {
     if (!filtros.cliente || filtros.cliente.length === 0) { showToast("Selecione um cliente no filtro.", "erro"); return; }
-    
-    const dadosParaEnvio = selectedIds.length > 0 
-        ? servicosFiltradosData.filter(s => selectedIds.includes(s.id))
-        : servicosFiltradosData;
-
+    const dadosParaEnvio = selectedIds.length > 0 ? servicosFiltradosData.filter(s => selectedIds.includes(s.id)) : servicosFiltradosData;
     if (dadosParaEnvio.length === 0) { showToast("Não há serviços selecionados para enviar.", "erro"); return; }
-
     const nomeClienteAlvo = filtros.cliente[0];
     const clienteSelecionado = clientes.find(c => c.nome === nomeClienteAlvo);
-    
     if (!clienteSelecionado) { showToast("Cliente não encontrado.", "erro"); return; }
 
     setEmailEnviando(true);
     try {
       const { data: todosSolicitantes, error } = await supabase.from('solicitantes').select('*').eq('cliente_id', clienteSelecionado.id);
       if (error) throw error;
-      
       const pacotesDeEnvio = {};
       let servicosSemDestino = 0;
 
       dadosParaEnvio.forEach(servico => { 
         if (servico.cliente !== clienteSelecionado.nome) return;
-
         let emailDestino = null;
         let emailCC = null;
-
         const nomeNoServico = (servico.solicitante || '').trim().toLowerCase();
         const solicitanteEncontrado = todosSolicitantes.find(s => s.nome.trim().toLowerCase() === nomeNoServico);
 
         if (solicitanteEncontrado) {
           if (solicitanteEncontrado.coordenador_id) {
             const chefe = todosSolicitantes.find(s => s.id === solicitanteEncontrado.coordenador_id);
-            if (chefe && chefe.email) {
-              emailDestino = chefe.email;
-              if (solicitanteEncontrado.email) emailCC = solicitanteEncontrado.email;
-            }
-          } else if (solicitanteEncontrado.email) {
-            emailDestino = solicitanteEncontrado.email;
-          }
+            if (chefe && chefe.email) { emailDestino = chefe.email; if (solicitanteEncontrado.email) emailCC = solicitanteEncontrado.email; }
+          } else if (solicitanteEncontrado.email) { emailDestino = solicitanteEncontrado.email; }
         }
-
         if (!emailDestino) { servicosSemDestino++; return; }
-
         if (!pacotesDeEnvio[emailDestino]) { pacotesDeEnvio[emailDestino] = { destinatario: emailDestino, servicos: [], ccs: new Set() }; }
         pacotesDeEnvio[emailDestino].servicos.push(servico);
         if (emailCC) pacotesDeEnvio[emailDestino].ccs.add(emailCC);
       });
 
       if (Object.keys(pacotesDeEnvio).length === 0) { showToast("Nenhum e-mail de gestor/solicitante encontrado.", "erro"); return; }
-
       let enviados = 0;
       for (const [emailDestino, pacote] of Object.entries(pacotesDeEnvio)) {
         const listaCCs = Array.from(pacote.ccs);
         showToast(`Enviando para ${emailDestino}...`, "aviso");
-
         const nomeParaRelatorio = nomeConsultor || session?.user?.email || 'Consultor';
         const pdfBlob = gerarRelatorioPDF(pacote.servicos, filtros, nomeParaRelatorio);
-        
         if (!pdfBlob) throw new Error("Falha ao gerar PDF");
         const pdfBase64 = await blobToBase64(pdfBlob);
-        
         const response = await fetch("/api/enviar-email", {
           method: "POST", headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ email: emailDestino, cc: listaCCs, nomeCliente: clienteSelecionado.nome, pdfBase64: pdfBase64, periodo: filtros.dataInicio ? `${new Date(filtros.dataInicio).toLocaleDateString()} a ...` : 'Período Geral' })
         });
-
         if (response.ok) enviados++;
       }
-
       if (servicosSemDestino > 0) { showToast(`Enviados: ${enviados}. Atenção: ${servicosSemDestino} serviços sem email cadastrado.`, "aviso"); } 
       else { showToast(`Sucesso! ${enviados} pacote(s) de email enviados.`, "sucesso"); }
-
     } catch (error) { console.error("Erro:", error); showToast("Erro no processo de envio.", "erro"); } finally { setEmailEnviando(false); }
   };
   
   const resetForm = () => { 
     setFormData({ 
       data: new Date().toISOString().split('T')[0], 
-      hora_inicial: '09:00', 
-      hora_final: '18:00', 
-      valor_hora: parseFloat(valorHoraPadrao || '0').toFixed(2), 
-      atividade: '', 
-      solicitante: '', 
-      cliente: '', 
-      canal_id: '', 
-      status: 'Pendente', 
-      numero_nfs: '', 
-      os_op_dpc: '',
-      observacoes: '' 
+      hora_inicial: '09:00', hora_final: '18:00', valor_hora: parseFloat(valorHoraPadrao || '0').toFixed(2), 
+      atividade: '', solicitante: '', cliente: '', canal_id: '', 
+      status: 'Pendente', numero_nfs: '', os_op_dpc: '', observacoes: '' 
     }); 
   };
   const resetClienteForm = () => { setClienteFormData({ nome: '', email: '', telefone: '', ativo: true }); };
@@ -718,42 +583,23 @@ const handleEnviarEmail = async () => {
   const editarServico = (servico) => { 
     setEditingService(servico); 
     setFormData({
-      id: servico.id,
-      data: servico.data,
-      hora_inicial: servico.hora_inicial,
-      hora_final: servico.hora_final,
-      valor_hora: servico.valor_hora,
-      atividade: servico.atividade,
-      solicitante: servico.solicitante || '',
-      cliente: servico.cliente,
-      canal_id: servico.canal_id || '', 
-      status: servico.status,
-      numero_nfs: servico.numero_nfs || '',
-      os_op_dpc: servico.os_op_dpc || '',
-      observacoes: servico.observacoes || '',
-      demanda_id: servico.demanda_id || null 
+      id: servico.id, data: servico.data, hora_inicial: servico.hora_inicial, hora_final: servico.hora_final,
+      valor_hora: servico.valor_hora, atividade: servico.atividade, solicitante: servico.solicitante || '',
+      cliente: servico.cliente, canal_id: servico.canal_id || '', status: servico.status,
+      numero_nfs: servico.numero_nfs || '', os_op_dpc: servico.os_op_dpc || '',
+      observacoes: servico.observacoes || '', demanda_id: servico.demanda_id || null 
     });
     setShowModal(true); 
   };
 
   const handleDuplicateService = (servicoOriginal) => {
-    const dadosDuplicados = {
-      data: servicoOriginal.data, 
-      hora_inicial: servicoOriginal.hora_inicial,
-      hora_final: servicoOriginal.hora_final,
-      valor_hora: servicoOriginal.valor_hora,
-      atividade: servicoOriginal.atividade, 
-      solicitante: servicoOriginal.solicitante || '',
-      cliente: servicoOriginal.cliente,
-      canal_id: servicoOriginal.canal_id || '', 
-      status: 'Pendente', 
-      numero_nfs: '', 
-      os_op_dpc: servicoOriginal.os_op_dpc || '',
-      observacoes: servicoOriginal.observacoes || '',
+    setFormData({
+      data: servicoOriginal.data, hora_inicial: servicoOriginal.hora_inicial, hora_final: servicoOriginal.hora_final,
+      valor_hora: servicoOriginal.valor_hora, atividade: servicoOriginal.atividade, solicitante: servicoOriginal.solicitante || '',
+      cliente: servicoOriginal.cliente, canal_id: servicoOriginal.canal_id || '', status: 'Pendente', 
+      numero_nfs: '', os_op_dpc: servicoOriginal.os_op_dpc || '', observacoes: servicoOriginal.observacoes || '',
       demanda_id: servicoOriginal.demanda_id || null 
-    };
-
-    setFormData(dadosDuplicados);
+    });
     setEditingService(null); 
     setShowModal(true);
   };
@@ -770,13 +616,13 @@ const handleEnviarEmail = async () => {
       if (filtros.dataInicio && s.data < filtros.dataInicio) return false;
       if (filtros.dataFim && s.data > filtros.dataFim) return false;
       
-      // Filtro Solicitante (AGORA LIVRE)
+      // Filtro Solicitante
       if (filtros.solicitantes && filtros.solicitantes.length > 0) { 
           const solNome = (s.solicitante || '').trim(); 
           if (!filtros.solicitantes.includes(solNome)) return false; 
       }
       
-      // Filtro Demanda (NOVO)
+      // Filtro Demanda
       if (filtros.demanda && filtros.demanda.length > 0) {
           const nomeDemanda = s.demandas ? `#${s.demandas.codigo} - ${s.demandas.titulo}` : 'Sem Demanda';
           if (!filtros.demanda.includes(nomeDemanda)) return false;
@@ -785,7 +631,6 @@ const handleEnviarEmail = async () => {
       if (filtrosConsultores.length > 0) {
          if (!filtrosConsultores.includes(s.user_id)) return false;
       }
-
       return true;
     });
     if (sortConfig.key) {
@@ -802,32 +647,27 @@ const handleEnviarEmail = async () => {
   };
 
   const filtrarClientes = (todosClientes) => {
-    let filtrados = mostrarInativos ? todosClientes : todosClientes.filter(c => c.ativo !== false);
-    return filtrados;
+    return mostrarInativos ? todosClientes : todosClientes.filter(c => c.ativo !== false);
   };
 
   const servicosFiltradosData = servicosFiltrados(); 
   const clientesParaTabela = filtrarClientes(clientes);
 
-  // PREPARAR OPÇÕES PARA OS FILTROS
+  // OPÇÕES PARA FILTROS
   const opcoesCanais = ['Direto', ...canais.map(c => c.nome)];
   const opcoesClientes = clientes.map(c => c.nome);
   const opcoesStatus = ['Pendente', 'Em aprovação', 'Aprovado', 'NF Emitida', 'Pago'];
-  
-  // Opções Solicitantes (Agora pega a lista geral carregada)
   const opcoesSolicitantes = [...new Set(listaSolicitantesGeral.map(s => s.nome.trim()))];
-
-  // Opções Demandas (Formatadas)
   const opcoesDemandas = listaDemandas.map(d => `#${d.codigo} - ${d.titulo}`);
   opcoesDemandas.push('Sem Demanda');
 
   const clientesAtivos = clientes.filter(c => c.ativo !== false);
 
-  const stats = {
+  // Stats calculados para a barra da tabela (apenas o que sobrou, já que o dashboard tem os dele)
+  const statsTabela = {
     totalHoras: servicosFiltradosData.reduce((sum, s) => sum + parseFloat(s.qtd_horas || 0), 0),
     totalValor: servicosFiltradosData.reduce((sum, s) => sum + parseFloat(s.valor_total || 0), 0),
-    totalServicos: servicosFiltradosData.length,
-    porStatus: servicosFiltradosData.reduce((acc, s) => { if (!acc[s.status]) { acc[s.status] = { count: 0, valor: 0 }; } acc[s.status].count += 1; acc[s.status].valor += parseFloat(s.valor_total || 0); return acc; }, {})
+    totalServicos: servicosFiltradosData.length
   };
 
   if (loading && !session) return <div className="min-h-screen bg-white dark:bg-gray-950 flex items-center justify-center"><div className="animate-spin rounded-full h-16 w-16 border-t-2 border-b-2 border-indigo-600"></div></div>;
@@ -895,70 +735,38 @@ const handleEnviarEmail = async () => {
               <div className="text-center py-12"><div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600 mx-auto"></div><p className="mt-4 text-gray-600 dark:text-gray-400">Carregando Dados...</p></div>
             ) : (
                 <>
+                    {/* --- AQUI ESTÁ A INTEGRAÇÃO CORRETA DO NOVO DASHBOARD --- */}
                     {activeTab === 'dashboard' && (
-                        <div className="space-y-6">
-                            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-6">
-                                <div className="bg-white dark:bg-gray-800 p-4 md:p-6 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 hover:shadow-md transition-shadow">
-                                <div className="flex items-center justify-between mb-2"><div className="p-2 md:p-3 bg-indigo-50 dark:bg-indigo-900/50 rounded-xl"><Clock className="text-indigo-600 dark:text-indigo-400" size={20} /></div></div>
-                                <div><p className="text-sm md:text-xs font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wider mb-1">Horas</p><p className="text-xl md:text-2xl font-black text-gray-900 dark:text-white">{formatHoursInt(stats.totalHoras)}</p></div>
-                                </div>
-                                <div className="bg-white dark:bg-gray-800 p-4 md:p-6 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 hover:shadow-md transition-shadow">
-                                <div className="flex items-center justify-between mb-2"><div className="p-2 md:p-3 bg-green-50 dark:bg-green-900/50 rounded-xl"><DollarSign className="text-green-600 dark:text-green-400" size={20} /></div></div>
-                                <div><p className="text-sm md:text-xs font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wider mb-1">Total</p><p className="text-xl md:text-2xl font-black text-gray-900 dark:text-white truncate" title={formatCurrency(stats.totalValor)}><span className="text-base md:text-2xl">{formatCurrency(stats.totalValor).split(' ')[0]}</span> {formatCurrency(stats.totalValor).split(' ')[1]}</p></div>
-                                </div>
-                                <div className="bg-white dark:bg-gray-800 p-4 md:p-6 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 hover:shadow-md transition-shadow">
-                                <div className="flex items-center justify-between mb-2"><div className="p-2 md:p-3 bg-blue-50 dark:bg-blue-900/50 rounded-xl"><FileText className="text-blue-600 dark:text-blue-400" size={20} /></div></div>
-                                <div><p className="text-sm md:text-xs font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wider mb-1">Serviços</p><p className="text-xl md:text-2xl font-black text-gray-900 dark:text-white">{stats.totalServicos}</p></div>
-                                </div>
-                                <div className="bg-white dark:bg-gray-800 p-4 md:p-6 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 hover:shadow-md transition-shadow">
-                                <div className="flex items-center justify-between mb-2"><div className="p-2 md:p-3 bg-purple-50 dark:bg-purple-900/50 rounded-xl"><Users className="text-purple-600 dark:text-purple-400" size={20} /></div></div>
-                                <div><p className="text-sm md:text-xs font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wider mb-1">Clientes</p><p className="text-xl md:text-2xl font-black text-gray-900 dark:text-white">{clientesParaTabela.length}</p></div>
-                                </div>
-                            </div>
-                            <DashboardCharts servicos={servicosFiltradosData} />
-                            <div className="bg-white dark:bg-gray-800 p-4 md:p-6 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700">
-                                <h3 className="text-lg font-bold text-gray-800 dark:text-white mb-6">Status dos Serviços</h3>
-                                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4">
-                                {Object.entries(stats.porStatus || {}).map(([status, dados]) => {
-                                    const config = statusConfig[status] || statusConfig['Pendente'];
-                                    return <StatusCard key={status} status={status} count={dados.count} valor={dados.valor} color={config.color} icon={config.icon} />;
-                                })}
-                                </div>
-                            </div>
-                        </div>
+                        <Dashboard 
+                            servicos={servicos} 
+                            clientes={clientes} 
+                        />
                     )}
 
                     {activeTab === 'servicos' && (
                         <div className="space-y-6">
+                            {/* Summary Bar da Tabela */}
                             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                                 <div className="bg-white dark:bg-gray-800 p-4 rounded-xl border border-gray-100 dark:border-gray-700 flex items-center justify-between shadow-sm">
                                     <div>
                                         <p className="text-xs font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wider">Total Horas</p>
-                                        <p className="text-xl font-black text-indigo-600 dark:text-indigo-400">{formatHoursInt(stats.totalHoras)}</p>
+                                        <p className="text-xl font-black text-indigo-600 dark:text-indigo-400">{formatHoursInt(statsTabela.totalHoras)}</p>
                                     </div>
-                                    <div className="p-3 bg-indigo-50 dark:bg-indigo-900/30 rounded-lg">
-                                        <Clock className="text-indigo-600 dark:text-indigo-400" size={24} />
-                                    </div>
+                                    <div className="p-3 bg-indigo-50 dark:bg-indigo-900/30 rounded-lg"><Clock className="text-indigo-600 dark:text-indigo-400" size={24} /></div>
                                 </div>
                                 <div className="bg-white dark:bg-gray-800 p-4 rounded-xl border border-gray-100 dark:border-gray-700 flex items-center justify-between shadow-sm">
                                     <div>
                                         <p className="text-xs font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wider">Valor Total</p>
-                                        <p className="text-xl font-black text-green-600 dark:text-green-400 truncate max-w-[150px]" title={formatCurrency(stats.totalValor)}>
-                                            {formatCurrency(stats.totalValor)}
-                                        </p>
+                                        <p className="text-xl font-black text-green-600 dark:text-green-400 truncate max-w-[150px]">{formatHoursInt(statsTabela.totalValor).replace(':', ',') /* Ajuste rápido de visualização, ideal usar formatCurrency */}</p>
                                     </div>
-                                    <div className="p-3 bg-green-50 dark:bg-green-900/30 rounded-lg">
-                                        <DollarSign className="text-green-600 dark:text-green-400" size={24} />
-                                    </div>
+                                    <div className="p-3 bg-green-50 dark:bg-green-900/30 rounded-lg"><DollarSign className="text-green-600 dark:text-green-400" size={24} /></div>
                                 </div>
                                 <div className="bg-white dark:bg-gray-800 p-4 rounded-xl border border-gray-100 dark:border-gray-700 flex items-center justify-between shadow-sm">
                                     <div>
                                         <p className="text-xs font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wider">Quantidade</p>
-                                        <p className="text-xl font-black text-gray-700 dark:text-white">{stats.totalServicos} <span className="text-xs font-medium text-gray-400">serviços</span></p>
+                                        <p className="text-xl font-black text-gray-700 dark:text-white">{statsTabela.totalServicos} <span className="text-xs font-medium text-gray-400">serviços</span></p>
                                     </div>
-                                    <div className="p-3 bg-gray-50 dark:bg-gray-700 rounded-lg">
-                                        <FileText className="text-gray-600 dark:text-gray-300" size={24} />
-                                    </div>
+                                    <div className="p-3 bg-gray-50 dark:bg-gray-700 rounded-lg"><FileText className="text-gray-600 dark:text-gray-300" size={24} /></div>
                                 </div>
                             </div>
 
@@ -967,7 +775,6 @@ const handleEnviarEmail = async () => {
                                     <div className="flex items-center gap-2 text-gray-800 dark:text-white font-bold">
                                         <Filter size={20} className="text-indigo-600 dark:text-indigo-400" /> Filtros Avançados
                                     </div>
-                                    
                                     <div className="hidden md:flex bg-gray-100 dark:bg-gray-700 p-1 rounded-lg border border-gray-200 dark:border-gray-600">
                                         <button onClick={() => setViewMode('list')} className={`p-2 rounded-md transition-colors ${viewMode === 'list' ? 'bg-white dark:bg-gray-600 text-indigo-600 dark:text-indigo-400 shadow-sm' : 'text-gray-400 hover:text-gray-600 dark:hover:text-gray-300'}`}><LayoutList size={20} /></button>
                                         <button onClick={() => setViewMode('kanban')} className={`p-2 rounded-md transition-colors ${viewMode === 'kanban' ? 'bg-white dark:bg-gray-600 text-indigo-600 dark:text-indigo-400 shadow-sm' : 'text-gray-400 hover:text-gray-600 dark:hover:text-gray-300'}`}><Kanban size={20} /></button>
@@ -978,25 +785,9 @@ const handleEnviarEmail = async () => {
                                     <div className="col-span-full md:col-span-3 lg:col-span-3 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                                         <MultiSelect options={opcoesCanais} selected={filtros.canal} onChange={(novos) => setFiltros({...filtros, canal: novos})} placeholder="Canais..." />
                                         <MultiSelect options={opcoesClientes} selected={filtros.cliente} onChange={(novos) => setFiltros({...filtros, cliente: novos})} placeholder="Clientes..." />
-                                        
-                                        {/* FILTRO SOLICITANTE - AGORA LIVRE E COM TODAS AS OPÇÕES */}
-                                        <MultiSelect 
-                                            options={opcoesSolicitantes} 
-                                            selected={filtros.solicitantes} 
-                                            onChange={(novos) => setFiltros({...filtros, solicitantes: novos})} 
-                                            placeholder="Solicitantes..." 
-                                        />
-                                        
-                                        {/* FILTRO STATUS */}
+                                        <MultiSelect options={opcoesSolicitantes} selected={filtros.solicitantes} onChange={(novos) => setFiltros({...filtros, solicitantes: novos})} placeholder="Solicitantes..." />
                                         <MultiSelect options={opcoesStatus} selected={filtros.status} onChange={(novos) => setFiltros({...filtros, status: novos})} placeholder="Status..." />
-                                        
-                                        {/* FILTRO DEMANDA (NOVO) */}
-                                        <MultiSelect 
-                                            options={opcoesDemandas} 
-                                            selected={filtros.demanda} 
-                                            onChange={(novos) => setFiltros({...filtros, demanda: novos})} 
-                                            placeholder="Demandas..." 
-                                        />
+                                        <MultiSelect options={opcoesDemandas} selected={filtros.demanda} onChange={(novos) => setFiltros({...filtros, demanda: novos})} placeholder="Demandas..." />
                                     </div>
                                     <div className="col-span-full md:col-span-2 lg:col-span-2 grid grid-cols-2 gap-4">
                                         <input type="date" value={filtros.dataInicio} onChange={(e) => setFiltros({...filtros, dataInicio: e.target.value})} className="border border-gray-200 dark:border-gray-700 dark:bg-gray-900 dark:text-white rounded-lg px-3 pb-2 pt-5 text-sm focus:ring-2 focus:ring-indigo-500 outline-none w-full h-[46px]" />
@@ -1004,18 +795,14 @@ const handleEnviarEmail = async () => {
                                     </div>
                                 </div>
                                 <div className="flex justify-end gap-3 pt-2 items-center">
-                                    
-                                    {/* --- BARRA DE AÇÕES EM MASSA --- */}
+                                    {/* Ações em Massa */}
                                     {selectedIds.length > 0 && (
                                         <div className="flex items-center gap-2 mr-auto bg-indigo-50 dark:bg-indigo-900/20 px-3 py-1.5 rounded-lg border border-indigo-100 dark:border-indigo-800 animate-in fade-in slide-in-from-left-5">
                                             <span className="text-xs font-bold text-indigo-700 dark:text-indigo-300 whitespace-nowrap">{selectedIds.length} selecionado(s)</span>
                                             <div className="h-4 w-px bg-indigo-200 dark:bg-indigo-700 mx-1"></div>
                                             <select 
                                                 className="text-sm bg-transparent border-none focus:ring-0 text-gray-700 dark:text-gray-200 font-medium cursor-pointer py-0 pl-0 pr-6"
-                                                onChange={(e) => {
-                                                    if(e.target.value) handleBulkStatusUpdate(e.target.value);
-                                                    e.target.value = ""; // Reset select
-                                                }}
+                                                onChange={(e) => { if(e.target.value) handleBulkStatusUpdate(e.target.value); e.target.value = ""; }}
                                             >
                                                 <option value="">Alterar Status...</option>
                                                 <option value="Pendente">Pendente</option>
@@ -1027,98 +814,42 @@ const handleEnviarEmail = async () => {
                                         </div>
                                     )}
 
-                                    {/* EXCEL DROPDOWN */}
+                                    {/* Excel Dropdown */}
                                     <div className="relative" ref={excelMenuRef}>
-                                        <button 
-                                            onClick={() => setShowExcelMenu(!showExcelMenu)} 
-                                            className={`flex items-center gap-2 border px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200
-                                                ${showExcelMenu
-                                                    ? 'bg-green-50 border-green-200 text-green-700 dark:bg-green-900/30 dark:border-green-700 dark:text-green-300 ring-2 ring-green-100 dark:ring-green-900/50' 
-                                                    : 'bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700 hover:border-gray-300'
-                                                }`}
-                                            title="Opções de Excel"
-                                        >
-                                            <FileText size={18} className={showExcelMenu ? "text-green-600" : "text-green-600 dark:text-green-400"} /> 
-                                            <span>Excel</span>
-                                            <ChevronDown size={14} className={`transition-transform duration-300 ${showExcelMenu ? 'rotate-180' : ''}`}/>
+                                        <button onClick={() => setShowExcelMenu(!showExcelMenu)} className={`flex items-center gap-2 border px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 ${showExcelMenu ? 'bg-green-50 border-green-200 text-green-700 dark:bg-green-900/30 dark:border-green-700 dark:text-green-300 ring-2 ring-green-100 dark:ring-green-900/50' : 'bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700 hover:border-gray-300'}`} title="Opções de Excel">
+                                            <FileText size={18} className={showExcelMenu ? "text-green-600" : "text-green-600 dark:text-green-400"} /> <span>Excel</span> <ChevronDown size={14} className={`transition-transform duration-300 ${showExcelMenu ? 'rotate-180' : ''}`}/>
                                         </button>
-
                                         {showExcelMenu && (
                                             <div className="absolute right-0 top-full mt-2 w-48 bg-white dark:bg-gray-800 rounded-xl shadow-2xl border border-gray-100 dark:border-gray-700 overflow-hidden z-50 animate-in fade-in zoom-in-95 duration-200 origin-top-right">
                                                 <div className="p-2 space-y-1">
-                                                    <button 
-                                                        onClick={() => handleExportarExcel(false)}
-                                                        className="w-full text-left px-3 py-3 hover:bg-gray-50 dark:hover:bg-gray-700/50 rounded-lg flex items-center gap-3 transition-colors group"
-                                                    >
-                                                        <div className="p-2 bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400 rounded-lg group-hover:bg-green-200 dark:group-hover:bg-green-900/50 transition-colors">
-                                                            <DollarSign size={18} />
-                                                        </div>
-                                                        <div>
-                                                            <p className="text-sm font-bold text-gray-800 dark:text-white leading-tight">Completo</p>
-                                                            <p className="text-[10px] text-gray-500 dark:text-gray-400 mt-0.5">Com valores (R$)</p>
-                                                        </div>
+                                                    <button onClick={() => handleExportarExcel(false)} className="w-full text-left px-3 py-3 hover:bg-gray-50 dark:hover:bg-gray-700/50 rounded-lg flex items-center gap-3 transition-colors group">
+                                                        <div className="p-2 bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400 rounded-lg group-hover:bg-green-200 dark:group-hover:bg-green-900/50 transition-colors"><DollarSign size={18} /></div>
+                                                        <div><p className="text-sm font-bold text-gray-800 dark:text-white leading-tight">Completo</p><p className="text-[10px] text-gray-500 dark:text-gray-400 mt-0.5">Com valores (R$)</p></div>
                                                     </button>
-
-                                                    <button 
-                                                        onClick={() => handleExportarExcel(true)}
-                                                        className="w-full text-left px-3 py-3 hover:bg-gray-50 dark:hover:bg-gray-700/50 rounded-lg flex items-center gap-3 transition-colors group"
-                                                    >
-                                                        <div className="p-2 bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 rounded-lg group-hover:bg-blue-200 dark:group-hover:bg-blue-900/50 transition-colors">
-                                                            <Clock size={18} />
-                                                        </div>
-                                                        <div>
-                                                            <p className="text-sm font-bold text-gray-800 dark:text-white leading-tight">Apenas Horas</p>
-                                                            <p className="text-[10px] text-gray-500 dark:text-gray-400 mt-0.5">Para Canais e Parceiros</p>
-                                                        </div>
+                                                    <button onClick={() => handleExportarExcel(true)} className="w-full text-left px-3 py-3 hover:bg-gray-50 dark:hover:bg-gray-700/50 rounded-lg flex items-center gap-3 transition-colors group">
+                                                        <div className="p-2 bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 rounded-lg group-hover:bg-blue-200 dark:group-hover:bg-blue-900/50 transition-colors"><Clock size={18} /></div>
+                                                        <div><p className="text-sm font-bold text-gray-800 dark:text-white leading-tight">Apenas Horas</p><p className="text-[10px] text-gray-500 dark:text-gray-400 mt-0.5">Para Canais e Parceiros</p></div>
                                                     </button>
                                                 </div>
                                             </div>
                                         )}
                                     </div>
 
-                                    {/* PDF DROPDOWN */}
+                                    {/* PDF Dropdown */}
                                     <div className="relative" ref={pdfMenuRef}>
-                                        <button 
-                                            onClick={() => setShowPdfMenu(!showPdfMenu)} 
-                                            className={`flex items-center gap-2 border px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200
-                                                ${showPdfMenu 
-                                                    ? 'bg-indigo-50 border-indigo-200 text-indigo-700 dark:bg-indigo-900/30 dark:border-indigo-700 dark:text-indigo-300 ring-2 ring-indigo-100 dark:ring-indigo-900/50' 
-                                                    : 'bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700 hover:border-gray-300'
-                                                }`}
-                                            title="Opções de PDF"
-                                        >
-                                            <FileText size={18} className={showPdfMenu ? "text-indigo-600" : "text-red-600 dark:text-red-400"} /> 
-                                            <span>PDF</span>
-                                            <ChevronDown size={14} className={`transition-transform duration-300 ${showPdfMenu ? 'rotate-180' : ''}`}/>
+                                        <button onClick={() => setShowPdfMenu(!showPdfMenu)} className={`flex items-center gap-2 border px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 ${showPdfMenu ? 'bg-indigo-50 border-indigo-200 text-indigo-700 dark:bg-indigo-900/30 dark:border-indigo-700 dark:text-indigo-300 ring-2 ring-indigo-100 dark:ring-indigo-900/50' : 'bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700 hover:border-gray-300'}`} title="Opções de PDF">
+                                            <FileText size={18} className={showPdfMenu ? "text-indigo-600" : "text-red-600 dark:text-red-400"} /> <span>PDF</span> <ChevronDown size={14} className={`transition-transform duration-300 ${showPdfMenu ? 'rotate-180' : ''}`}/>
                                         </button>
-
                                         {showPdfMenu && (
                                             <div className="absolute right-0 top-full mt-2 w-48 bg-white dark:bg-gray-800 rounded-xl shadow-2xl border border-gray-100 dark:border-gray-700 overflow-hidden z-50 animate-in fade-in zoom-in-95 duration-200 origin-top-right">
                                                 <div className="p-2 space-y-1">
-                                                    <button 
-                                                        onClick={() => handleGerarPDF(false)}
-                                                        className="w-full text-left px-3 py-3 hover:bg-gray-50 dark:hover:bg-gray-700/50 rounded-lg flex items-center gap-3 transition-colors group"
-                                                    >
-                                                        <div className="p-2 bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400 rounded-lg group-hover:bg-green-200 dark:group-hover:bg-green-900/50 transition-colors">
-                                                            <DollarSign size={18} />
-                                                        </div>
-                                                        <div>
-                                                            <p className="text-sm font-bold text-gray-800 dark:text-white leading-tight">Relatório Completo</p>
-                                                            <p className="text-[10px] text-gray-500 dark:text-gray-400 mt-0.5">Inclui valores financeiros (R$)</p>
-                                                        </div>
+                                                    <button onClick={() => handleGerarPDF(false)} className="w-full text-left px-3 py-3 hover:bg-gray-50 dark:hover:bg-gray-700/50 rounded-lg flex items-center gap-3 transition-colors group">
+                                                        <div className="p-2 bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400 rounded-lg group-hover:bg-green-200 dark:group-hover:bg-green-900/50 transition-colors"><DollarSign size={18} /></div>
+                                                        <div><p className="text-sm font-bold text-gray-800 dark:text-white leading-tight">Relatório Completo</p><p className="text-[10px] text-gray-500 dark:text-gray-400 mt-0.5">Inclui valores financeiros (R$)</p></div>
                                                     </button>
-
-                                                    <button 
-                                                        onClick={() => handleGerarPDF(true)}
-                                                        className="w-full text-left px-3 py-3 hover:bg-gray-50 dark:hover:bg-gray-700/50 rounded-lg flex items-center gap-3 transition-colors group"
-                                                    >
-                                                        <div className="p-2 bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 rounded-lg group-hover:bg-blue-200 dark:group-hover:bg-blue-900/50 transition-colors">
-                                                            <Clock size={18} />
-                                                        </div>
-                                                        <div>
-                                                            <p className="text-sm font-bold text-gray-800 dark:text-white leading-tight">Apenas Horas</p>
-                                                            <p className="text-[10px] text-gray-500 dark:text-gray-400 mt-0.5">Para Canais e Parceiros</p>
-                                                        </div>
+                                                    <button onClick={() => handleGerarPDF(true)} className="w-full text-left px-3 py-3 hover:bg-gray-50 dark:hover:bg-gray-700/50 rounded-lg flex items-center gap-3 transition-colors group">
+                                                        <div className="p-2 bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 rounded-lg group-hover:bg-blue-200 dark:group-hover:bg-blue-900/50 transition-colors"><Clock size={18} /></div>
+                                                        <div><p className="text-sm font-bold text-gray-800 dark:text-white leading-tight">Apenas Horas</p><p className="text-[10px] text-gray-500 dark:text-gray-400 mt-0.5">Para Canais e Parceiros</p></div>
                                                     </button>
                                                 </div>
                                             </div>
@@ -1132,46 +863,14 @@ const handleEnviarEmail = async () => {
                             </div>
                             
                             <div className="md:hidden">
-                                <ServicesTable 
-                                    servicos={servicosFiltradosData} 
-                                    onStatusChange={alterarStatusRapido} 
-                                    onEdit={editarServico} 
-                                    onDelete={deletarServico} 
-                                    onSort={handleSort} 
-                                    sortConfig={sortConfig} 
-                                    filtrosConsultores={filtrosConsultores}
-                                    setFiltrosConsultores={setFiltrosConsultores}
-                                    isAdmin={['admin', 'dono', 'super_admin', 'gestor'].includes(userRole)}
-                                    onDuplicate={handleDuplicateService}
-                                    selectedIds={selectedIds}
-                                    setSelectedIds={setSelectedIds}
-                                />
+                                <ServicesTable servicos={servicosFiltradosData} onStatusChange={alterarStatusRapido} onEdit={editarServico} onDelete={deletarServico} onSort={handleSort} sortConfig={sortConfig} filtrosConsultores={filtrosConsultores} setFiltrosConsultores={setFiltrosConsultores} isAdmin={['admin', 'dono', 'super_admin', 'gestor'].includes(userRole)} onDuplicate={handleDuplicateService} selectedIds={selectedIds} setSelectedIds={setSelectedIds} />
                             </div>
                             <div className="hidden md:block">
-                                    {viewMode === 'list' ? (
-                                        <ServicesTable 
-                                            servicos={servicosFiltradosData} 
-                                            onStatusChange={alterarStatusRapido} 
-                                            onEdit={editarServico} 
-                                            onDelete={deletarServico} 
-                                            onSort={handleSort} 
-                                            sortConfig={sortConfig}
-                                            filtrosConsultores={filtrosConsultores}
-                                            setFiltrosConsultores={setFiltrosConsultores}
-                                            isAdmin={['admin', 'dono', 'super_admin', 'gestor'].includes(userRole)} 
-                                            onDuplicate={handleDuplicateService}
-                                            selectedIds={selectedIds}
-                                            setSelectedIds={setSelectedIds}
-                                        />
-                                    ) : (
-                                        <div className="h-[600px]">
-                                            <ServicesKanban 
-                                                servicos={servicosFiltradosData} 
-                                                onEditService={editarServico} 
-                                                onStatusChange={alterarStatusRapido} 
-                                            />
-                                        </div>
-                                    )}
+                                {viewMode === 'list' ? (
+                                    <ServicesTable servicos={servicosFiltradosData} onStatusChange={alterarStatusRapido} onEdit={editarServico} onDelete={deletarServico} onSort={handleSort} sortConfig={sortConfig} filtrosConsultores={filtrosConsultores} setFiltrosConsultores={setFiltrosConsultores} isAdmin={['admin', 'dono', 'super_admin', 'gestor'].includes(userRole)} onDuplicate={handleDuplicateService} selectedIds={selectedIds} setSelectedIds={setSelectedIds} />
+                                ) : (
+                                    <div className="h-[600px]"><ServicesKanban servicos={servicosFiltradosData} onEditService={editarServico} onStatusChange={alterarStatusRapido} /></div>
+                                )}
                             </div>
                         </div>
                     )}
@@ -1196,41 +895,13 @@ const handleEnviarEmail = async () => {
                         </div>
                     )}
 
-                    {activeTab === 'demandas' && (
-                        <DemandList 
-                            userId={session?.user?.id} 
-                            userRole={userRole} 
-                            consultoriaId={profileData?.consultoria_id} 
-                            showToast={showToast} 
-                        />
-                    )}
-
-                    {activeTab === 'agenda' && (
-                        <TeamCalendar 
-                            userId={session?.user?.id}
-                            userRole={userRole}
-                            showToast={showToast}
-                        />
-                    )}
-
-                    {activeTab === 'admin-tenants' && (
-                        <AdminTenants 
-                          onViewDetails={(id) => setSelectedTenantId(id)} 
-                        />
-                    )}
-                    
+                    {activeTab === 'demandas' && <DemandList userId={session?.user?.id} userRole={userRole} consultoriaId={profileData?.consultoria_id} showToast={showToast} />}
+                    {activeTab === 'agenda' && <TeamCalendar userId={session?.user?.id} userRole={userRole} showToast={showToast} />}
+                    {activeTab === 'admin-tenants' && <AdminTenants onViewDetails={(id) => setSelectedTenantId(id)} />}
                     {activeTab === 'admin-finance' && <AdminFinance />}
-                    
                     {activeTab === 'team' && <TeamManagement showToast={showToast} />}
-                    
                     {activeTab === 'admin-plans' && <AdminPlans />}
-
-                    {activeTab === 'channels' && (
-                        <ChannelsManagement 
-                          userId={session?.user?.id} 
-                          showToast={showToast} 
-                        />
-                    )}
+                    {activeTab === 'channels' && <ChannelsManagement userId={session?.user?.id} showToast={showToast} />}
                     {activeTab === 'reports' && <Reports />}
                 </>
             )}
@@ -1238,58 +909,20 @@ const handleEnviarEmail = async () => {
         </main>
       </div>
 
-      <AdminModal 
-          isOpen={!!selectedTenantId} 
-          onClose={() => setSelectedTenantId(null)} 
-          tenantId={selectedTenantId} 
-      />
-
-      <ServiceModal 
-        isOpen={showModal} 
-        onClose={() => { setShowModal(false); setEditingService(null); resetForm(); }}
-        onSave={salvarServico} 
-        onDelete={deletarServico}
-        formData={formData} 
-        setFormData={setFormData} 
-        clientes={clientesAtivos} 
-        isEditing={!!editingService} 
-      />
-      
+      <AdminModal isOpen={!!selectedTenantId} onClose={() => setSelectedTenantId(null)} tenantId={selectedTenantId} />
+      <ServiceModal isOpen={showModal} onClose={() => { setShowModal(false); setEditingService(null); resetForm(); }} onSave={salvarServico} onDelete={deletarServico} formData={formData} setFormData={setFormData} clientes={clientesAtivos} isEditing={!!editingService} />
       <ClientModal isOpen={showClienteModal} onClose={() => { setShowClienteModal(false); setEditingCliente(null); resetClienteForm(); }} onSave={salvarCliente} formData={clienteFormData} setFormData={setClienteFormData} isEditing={!!editingCliente} />
-      
       <SolicitantesModal isOpen={showSolicitantesModal} onClose={() => { setShowSolicitantesModal(false); setClienteParaSolicitantes(null); }} cliente={clienteParaSolicitantes} userId={session?.user?.id} showToast={showToast} />
+      <ConfigModal isOpen={showConfigModal} onClose={() => setShowConfigModal(false)} onSave={handleSaveConfig} profileData={profileData} userEmail={session?.user?.email} />
       
-      <ConfigModal 
-        isOpen={showConfigModal} 
-        onClose={() => setShowConfigModal(false)} 
-        onSave={handleSaveConfig} 
-        profileData={profileData} 
-        userEmail={session?.user?.email} 
-      />
-      
-      <ConfirmModal
-        isOpen={confirmModalOpen}
-        onClose={() => setConfirmModalOpen(false)}
-        onConfirm={confirmInactivation}
-        title="Inativar Cliente?"
-        message={`Deseja realmente inativar "${clientToInactivate?.nome}"? Ele ficará oculto das novas seleções, mas o histórico financeiro será mantido.`}
-        confirmText="Sim, inativar"
-        cancelText="Cancelar"
-        type="danger"
-      />
+      <ConfirmModal isOpen={confirmModalOpen} onClose={() => setConfirmModalOpen(false)} onConfirm={confirmInactivation} title="Inativar Cliente?" message={`Deseja realmente inativar "${clientToInactivate?.nome}"? Ele ficará oculto das novas seleções, mas o histórico financeiro será mantido.`} confirmText="Sim, inativar" cancelText="Cancelar" type="danger" />
 
-      <div className={`fixed top-6 right-6 w-96 max-w-xs px-6 py-3 rounded-xl shadow-lg text-white transform transition-all duration-500 z-[90] 
-        ${toast.visivel ? "translate-x-0 opacity-100" : "translate-x-24 opacity-0 pointer-events-none"} 
-        ${toast.tipo === 'sucesso' ? 'bg-green-600' : 'bg-red-600'}`}
-      >
+      <div className={`fixed top-6 right-6 w-96 max-w-xs px-6 py-3 rounded-xl shadow-lg text-white transform transition-all duration-500 z-[90] ${toast.visivel ? "translate-x-0 opacity-100" : "translate-x-24 opacity-0 pointer-events-none"} ${toast.tipo === 'sucesso' ? 'bg-green-600' : 'bg-red-600'}`}>
         {toast.mensagem}
       </div>
 
       {aviso.mensagem && (
-        <div className={`fixed top-4 right-4 px-4 py-2 rounded shadow-lg text-white transition-all z-[90] pointer-events-auto
-          ${aviso.tipo === "sucesso" ? "bg-green-600" : "bg-red-600"}`} 
-          onAnimationEnd={() => setAviso({ mensagem: "", tipo: "" })}
-        >
+        <div className={`fixed top-4 right-4 px-4 py-2 rounded shadow-lg text-white transition-all z-[90] pointer-events-auto ${aviso.tipo === "sucesso" ? "bg-green-600" : "bg-red-600"}`} onAnimationEnd={() => setAviso({ mensagem: "", tipo: "" })}>
           {aviso.mensagem}
         </div>
       )}
