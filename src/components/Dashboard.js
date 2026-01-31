@@ -8,48 +8,29 @@ import {
   Hourglass, Timer, CheckCircle, FileCheck 
 } from 'lucide-react';
 import StatusCard from './StatusCard'; 
-import MultiSelect from './MultiSelect'; // <--- IMPORTANDO O COMPONENTE PREMIUM
+import MultiSelect from './MultiSelect'; 
 import { formatCurrency, formatHoursInt } from '../utils/formatters';
 
-// Cores do Gráfico de Pizza
 const COLORS = ['#4F46E5', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6'];
 
-const Dashboard = ({ servicos = [], clientes = [] }) => {
+// RECEBENDO userRole AGORA
+const Dashboard = ({ servicos = [], clientes = [], userRole }) => {
   
+  // Verifica se é chefia
+  const isAdmin = ['admin', 'dono', 'super_admin', 'gestor'].includes(userRole);
+
   // --- 1. ESTADOS DOS FILTROS ---
   const [periodo, setPeriodo] = useState('mes_atual'); 
-  
-  // AGORA SÃO ARRAYS PARA O MULTISELECT
   const [filtroClientes, setFiltroClientes] = useState([]);
   const [filtroConsultores, setFiltroConsultores] = useState([]);
 
   // --- CONFIGURAÇÃO VISUAL DOS STATUS ---
   const statusConfig = {
-    'Pendente': { 
-        color: 'bg-gray-100 dark:bg-gray-700/50 text-gray-700 dark:text-gray-300 border-gray-200 dark:border-gray-600', 
-        icon: Hourglass, 
-        label: 'Pendente' 
-    },
-    'Em aprovação': { 
-        color: 'bg-orange-100 dark:bg-orange-900/30 text-orange-800 dark:text-orange-300 border-orange-200 dark:border-orange-800', 
-        icon: Timer, 
-        label: 'Em Aprovação' 
-    },
-    'Aprovado': { 
-        color: 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-800 dark:text-yellow-300 border-yellow-200 dark:border-yellow-800', 
-        icon: CheckCircle, 
-        label: 'Aprovado' 
-    }, 
-    'NF Emitida': { 
-        color: 'bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-300 border-blue-200 dark:border-blue-800', 
-        icon: FileCheck, 
-        label: 'NF Emitida' 
-    },
-    'Pago': { 
-        color: 'bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-300 border-green-200 dark:border-green-800', 
-        icon: DollarSign, 
-        label: 'Pago' 
-    }
+    'Pendente': { color: 'bg-gray-100 dark:bg-gray-700/50 text-gray-700 dark:text-gray-300 border-gray-200 dark:border-gray-600', icon: Hourglass, label: 'Pendente' },
+    'Em aprovação': { color: 'bg-orange-100 dark:bg-orange-900/30 text-orange-800 dark:text-orange-300 border-orange-200 dark:border-orange-800', icon: Timer, label: 'Em Aprovação' },
+    'Aprovado': { color: 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-800 dark:text-yellow-300 border-yellow-200 dark:border-yellow-800', icon: CheckCircle, label: 'Aprovado' }, 
+    'NF Emitida': { color: 'bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-300 border-blue-200 dark:border-blue-800', icon: FileCheck, label: 'NF Emitida' },
+    'Pago': { color: 'bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-300 border-green-200 dark:border-green-800', icon: DollarSign, label: 'Pago' }
   };
 
   // --- 2. HELPERS DE DATA ---
@@ -82,21 +63,18 @@ const Dashboard = ({ servicos = [], clientes = [] }) => {
     return servicos.filter(s => {
       const dataServico = new Date(s.data + 'T00:00:00');
       
-      // Filtro de Data
       if (range && (dataServico < range.inicio || dataServico > range.fim)) return false;
-      
-      // Filtro de Clientes (Multi)
       if (filtroClientes.length > 0 && !filtroClientes.includes(s.cliente)) return false;
 
-      // Filtro de Consultores (Multi)
-      if (filtroConsultores.length > 0) {
+      // Filtro de Consultores (Só aplica se o usuário for Admin e tiver selecionado algo)
+      if (isAdmin && filtroConsultores.length > 0) {
           const nomeConsultor = s.profiles?.nome || 'N/A';
           if (!filtroConsultores.includes(nomeConsultor)) return false;
       }
 
       return true;
     });
-  }, [servicos, periodo, filtroClientes, filtroConsultores]);
+  }, [servicos, periodo, filtroClientes, filtroConsultores, isAdmin]);
 
   // --- 4. CÁLCULO DE KPIs ---
   const kpis = useMemo(() => {
@@ -144,7 +122,7 @@ const Dashboard = ({ servicos = [], clientes = [] }) => {
       dados[key].valor += Number(s.valor_total || 0);
     });
 
-    return Object.values(dados);
+    return Object.values(dados); // Recharts ordena pela ordem de inserção ou array
   }, [dadosFiltrados, periodo]);
 
   const chartDataClientes = useMemo(() => {
@@ -167,14 +145,15 @@ const Dashboard = ({ servicos = [], clientes = [] }) => {
     return Object.values(map);
   }, [dadosFiltrados]);
 
-  // Preparação das listas para os MultiSelects
   const opcoesConsultores = useMemo(() => {
       const nomes = servicos.map(s => s.profiles?.nome).filter(Boolean);
       return [...new Set(nomes)].sort();
   }, [servicos]);
 
   const opcoesClientes = useMemo(() => {
-      return clientes.map(c => c.nome).sort();
+      // Usa Set para remover duplicatas caso venha sujo
+      const nomes = clientes.map(c => c.nome).filter(Boolean);
+      return [...new Set(nomes)].sort();
   }, [clientes]);
 
   return (
@@ -186,7 +165,9 @@ const Dashboard = ({ servicos = [], clientes = [] }) => {
             <h2 className="text-xl font-bold text-gray-800 dark:text-white flex items-center gap-2">
                 <Activity className="text-indigo-600" /> Cockpit Financeiro
             </h2>
-            <p className="text-xs text-gray-500">Visão estratégica em tempo real</p>
+            <p className="text-xs text-gray-500">
+                {isAdmin ? "Visão Geral da Consultoria" : "Meus Indicadores de Performance"}
+            </p>
         </div>
 
         <div className="flex flex-col sm:flex-row items-center gap-3 w-full xl:w-auto">
@@ -208,17 +189,20 @@ const Dashboard = ({ servicos = [], clientes = [] }) => {
                 />
             </div>
 
-            <div className="w-full sm:w-64">
-                <MultiSelect 
-                    options={opcoesConsultores} 
-                    selected={filtroConsultores} 
-                    onChange={setFiltroConsultores} 
-                    placeholder="Filtrar Consultores..." 
-                />
-            </div>
+            {/* SÓ MOSTRA O FILTRO DE CONSULTOR SE FOR ADMIN */}
+            {isAdmin && (
+                <div className="w-full sm:w-64">
+                    <MultiSelect 
+                        options={opcoesConsultores} 
+                        selected={filtroConsultores} 
+                        onChange={setFiltroConsultores} 
+                        placeholder="Filtrar Consultores..." 
+                    />
+                </div>
+            )}
             
             {/* Botão Limpar Filtros */}
-            {(filtroClientes.length > 0 || filtroConsultores.length > 0) && (
+            {(filtroClientes.length > 0 || (isAdmin && filtroConsultores.length > 0)) && (
                 <button 
                     onClick={() => { setFiltroClientes([]); setFiltroConsultores([]); }} 
                     className="p-2 text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors shrink-0" 
@@ -230,7 +214,7 @@ const Dashboard = ({ servicos = [], clientes = [] }) => {
         </div>
       </div>
 
-      {/* 1. KPI CARDS (Macro) */}
+      {/* 1. KPI CARDS */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         <KpiCard title="Faturamento" value={formatCurrency(kpis.totalValor)} icon={DollarSign} color="text-green-600" bg="bg-green-50 dark:bg-green-900/20" borderColor="border-green-200 dark:border-green-900/50" />
         <KpiCard title="Total de Horas" value={formatHoursInt(kpis.totalHoras)} subValue="Horas trabalhadas" icon={Clock} color="text-blue-600" bg="bg-blue-50 dark:bg-blue-900/20" borderColor="border-blue-200 dark:border-blue-900/50" />
