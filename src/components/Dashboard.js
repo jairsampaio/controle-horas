@@ -13,10 +13,8 @@ import { formatCurrency, formatHoursInt } from '../utils/formatters';
 
 const COLORS = ['#4F46E5', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6'];
 
-// RECEBENDO userRole AGORA
 const Dashboard = ({ servicos = [], clientes = [], userRole }) => {
   
-  // Verifica se é chefia
   const isAdmin = ['admin', 'dono', 'super_admin', 'gestor'].includes(userRole);
 
   // --- 1. ESTADOS DOS FILTROS ---
@@ -66,7 +64,6 @@ const Dashboard = ({ servicos = [], clientes = [], userRole }) => {
       if (range && (dataServico < range.inicio || dataServico > range.fim)) return false;
       if (filtroClientes.length > 0 && !filtroClientes.includes(s.cliente)) return false;
 
-      // Filtro de Consultores (Só aplica se o usuário for Admin e tiver selecionado algo)
       if (isAdmin && filtroConsultores.length > 0) {
           const nomeConsultor = s.profiles?.nome || 'N/A';
           if (!filtroConsultores.includes(nomeConsultor)) return false;
@@ -122,7 +119,7 @@ const Dashboard = ({ servicos = [], clientes = [], userRole }) => {
       dados[key].valor += Number(s.valor_total || 0);
     });
 
-    return Object.values(dados); // Recharts ordena pela ordem de inserção ou array
+    return Object.values(dados);
   }, [dadosFiltrados, periodo]);
 
   const chartDataClientes = useMemo(() => {
@@ -135,12 +132,14 @@ const Dashboard = ({ servicos = [], clientes = [], userRole }) => {
     return Object.values(map).sort((a, b) => b.valor - a.valor).slice(0, 5);
   }, [dadosFiltrados]);
 
+  // --- CORREÇÃO AQUI: Agora soma VALOR, não conta itens ---
   const chartDataStatus = useMemo(() => {
     const map = {};
     dadosFiltrados.forEach(s => {
       const st = s.status || 'Pendente';
       if (!map[st]) map[st] = { name: st, value: 0 };
-      map[st].value += 1;
+      // Mudança: Somando o valor financeiro
+      map[st].value += Number(s.valor_total || 0);
     });
     return Object.values(map);
   }, [dadosFiltrados]);
@@ -151,7 +150,6 @@ const Dashboard = ({ servicos = [], clientes = [], userRole }) => {
   }, [servicos]);
 
   const opcoesClientes = useMemo(() => {
-      // Usa Set para remover duplicatas caso venha sujo
       const nomes = clientes.map(c => c.nome).filter(Boolean);
       return [...new Set(nomes)].sort();
   }, [clientes]);
@@ -189,7 +187,6 @@ const Dashboard = ({ servicos = [], clientes = [], userRole }) => {
                 />
             </div>
 
-            {/* SÓ MOSTRA O FILTRO DE CONSULTOR SE FOR ADMIN */}
             {isAdmin && (
                 <div className="w-full sm:w-64">
                     <MultiSelect 
@@ -201,7 +198,6 @@ const Dashboard = ({ servicos = [], clientes = [], userRole }) => {
                 </div>
             )}
             
-            {/* Botão Limpar Filtros */}
             {(filtroClientes.length > 0 || (isAdmin && filtroConsultores.length > 0)) && (
                 <button 
                     onClick={() => { setFiltroClientes([]); setFiltroConsultores([]); }} 
@@ -264,9 +260,9 @@ const Dashboard = ({ servicos = [], clientes = [], userRole }) => {
             </ResponsiveContainer>
         </div>
 
-        {/* PIZZA */}
+        {/* PIZZA (CORRIGIDO PARA VALOR) */}
         <div className="bg-white dark:bg-gray-800 p-6 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 h-96 flex flex-col">
-            <h3 className="font-bold text-gray-800 dark:text-white mb-2">Distribuição (%)</h3>
+            <h3 className="font-bold text-gray-800 dark:text-white mb-2">Distribuição de Receita</h3>
             <div className="flex-1 min-h-0">
                 <ResponsiveContainer width="100%" height="100%">
                     <PieChart>
@@ -275,7 +271,10 @@ const Dashboard = ({ servicos = [], clientes = [], userRole }) => {
                                 <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                             ))}
                         </Pie>
-                        <Tooltip />
+                        <Tooltip 
+                            formatter={(value) => [formatCurrency(value), "Valor Total"]} 
+                            contentStyle={{ backgroundColor: '#fff', borderRadius: '8px', border: '1px solid #e5e7eb', color: '#333' }}
+                        />
                         <Legend verticalAlign="bottom" height={36} iconType="circle" />
                     </PieChart>
                 </ResponsiveContainer>
