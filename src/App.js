@@ -740,6 +740,7 @@ const App = () => {
                         <Dashboard 
                             servicos={servicos} 
                             clientes={clientes} 
+                            userRole={userRole}
                         />
                     )}
 
