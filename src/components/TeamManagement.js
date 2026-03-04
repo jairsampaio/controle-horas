@@ -64,13 +64,13 @@ const RoleBadge = ({ role }) => {
 // --- COMPONENTE PRINCIPAL ---
 
 const TeamManagement = ({ showToast }) => {
-  // 1. INICIALIZAÇÃO COM CACHE (Evita tela branca)
+  // 1. INICIALIZAÇÃO COM CACHE
   const [members, setMembers] = useState(() => {
       const saved = localStorage.getItem('team_members_cache');
       return saved ? JSON.parse(saved) : [];
   });
 
-  // 2. LOADING INTELIGENTE (Só mostra spinner se não tiver nada no cache)
+  // 2. LOADING INTELIGENTE
   const [loading, setLoading] = useState(() => {
       return !localStorage.getItem('team_members_cache');
   });
@@ -104,7 +104,6 @@ const TeamManagement = ({ showToast }) => {
 
   // 3. FUNÇÃO DE CARREGAMENTO "SILENCIOSA"
   const loadData = useCallback(async (silencioso = false) => {
-    // Se não for silencioso, ativa o spinner (apenas se não tiver cache)
     if (!silencioso) setLoading(true);
     
     try {
@@ -128,7 +127,6 @@ const TeamManagement = ({ showToast }) => {
 
       if (membersData) {
           setMembers(membersData);
-          // ATUALIZA O CACHE PARA A PRÓXIMA VEZ
           localStorage.setItem('team_members_cache', JSON.stringify(membersData));
       }
     } catch (error) {
@@ -141,11 +139,9 @@ const TeamManagement = ({ showToast }) => {
 
   // 4. USE EFFECT INTELIGENTE
   useEffect(() => {
-      // Se já temos membros no state (vds do cache), carregamos em modo silencioso (true)
-      // Se a lista está vazia, carregamos com loading normal (false)
       const temDados = members.length > 0;
       loadData(temDados); 
-  }, [loadData]); // Removida dependência 'members' para evitar loop
+  }, [loadData]); 
 
   // --- HANDLERS ---
 
@@ -156,9 +152,10 @@ const TeamManagement = ({ showToast }) => {
     try {
       if (newMember.senha.length < 6) throw new Error("A senha deve ter no mínimo 6 caracteres.");
 
+      // CRIAÇÃO DE CLIENTE TEMPORÁRIO (CORRIGIDO AS VARIÁVEIS DE AMBIENTE)
       const tempClient = createClient(
-        process.env.REACT_APP_SUPABASE_URL || 'https://ubwutmslwlefviiabysc.supabase.co', 
-        process.env.REACT_APP_SUPABASE_ANON_KEY || 'SUA_CHAVE_ANONIMA_AQUI',
+        process.env.REACT_APP_SUPABASE_URL, 
+        process.env.REACT_APP_SUPABASE_KEY,
         { auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false } }
       );
 
@@ -200,7 +197,6 @@ const TeamManagement = ({ showToast }) => {
       setCreateModalOpen(false);
       setNewMember({ nome: '', email: '', senha: '', whatsapp: '', valor_hora: '', banco: '', agencia: '', conta: '', chave_pix: '', nome_emergencia: '', telefone_emergencia: '', role: 'consultor' });
       
-      // Atualiza silenciosamente
       loadData(true);
 
     } catch (error) {
@@ -243,7 +239,6 @@ const TeamManagement = ({ showToast }) => {
         if (showToast) showToast("Dados atualizados!", 'sucesso');
         setEditModalOpen(false);
         
-        // Atualiza silenciosamente
         loadData(true);
     } catch (error) {
         console.error(error);
@@ -260,7 +255,6 @@ const TeamManagement = ({ showToast }) => {
       try {
         await supabase.from('profiles').update({ ativo: novoStatus }).eq('id', member.id);
         if (showToast) showToast(`Status alterado.`, 'sucesso');
-        // Atualiza silenciosamente
         loadData(true);
       } catch (error) { console.error(error); }
   };
@@ -465,7 +459,6 @@ const TeamManagement = ({ showToast }) => {
         <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in w-screen h-screen">
           <div className="bg-white dark:bg-gray-900 w-full max-w-3xl rounded-2xl shadow-2xl flex flex-col max-h-[90vh] border border-gray-200 dark:border-gray-800">
             
-            {/* Header (Fixo) */}
             <div className="p-6 border-b border-gray-100 dark:border-gray-800 flex justify-between items-center bg-gray-50/50 dark:bg-gray-900/50 shrink-0">
                 <div>
                     <h3 className="font-bold text-xl text-gray-800 dark:text-white flex items-center gap-2">
@@ -477,7 +470,6 @@ const TeamManagement = ({ showToast }) => {
                 <button onClick={() => { setCreateModalOpen(false); setEditModalOpen(false); }} className="text-gray-400 hover:text-gray-600 p-2 hover:bg-gray-200 rounded-full transition-colors"><X size={20}/></button>
             </div>
             
-            {/* Conteúdo com Scroll (Flex-1 + min-h-0) */}
             <div className="p-6 overflow-y-auto custom-scrollbar flex-1 min-h-0">
                 <form id="memberForm" onSubmit={createModalOpen ? handleCreateMember : handleUpdateMember} className="space-y-8">
                     
@@ -660,7 +652,6 @@ const TeamManagement = ({ showToast }) => {
                 </form>
             </div>
 
-            {/* Footer (Fixo) */}
             <div className="p-6 border-t border-gray-100 dark:border-gray-800 bg-gray-50 dark:bg-gray-900 flex justify-end gap-3 rounded-b-2xl shrink-0">
                 <button onClick={() => { setCreateModalOpen(false); setEditModalOpen(false); }} className="px-6 py-2.5 rounded-xl text-gray-500 font-bold text-sm hover:bg-gray-200 dark:hover:bg-gray-800 transition-colors">Cancelar</button>
                 <button onClick={() => document.getElementById('memberForm').requestSubmit()} disabled={actionLoading} className="px-8 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-sm shadow-lg shadow-indigo-200 dark:shadow-none transition-all hover:scale-105 active:scale-95 flex items-center gap-2">
