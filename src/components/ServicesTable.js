@@ -311,6 +311,11 @@ const ServicesTable = ({
                 </th>
                 <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider w-40">Canal</th>
                 <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Cliente / Solicitante</th>
+                {isAdmin && (
+                    <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                        Consultor
+                    </th>
+                )}
                 <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider min-w-[200px]">Atividade</th>
                 <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Valor / Horas</th>
                 <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Status</th>
@@ -350,6 +355,13 @@ const ServicesTable = ({
                       </div>
                     </div>
                   </td>
+                  {isAdmin && (
+                      <td className="px-6 py-4 whitespace-nowrap">
+                          <div className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                              {servico.profiles?.nome || 'Não identificado'}
+                          </div>
+                      </td>
+                  )}
                   <td className="px-6 py-4">
                     <div className="text-sm text-gray-600 dark:text-gray-300 max-w-xs truncate" title={servico.atividade}>{servico.atividade}</div>
                   </td>
@@ -377,7 +389,16 @@ const ServicesTable = ({
                   </td>
                 </tr>
               );})}
-              {servicos.length === 0 && (<tr><td colSpan="8" className="text-center py-8 text-gray-500">Nenhum serviço encontrado.</td></tr>)}
+              {servicos.length === 0 && (
+                <tr>
+                    <td
+                        colSpan={isAdmin ? 9 : 8}
+                        className="text-center py-8 text-gray-500"
+                    >
+                        Nenhum serviço encontrado.
+                    </td>
+                </tr>
+            )}
             </tbody>
           </table>
         </div>

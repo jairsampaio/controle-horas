@@ -30,7 +30,7 @@ import AccessDenied from './components/AccessDenied';
 import DemandList from './components/DemandList';
 import TeamCalendar from './components/TeamCalendar';
 import Reports from './components/Reports'; 
-import { formatHoursInt } from './utils/formatters'; // Removido formatCurrency se não for usado aqui direto
+import { formatHoursInt, formatCurrency } from './utils/formatters';
 
 const App = () => {
   // --- ESTADOS ---
@@ -758,7 +758,7 @@ const App = () => {
                                 <div className="bg-white dark:bg-gray-800 p-4 rounded-xl border border-gray-100 dark:border-gray-700 flex items-center justify-between shadow-sm">
                                     <div>
                                         <p className="text-xs font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wider">Valor Total</p>
-                                        <p className="text-xl font-black text-green-600 dark:text-green-400 truncate max-w-[150px]">{formatHoursInt(statsTabela.totalValor).replace(':', ',') /* Ajuste rápido de visualização, ideal usar formatCurrency */}</p>
+                                        <p className="text-xl font-black text-green-600 dark:text-green-400 truncate max-w-[150px]">{formatCurrency(statsTabela.totalValor) /* Ajuste rápido de visualização, ideal usar formatCurrency */}</p>
                                     </div>
                                     <div className="p-3 bg-green-50 dark:bg-green-900/30 rounded-lg"><DollarSign className="text-green-600 dark:text-green-400" size={24} /></div>
                                 </div>
