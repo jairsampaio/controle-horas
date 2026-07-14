@@ -210,13 +210,51 @@ const Dashboard = ({ servicos = [], clientes = [], userRole }) => {
         </div>
       </div>
 
-      {/* 1. KPI CARDS */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        <KpiCard title="Faturamento" value={formatCurrency(kpis.totalValor)} icon={DollarSign} color="text-green-600" bg="bg-green-50 dark:bg-green-900/20" borderColor="border-green-200 dark:border-green-900/50" />
-        <KpiCard title="Total de Horas" value={formatHoursInt(kpis.totalHoras)} subValue="Horas trabalhadas" icon={Clock} color="text-blue-600" bg="bg-blue-50 dark:bg-blue-900/20" borderColor="border-blue-200 dark:border-blue-900/50" />
-        <KpiCard title="Ticket Médio / Hora" value={formatCurrency(kpis.ticketMedio)} subValue="Eficiência financeira" icon={TrendingUp} color="text-purple-600" bg="bg-purple-50 dark:bg-purple-900/20" borderColor="border-purple-200 dark:border-purple-900/50" />
-        <KpiCard title="Total Serviços" value={kpis.totalServicos} subValue="Entregas realizadas" icon={Briefcase} color="text-amber-600" bg="bg-amber-50 dark:bg-amber-900/20" borderColor="border-amber-200 dark:border-amber-900/50" />
-      </div>
+        {/* 1. KPI CARDS */}
+        <div className={`grid grid-cols-1 md:grid-cols-2 ${isAdmin ? 'lg:grid-cols-4' : 'lg:grid-cols-3'} gap-4`}>
+            
+            <KpiCard
+                title="Faturamento"
+                value={formatCurrency(kpis.totalValor)}
+                icon={DollarSign}
+                color="text-green-600"
+                bg="bg-green-50 dark:bg-green-900/20"
+                borderColor="border-green-200 dark:border-green-900/50"
+            />
+
+            <KpiCard
+                title="Total de Horas"
+                value={formatHoursInt(kpis.totalHoras)}
+                subValue="Horas trabalhadas"
+                icon={Clock}
+                color="text-blue-600"
+                bg="bg-blue-50 dark:bg-blue-900/20"
+                borderColor="border-blue-200 dark:border-blue-900/50"
+            />
+
+            {isAdmin && (
+                <KpiCard
+                    title="Ticket Médio / Hora"
+                    value={formatCurrency(kpis.ticketMedio)}
+                    subValue="Eficiência financeira"
+                    icon={TrendingUp}
+                    color="text-purple-600"
+                    bg="bg-purple-50 dark:bg-purple-900/20"
+                    borderColor="border-purple-200 dark:border-purple-900/50"
+                />
+            )}
+
+            <KpiCard
+                title="Total Serviços"
+                value={kpis.totalServicos}
+                subValue="Entregas realizadas"
+                icon={Briefcase}
+                color="text-amber-600"
+                bg="bg-amber-50 dark:bg-amber-900/20"
+                borderColor="border-amber-200 dark:border-amber-900/50"
+            />
+
+        </div>
 
       {/* 2. FUNIL DE STATUS */}
       <div>
