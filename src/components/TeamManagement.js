@@ -55,10 +55,22 @@ const RoleBadge = ({ role }) => {
     const styles = {
         super_admin: 'bg-yellow-100 text-yellow-800 border-yellow-200',
         admin: 'bg-purple-100 text-purple-800 border-purple-200 dark:bg-purple-900/30 dark:text-purple-300 dark:border-purple-800',
+        gp: 'bg-emerald-100 text-emerald-800 border-emerald-200 dark:bg-emerald-900/30 dark:text-emerald-300 dark:border-emerald-800',
         consultor: 'bg-blue-100 text-blue-800 border-blue-200 dark:bg-blue-900/30 dark:text-blue-300 dark:border-blue-800',
     };
-    const label = role === 'super_admin' ? 'Super Admin' : role === 'admin' ? 'Gestor' : 'Consultor';
-    return <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold uppercase border ${styles[role] || styles.consultor}`}>{label}</span>;
+
+    const labels = {
+        super_admin: 'Super Admin',
+        admin: 'Administrador',
+        gp: 'Gerente de Projetos',
+        consultor: 'Consultor'
+    };
+
+    return (
+        <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold uppercase border ${styles[role] || styles.consultor}`}>
+            {labels[role] || 'Consultor'}
+        </span>
+    );
 };
 
 // --- COMPONENTE PRINCIPAL ---
@@ -224,6 +236,7 @@ const TeamManagement = ({ showToast }) => {
             .update({ 
                 nome: editingMember.nome,
                 role: editingMember.role,
+                cargo: editingMember.role,
                 whatsapp: editingMember.whatsapp,
                 valor_hora: parseCurrency(editingMember.valor_hora),
                 banco: editingMember.banco,
@@ -511,6 +524,7 @@ const TeamManagement = ({ showToast }) => {
                                         className="w-full border dark:border-gray-700 rounded-xl pl-10 pr-4 py-3 bg-white dark:bg-gray-800 text-gray-900 dark:text-white outline-none focus:ring-2 focus:ring-indigo-500 appearance-none font-medium cursor-pointer"
                                     >
                                             <option value="consultor">Consultor</option>
+                                            <option value="gp">Gerente de Projetos (GP)</option>
                                             <option value="admin">Administrador</option>
                                     </select>
                                 </div>
