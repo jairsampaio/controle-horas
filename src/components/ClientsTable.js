@@ -15,7 +15,18 @@ const getAvatarColor = (name) => {
   return colors[index];
 };
 
-const ClientsTable = ({ clientes, onEdit, onDeleteClick, onManageTeam, onReactivate }) => { 
+const ClientsTable = ({
+  clientes,
+  onEdit,
+  onDeleteClick,
+  onManageTeam,
+  onReactivate,
+
+  // Neste componente, isAdmin significa:
+  // pode criar, editar, inativar/reativar cliente e gerenciar a equipe (solicitantes).
+  // Portanto, Admin, Dono, GP e Super Admin recebem true.
+  isAdmin,
+}) => {
   
   // --- EMPTY STATE (Sem dados) ---
   if (clientes.length === 0) {
@@ -77,42 +88,44 @@ const ClientsTable = ({ clientes, onEdit, onDeleteClick, onManageTeam, onReactiv
             )}
 
             {/* Ações Mobile */}
-            <div className="pt-3 mt-2 border-t border-gray-200/50 dark:border-gray-700/50 flex justify-end gap-3">
-               
-               <button 
-                 onClick={() => onManageTeam(cliente)} 
-                 className="p-2 text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-900/20 rounded-lg active:scale-95 transition-transform" 
-                 title="Gerenciar Equipe (Solicitantes)"
-               >
-                 <Users size={20}/>
-               </button>
+            {isAdmin && (
+              <div className="pt-3 mt-2 border-t border-gray-200/50 dark:border-gray-700/50 flex justify-end gap-3">
 
-               <button 
-                 onClick={() => onEdit(cliente)} 
-                 className="p-2 text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/20 rounded-lg active:scale-95 transition-transform" 
-                 title="Editar Dados"
-               >
-                 <Edit2 size={20}/>
-               </button>
-               
-               {cliente.ativo !== false ? (
-                   <button 
-                     onClick={() => onDeleteClick(cliente)} 
-                     className="p-2 text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/20 rounded-lg active:scale-95 transition-transform" 
-                     title="Inativar"
-                   >
-                     <Trash2 size={20}/>
-                   </button>
-               ) : (
-                   <button 
-                     onClick={() => onReactivate(cliente.id)} 
-                     className="p-2 text-orange-600 dark:text-orange-400 bg-orange-50 dark:bg-orange-900/20 rounded-lg active:scale-95 transition-transform" 
-                     title="Restaurar"
-                   >
-                     <RotateCcw size={20}/>
-                   </button>
-               )}
-            </div>
+                 <button
+                   onClick={() => onManageTeam(cliente)}
+                   className="p-2 text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-900/20 rounded-lg active:scale-95 transition-transform"
+                   title="Gerenciar Equipe (Solicitantes)"
+                 >
+                   <Users size={20}/>
+                 </button>
+
+                 <button
+                   onClick={() => onEdit(cliente)}
+                   className="p-2 text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/20 rounded-lg active:scale-95 transition-transform"
+                   title="Editar Dados"
+                 >
+                   <Edit2 size={20}/>
+                 </button>
+
+                 {cliente.ativo !== false ? (
+                     <button
+                       onClick={() => onDeleteClick(cliente)}
+                       className="p-2 text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/20 rounded-lg active:scale-95 transition-transform"
+                       title="Inativar"
+                     >
+                       <Trash2 size={20}/>
+                     </button>
+                 ) : (
+                     <button
+                       onClick={() => onReactivate(cliente.id)}
+                       className="p-2 text-orange-600 dark:text-orange-400 bg-orange-50 dark:bg-orange-900/20 rounded-lg active:scale-95 transition-transform"
+                       title="Restaurar"
+                     >
+                       <RotateCcw size={20}/>
+                     </button>
+                 )}
+              </div>
+            )}
           </div>
         ))}
       </div>
@@ -174,26 +187,28 @@ const ClientsTable = ({ clientes, onEdit, onDeleteClick, onManageTeam, onReactiv
                 </td>
 
                 <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                  <div className="flex justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
-                    
-                    <button onClick={() => onManageTeam(cliente)} className="text-gray-400 hover:text-indigo-600 dark:text-gray-500 dark:hover:text-indigo-400 p-1.5 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 rounded" title="Equipe / Solicitantes">
-                      <Users size={18} />
-                    </button>
-                    
-                    <button onClick={() => onEdit(cliente)} className="text-gray-400 hover:text-blue-600 dark:text-gray-500 dark:hover:text-blue-400 p-1.5 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded" title="Editar">
-                      <Edit2 size={18} />
-                    </button>
-                    
-                    {cliente.ativo !== false ? (
-                        <button onClick={() => onDeleteClick(cliente)} className="text-gray-400 hover:text-red-600 dark:text-gray-500 dark:hover:text-red-400 p-1.5 hover:bg-red-50 dark:hover:bg-red-900/20 rounded" title="Inativar">
-                          <Trash2 size={18} />
-                        </button>
-                    ) : (
-                        <button onClick={() => onReactivate(cliente.id)} className="text-orange-400 hover:text-orange-600 dark:text-orange-400 dark:hover:text-orange-300 p-1.5 hover:bg-orange-50 dark:hover:bg-orange-900/20 rounded" title="Restaurar Cliente">
-                          <RotateCcw size={18} />
-                        </button>
-                    )}
-                  </div>
+                  {isAdmin && (
+                    <div className="flex justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+
+                      <button onClick={() => onManageTeam(cliente)} className="text-gray-400 hover:text-indigo-600 dark:text-gray-500 dark:hover:text-indigo-400 p-1.5 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 rounded" title="Equipe / Solicitantes">
+                        <Users size={18} />
+                      </button>
+
+                      <button onClick={() => onEdit(cliente)} className="text-gray-400 hover:text-blue-600 dark:text-gray-500 dark:hover:text-blue-400 p-1.5 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded" title="Editar">
+                        <Edit2 size={18} />
+                      </button>
+
+                      {cliente.ativo !== false ? (
+                          <button onClick={() => onDeleteClick(cliente)} className="text-gray-400 hover:text-red-600 dark:text-gray-500 dark:hover:text-red-400 p-1.5 hover:bg-red-50 dark:hover:bg-red-900/20 rounded" title="Inativar">
+                            <Trash2 size={18} />
+                          </button>
+                      ) : (
+                          <button onClick={() => onReactivate(cliente.id)} className="text-orange-400 hover:text-orange-600 dark:text-orange-400 dark:hover:text-orange-300 p-1.5 hover:bg-orange-50 dark:hover:bg-orange-900/20 rounded" title="Restaurar Cliente">
+                            <RotateCcw size={18} />
+                          </button>
+                      )}
+                    </div>
+                  )}
                 </td>
               </tr>
             ))}

@@ -2313,19 +2313,21 @@ const App = () => {
                             </span>
                           </button>
 
-                          <button
-                            onClick={() => {
-                              resetClienteForm();
+                          {canManageOperation && (
+                            <button
+                              onClick={() => {
+                                resetClienteForm();
 
-                              setShowClienteModal(true);
-                            }}
-                            className="bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-400 px-3 md:px-4 py-2 rounded-lg text-sm font-bold hover:bg-indigo-100 dark:hover:bg-indigo-900/50 transition-colors flex items-center gap-2"
-                            title="Cadastrar Novo"
-                          >
-                            <Plus size={18} />
+                                setShowClienteModal(true);
+                              }}
+                              className="bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-400 px-3 md:px-4 py-2 rounded-lg text-sm font-bold hover:bg-indigo-100 dark:hover:bg-indigo-900/50 transition-colors flex items-center gap-2"
+                              title="Cadastrar Novo"
+                            >
+                              <Plus size={18} />
 
-                            <span className="hidden md:inline">Cadastrar</span>
-                          </button>
+                              <span className="hidden md:inline">Cadastrar</span>
+                            </button>
+                          )}
                         </div>
                       </div>
                     </div>
@@ -2336,6 +2338,7 @@ const App = () => {
                       onDeleteClick={handleRequestInactivate}
                       onReactivate={reativarCliente}
                       onManageTeam={handleManageTeam}
+                      isAdmin={canManageOperation}
                     />
                   </div>
                 )}
@@ -2364,6 +2367,7 @@ const App = () => {
                   <ChannelsManagement
                     userId={session?.user?.id}
                     showToast={showToast}
+                    isAdmin={canManageOperation}
                   />
                 )}
 
