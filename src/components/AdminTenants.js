@@ -193,12 +193,12 @@ const AdminTenants = ({ onViewDetails }) => {
             throw new Error("Preencha todos os dados do Dono da consultoria.");
         }
 
-        // SEGURANÇA: Usa variáveis de ambiente se disponíveis, senão fallback (Cuidado em produção!)
-        const SUPABASE_URL = process.env.REACT_APP_SUPABASE_URL || 'https://ubwutmslwlefviiabysc.supabase.co'; 
-        const SUPABASE_ANON_KEY = process.env.REACT_APP_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...'; // (Truncado por segurança no exemplo)
+        if (!process.env.REACT_APP_SUPABASE_URL || !process.env.REACT_APP_SUPABASE_KEY) {
+            throw new Error("Configuração do Supabase ausente (REACT_APP_SUPABASE_URL/REACT_APP_SUPABASE_KEY).");
+        }
 
         // Cliente temporário para não deslogar o Super Admin
-        const tempClient = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+        const tempClient = createClient(process.env.REACT_APP_SUPABASE_URL, process.env.REACT_APP_SUPABASE_KEY, {
             auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false }
         });
 
