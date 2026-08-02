@@ -558,16 +558,19 @@ const TeamCalendar = ({ userId, userRole, showToast }) => {
 
       {renderModal()}
 
-      <ConfirmModal
-        isOpen={showDeleteConfirm}
-        onClose={() => setShowDeleteConfirm(false)}
-        onConfirm={confirmDelete}
-        title="Excluir Evento?"
-        message={`Deseja realmente excluir o evento "${formData.titulo}"?`}
-        confirmText="Sim, excluir"
-        cancelText="Cancelar"
-        type="danger"
-      />
+      {showDeleteConfirm && ReactDOM.createPortal(
+        <ConfirmModal
+          isOpen={showDeleteConfirm}
+          onClose={() => setShowDeleteConfirm(false)}
+          onConfirm={confirmDelete}
+          title="Excluir Evento?"
+          message={`Deseja realmente excluir o evento "${formData.titulo}"?`}
+          confirmText="Sim, excluir"
+          cancelText="Cancelar"
+          type="danger"
+        />,
+        document.body
+      )}
     </div>
   );
 };

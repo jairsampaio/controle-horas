@@ -306,14 +306,17 @@ const ChannelsManagement = ({
         document.body
       )}
 
-      <ChannelModal
-        isOpen={showModal}
-        onClose={() => setShowModal(false)}
-        onSave={handleSalvar}
-        formData={formData}
-        setFormData={setFormData}
-        isEditing={!!editingCanal}
-      />
+      {showModal && createPortal(
+        <ChannelModal
+          isOpen={showModal}
+          onClose={() => setShowModal(false)}
+          onSave={handleSalvar}
+          formData={formData}
+          setFormData={setFormData}
+          isEditing={!!editingCanal}
+        />,
+        document.body
+      )}
     </div>
   );
 };

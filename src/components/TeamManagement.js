@@ -709,16 +709,19 @@ const TeamManagement = ({ showToast }) => {
         </div>, document.body
       )}
 
-      <ConfirmModal
-        isOpen={!!memberParaStatus}
-        onClose={() => setMemberParaStatus(null)}
-        onConfirm={confirmToggleStatus}
-        title={memberParaStatus?.ativo ? "Bloquear Membro?" : "Ativar Membro?"}
-        message={`Deseja ${memberParaStatus?.ativo ? 'BLOQUEAR' : 'ATIVAR'} ${memberParaStatus?.nome}?`}
-        confirmText={memberParaStatus?.ativo ? "Sim, bloquear" : "Sim, ativar"}
-        cancelText="Cancelar"
-        type={memberParaStatus?.ativo ? "danger" : "info"}
-      />
+      {!!memberParaStatus && createPortal(
+        <ConfirmModal
+          isOpen={!!memberParaStatus}
+          onClose={() => setMemberParaStatus(null)}
+          onConfirm={confirmToggleStatus}
+          title={memberParaStatus?.ativo ? "Bloquear Membro?" : "Ativar Membro?"}
+          message={`Deseja ${memberParaStatus?.ativo ? 'BLOQUEAR' : 'ATIVAR'} ${memberParaStatus?.nome}?`}
+          confirmText={memberParaStatus?.ativo ? "Sim, bloquear" : "Sim, ativar"}
+          cancelText="Cancelar"
+          type={memberParaStatus?.ativo ? "danger" : "info"}
+        />,
+        document.body
+      )}
 
     </div>
   );

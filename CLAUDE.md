@@ -36,6 +36,16 @@ This is a single-tenant-per-login, multi-tenant-by-data SaaS for freelancers/con
 
 Active tab and filters persist to `localStorage` (`lastActiveTab`, `filtrosConsultFlow`) and are restored on load. Modal open/close and tab navigation are also mirrored into `window.history` (`pushState`/`popstate`) so the mobile/browser back button closes modals or returns to the dashboard instead of leaving the app.
 
+### Modais precisam de createPortal
+
+O wrapper de conteúdo das abas em `App.js` (`<div className="... animate-fade-in-up ...">`, dentro de `<main>`, `App.js:1818`) usa uma animação (`slideUpFade`, definida em `index.css`) que anima `transform` com `animation-fill-mode: both` — o valor final do keyframe (`transform: translateY(0)`) fica travado no elemento mesmo depois da animação terminar, e não é removido.
+
+Qualquer valor de `transform` diferente de `none` transforma o elemento em *containing block* para descendentes `position: fixed`. Consequência prática: um modal com `fixed inset-0` renderizado de dentro de um componente de aba não cobre a viewport inteira — o overlay fica confinado à área de conteúdo daquela div, deixando sidebar e cabeçalho sem escurecer.
+
+Regra: todo modal renderizado de dentro de um componente de aba precisa de `ReactDOM.createPortal(..., document.body)`. Modais renderizados diretamente em `App.js`, depois do `</main>` (`ClientModal`, `ConfigModal`, `SolicitantesModal`, `AdminModal`), não sofrem esse problema porque ficam fora da div animada — mas portalar não faz mal, só é redundante.
+
+Referências corretas a seguir: `ChannelsManagement.js` (portala tanto o `ChannelModal` quanto o próprio `ConfirmModal`), e `ServiceModal.js`/`DemandModal.js` (portalam o retorno inteiro do componente, não só o modal em si).
+
 ### Environment variables
 
 `REACT_APP_SUPABASE_URL`, `REACT_APP_SUPABASE_KEY` (CRA client-side, embedded in the build), `EMAIL_USER`, `EMAIL_PASS` (server-side only, used by `api/enviar-email.js`).

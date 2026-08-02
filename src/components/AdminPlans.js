@@ -302,16 +302,19 @@ const AdminPlans = ({ showToast }) => {
         document.body
       )}
 
-      <ConfirmModal
-        isOpen={!!planoParaExcluir}
-        onClose={() => setPlanoParaExcluir(null)}
-        onConfirm={confirmDeletePlano}
-        title="Excluir Plano?"
-        message={`Tem certeza que deseja excluir o plano "${planoParaExcluir?.nome}"? Isso pode afetar a exibição para empresas já vinculadas a ele.`}
-        confirmText="Sim, excluir"
-        cancelText="Cancelar"
-        type="danger"
-      />
+      {!!planoParaExcluir && createPortal(
+        <ConfirmModal
+          isOpen={!!planoParaExcluir}
+          onClose={() => setPlanoParaExcluir(null)}
+          onConfirm={confirmDeletePlano}
+          title="Excluir Plano?"
+          message={`Tem certeza que deseja excluir o plano "${planoParaExcluir?.nome}"? Isso pode afetar a exibição para empresas já vinculadas a ele.`}
+          confirmText="Sim, excluir"
+          cancelText="Cancelar"
+          type="danger"
+        />,
+        document.body
+      )}
     </>
   );
 };
