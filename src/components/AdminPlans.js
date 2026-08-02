@@ -5,12 +5,14 @@ import {
 } from 'lucide-react';
 import supabase from '../services/supabase';
 import { formatCurrency } from '../utils/formatters';
+import ConfirmModal from './ConfirmModal';
 
-const AdminPlans = () => {
+const AdminPlans = ({ showToast }) => {
   const [planos, setPlanos] = useState([]);
   const [loading, setLoading] = useState(true);
   const [modalOpen, setModalOpen] = useState(false);
   const [editingPlan, setEditingPlan] = useState(null);
+  const [planoParaExcluir, setPlanoParaExcluir] = useState(null);
 
   // Estado do formulário
   const [formData, setFormData] = useState({
@@ -60,17 +62,27 @@ const AdminPlans = () => {
       setEditingPlan(null);
       resetForm();
       carregarPlanos();
+      if (showToast) showToast(editingPlan ? 'Plano atualizado com sucesso!' : 'Plano criado com sucesso!', 'sucesso');
     } catch (error) {
-      alert('Erro ao salvar plano: ' + error.message);
+      if (showToast) showToast('Erro ao salvar plano: ' + error.message, 'erro');
     }
   };
 
   // --- DELETAR ---
-  const handleDelete = async (id) => {
-    if (!window.confirm('Tem certeza? Isso pode afetar a exibição para novos clientes.')) return;
-    const { error } = await supabase.from('saas_planos').delete().eq('id', id);
-    if (!error) carregarPlanos();
-    else alert("Erro ao excluir. Talvez existam empresas vinculadas a este plano.");
+  const handleDelete = (plano) => {
+    setPlanoParaExcluir(plano);
+  };
+
+  const confirmDeletePlano = async () => {
+    if (!planoParaExcluir) return;
+    const { error } = await supabase.from('saas_planos').delete().eq('id', planoParaExcluir.id);
+    if (!error) {
+      carregarPlanos();
+      if (showToast) showToast('Plano excluído.', 'sucesso');
+    } else if (showToast) {
+      showToast("Erro ao excluir. Talvez existam empresas vinculadas a este plano.", 'erro');
+    }
+    setPlanoParaExcluir(null);
   };
 
   // --- MODAL ---
@@ -253,7 +265,7 @@ const AdminPlans = () => {
                   </div>
                   <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
                     <button onClick={() => openModal(plano)} className="p-2 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"><Edit size={18} /></button>
-                    <button onClick={() => handleDelete(plano.id)} className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"><Trash2 size={18} /></button>
+                    <button onClick={() => handleDelete(plano)} className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"><Trash2 size={18} /></button>
                   </div>
                 </div>
 
@@ -289,6 +301,17 @@ const AdminPlans = () => {
         <ModalContent />,
         document.body
       )}
+
+      <ConfirmModal
+        isOpen={!!planoParaExcluir}
+        onClose={() => setPlanoParaExcluir(null)}
+        onConfirm={confirmDeletePlano}
+        title="Excluir Plano?"
+        message={`Tem certeza que deseja excluir o plano "${planoParaExcluir?.nome}"? Isso pode afetar a exibição para empresas já vinculadas a ele.`}
+        confirmText="Sim, excluir"
+        cancelText="Cancelar"
+        type="danger"
+      />
     </>
   );
 };

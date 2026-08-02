@@ -771,6 +771,7 @@ const DemandList = ({ userRole, userId, consultoriaId, showToast }) => {
         userId={userId}
         consultoriaId={consultoriaId}
         onSuccess={handleModalSuccess}
+        showToast={showToast}
       />
     </div>
   );

@@ -16,6 +16,7 @@ import {
   Clock, Filter, Plus, ChevronDown, Check, ChevronLeft, ChevronRight
 } from 'lucide-react';
 import supabase from '../services/supabase';
+import ConfirmModal from './ConfirmModal';
 
 // --- CONFIGURAÇÃO ---
 const locales = { 'pt-BR': ptBR };
@@ -192,6 +193,7 @@ const TeamCalendar = ({ userId, userRole, showToast }) => {
   const [team, setTeam] = useState([]);
   const [, setLoading] = useState(true); 
   const [modalOpen, setModalOpen] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [filterConsultant, setFilterConsultant] = useState(['todos']);
   
   // Controle de Data (Crucial para o Mobile)
@@ -345,14 +347,21 @@ const TeamCalendar = ({ userId, userRole, showToast }) => {
     }
   };
 
-  const handleDelete = async () => {
-    if (!window.confirm('Excluir?')) return;
+  const handleDelete = () => {
+    setShowDeleteConfirm(true);
+  };
+
+  const confirmDelete = async () => {
     try {
       await supabase.from('agenda_eventos').delete().eq('id', formData.id);
       setModalOpen(false);
       fetchEvents();
       if (showToast) showToast('Excluído.', 'sucesso');
-    } catch (error) { console.error(error); }
+    } catch (error) {
+      console.error(error);
+    } finally {
+      setShowDeleteConfirm(false);
+    }
   };
 
   const eventStyleGetter = (event) => {
@@ -548,6 +557,17 @@ const TeamCalendar = ({ userId, userRole, showToast }) => {
       </div>
 
       {renderModal()}
+
+      <ConfirmModal
+        isOpen={showDeleteConfirm}
+        onClose={() => setShowDeleteConfirm(false)}
+        onConfirm={confirmDelete}
+        title="Excluir Evento?"
+        message={`Deseja realmente excluir o evento "${formData.titulo}"?`}
+        confirmText="Sim, excluir"
+        cancelText="Cancelar"
+        type="danger"
+      />
     </div>
   );
 };

@@ -62,6 +62,7 @@ const DemandModal = ({
   userId,
   consultoriaId,
   onSuccess,
+  showToast,
 }) => {
   // =========================================================
   // PERMISSÕES
@@ -92,6 +93,9 @@ const DemandModal = ({
   const [showConfirmModal, setShowConfirmModal] = useState(false);
   const [deleteMode, setDeleteMode] = useState(null);
   const [deleteMessage, setDeleteMessage] = useState("");
+
+  // --- DELETE STATE (MOVIMENTAÇÃO FINANCEIRA) ---
+  const [showConfirmMovimentacao, setShowConfirmMovimentacao] = useState(false);
 
   // --- PROGRESSO ---
   const [progresso, setProgresso] = useState({
@@ -487,7 +491,7 @@ const DemandModal = ({
     setLoading(false);
 
     if (error) {
-      alert("Erro ao verificar vínculos.");
+      if (showToast) showToast("Erro ao verificar vínculos.", "erro");
       return;
     }
 
@@ -545,7 +549,7 @@ const DemandModal = ({
       onSuccess();
       onClose();
     } catch (err) {
-      alert("Erro: " + err.message);
+      if (showToast) showToast("Erro: " + err.message, "erro");
     } finally {
       setLoading(false);
       setShowConfirmModal(false);
@@ -565,7 +569,7 @@ const DemandModal = ({
     }
 
     if (!formData.titulo.trim() || !formData.cliente_id) {
-      alert("Preencha Título e Cliente.");
+      if (showToast) showToast("Preencha Título e Cliente.", "erro");
 
       return;
     }
@@ -669,7 +673,7 @@ const DemandModal = ({
       onSuccess();
       onClose();
     } catch (error) {
-      alert("Erro ao salvar: " + error.message);
+      if (showToast) showToast("Erro ao salvar: " + error.message, "erro");
     } finally {
       setLoading(false);
     }
@@ -817,7 +821,7 @@ const DemandModal = ({
       !financeiroModal.data ||
       !financeiroModal.descricao
     ) {
-      alert("Preencha todos os campos obrigatórios.");
+      if (showToast) showToast("Preencha todos os campos obrigatórios.", "erro");
 
       return;
     }
@@ -877,7 +881,7 @@ const DemandModal = ({
 
       await carregarMovimentacoes();
     } catch (error) {
-      alert("Erro ao gravar: " + error.message);
+      if (showToast) showToast("Erro ao gravar: " + error.message, "erro");
     } finally {
       setLoadingMov(false);
     }
@@ -887,19 +891,15 @@ const DemandModal = ({
   // EXCLUIR MOVIMENTAÇÃO FINANCEIRA
   // =========================================================
 
-  const excluirMovimentacao = async () => {
+  const excluirMovimentacao = () => {
     if (!canViewFinancial || !financeiroModal.id) {
       return;
     }
 
-    if (
-      !window.confirm(
-        "Tem certeza que deseja excluir este lançamento financeiro?"
-      )
-    ) {
-      return;
-    }
+    setShowConfirmMovimentacao(true);
+  };
 
+  const confirmarExclusaoMovimentacao = async () => {
     setLoadingMov(true);
 
     try {
@@ -925,9 +925,10 @@ const DemandModal = ({
     } catch (error) {
       console.error("Erro ao excluir:", error);
 
-      alert("Erro ao excluir: " + error.message);
+      if (showToast) showToast("Erro ao excluir: " + error.message, "erro");
     } finally {
       setLoadingMov(false);
+      setShowConfirmMovimentacao(false);
     }
   };
 
@@ -1977,6 +1978,17 @@ const DemandModal = ({
         title={deleteMode === "soft" ? "Inativar Demanda?" : "Excluir Demanda?"}
         message={deleteMessage}
         confirmText={deleteMode === "soft" ? "Sim, Inativar" : "Sim, Excluir"}
+        cancelText="Cancelar"
+        type="danger"
+      />
+
+      <ConfirmModal
+        isOpen={showConfirmMovimentacao}
+        onClose={() => setShowConfirmMovimentacao(false)}
+        onConfirm={confirmarExclusaoMovimentacao}
+        title="Excluir Lançamento?"
+        message={`Deseja realmente excluir o lançamento "${financeiroModal.descricao}"? Esta ação não pode ser desfeita.`}
+        confirmText="Sim, excluir"
         cancelText="Cancelar"
         type="danger"
       />

@@ -106,6 +106,10 @@ const App = () => {
 
   const [clientToInactivate, setClientToInactivate] = useState(null);
 
+  const [servicoParaExcluir, setServicoParaExcluir] = useState(null);
+
+  const [statusEmMassaPendente, setStatusEmMassaPendente] = useState(null);
+
   const [mostrarInativos, setMostrarInativos] = useState(false);
 
   const [valorHoraPadrao, setValorHoraPadrao] = useState("150.00");
@@ -749,18 +753,16 @@ const App = () => {
   // =========================================================
   // UPDATE EM MASSA
   // =========================================================
-  const handleBulkStatusUpdate = async (novoStatus) => {
+  const handleBulkStatusUpdate = (novoStatus) => {
     if (selectedIds.length === 0) {
       return;
     }
 
-    if (
-      !confirm(
-        `Tem certeza que deseja alterar o status de ${selectedIds.length} serviços para "${novoStatus}"?`
-      )
-    ) {
-      return;
-    }
+    setStatusEmMassaPendente(novoStatus);
+  };
+
+  const confirmarBulkStatusUpdate = async () => {
+    const novoStatus = statusEmMassaPendente;
 
     try {
       setLoading(true);
@@ -790,6 +792,7 @@ const App = () => {
       showToast("Erro ao atualizar serviços em massa.", "erro");
     } finally {
       setLoading(false);
+      setStatusEmMassaPendente(null);
     }
   };
 
@@ -872,11 +875,10 @@ const App = () => {
   // =========================================================
   // DELETAR SERVIÇO
   // =========================================================
-  const deletarServico = async (id) => {
-    if (!confirm("Tem certeza que deseja excluir este serviço?")) {
-      return;
-    }
 
+  // Executa a exclusão direto, sem perguntar.
+  // Usada pelo ServiceModal, que já tem sua própria confirmação.
+  const executarExclusaoServico = async (id) => {
     try {
       const { error } = await supabase
         .from("servicos_prestados")
@@ -890,15 +892,33 @@ const App = () => {
       showToast("Serviço excluído!", "sucesso");
 
       carregarDados();
-
-      return true;
     } catch (error) {
       console.error("Erro deletar:", error);
 
       showToast("Erro ao excluir serviço!", "erro");
-
-      return false;
     }
+  };
+
+  // Pergunta antes de excluir (abre o ConfirmModal).
+  // Usada pela linha da ServicesTable/Kanban, que não tem confirmação própria.
+  const deletarServico = (id) => {
+    const servico = servicos.find((item) => item.id === id);
+
+    setServicoParaExcluir({
+      id,
+      atividade: servico?.atividade,
+      cliente: servico?.cliente,
+    });
+  };
+
+  const confirmarExclusaoServico = async () => {
+    if (!servicoParaExcluir) {
+      return;
+    }
+
+    await executarExclusaoServico(servicoParaExcluir.id);
+
+    setServicoParaExcluir(null);
   };
 
   // =========================================================
@@ -1676,6 +1696,7 @@ const App = () => {
         onClose={() => setIsMobileMenuOpen(false)}
         onLogout={handleLogout}
         onOpenConfig={() => setShowConfigModal(true)}
+        showToast={showToast}
         userEmail={session?.user?.email}
         userProfile={profileData}
       />
@@ -2383,14 +2404,17 @@ const App = () => {
                 {activeTab === "admin-tenants" && isSuperAdmin && (
                   <AdminTenants
                     onViewDetails={(id) => setSelectedTenantId(id)}
+                    showToast={showToast}
                   />
                 )}
 
                 {activeTab === "admin-finance" && isSuperAdmin && (
-                  <AdminFinance />
+                  <AdminFinance showToast={showToast} />
                 )}
 
-                {activeTab === "admin-plans" && isSuperAdmin && <AdminPlans />}
+                {activeTab === "admin-plans" && isSuperAdmin && (
+                  <AdminPlans showToast={showToast} />
+                )}
               </>
             )}
           </div>
@@ -2419,7 +2443,7 @@ const App = () => {
           resetForm();
         }}
         onSave={salvarServico}
-        onDelete={deletarServico}
+        onDelete={executarExclusaoServico}
         formData={formData}
         setFormData={setFormData}
         clientes={clientesAtivos}
@@ -2471,6 +2495,32 @@ const App = () => {
         confirmText="Sim, inativar"
         cancelText="Cancelar"
         type="danger"
+      />
+
+      <ConfirmModal
+        isOpen={!!servicoParaExcluir}
+        onClose={() => setServicoParaExcluir(null)}
+        onConfirm={confirmarExclusaoServico}
+        title="Excluir Serviço?"
+        message={`Deseja realmente excluir o serviço "${
+          servicoParaExcluir?.atividade || "sem atividade"
+        }"${
+          servicoParaExcluir?.cliente ? ` (cliente: ${servicoParaExcluir.cliente})` : ""
+        }? Esta ação não pode ser desfeita.`}
+        confirmText="Sim, excluir"
+        cancelText="Cancelar"
+        type="danger"
+      />
+
+      <ConfirmModal
+        isOpen={!!statusEmMassaPendente}
+        onClose={() => setStatusEmMassaPendente(null)}
+        onConfirm={confirmarBulkStatusUpdate}
+        title="Alterar Status em Massa?"
+        message={`Tem certeza que deseja alterar o status de ${selectedIds.length} serviço(s) para "${statusEmMassaPendente}"?`}
+        confirmText="Sim, alterar"
+        cancelText="Cancelar"
+        type="info"
       />
 
       {/* =================================================== */}

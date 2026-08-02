@@ -24,7 +24,7 @@ const StatusBadge = ({ status }) => {
   );
 };
 
-const AdminTenants = ({ onViewDetails }) => {
+const AdminTenants = ({ onViewDetails, showToast }) => {
   const [tenants, setTenants] = useState([]);
   const [loading, setLoading] = useState(true);
   const [busca, setBusca] = useState('');
@@ -151,7 +151,7 @@ const AdminTenants = ({ onViewDetails }) => {
           fetchTenants(); 
       } catch (error) {
           console.error(error);
-          alert("Erro ao alterar status.");
+          if (showToast) showToast("Erro ao alterar status.", "erro");
       }
   };
 
@@ -248,8 +248,8 @@ const AdminTenants = ({ onViewDetails }) => {
       }
 
       setShowModal(false);
-      fetchTenants(); 
-      alert(editingId ? "Consultoria atualizada!" : "Consultoria e Usuário Admin criados com sucesso!");
+      fetchTenants();
+      if (showToast) showToast(editingId ? "Consultoria atualizada!" : "Consultoria e Usuário Admin criados com sucesso!", "sucesso");
 
     } catch (error) {
       console.error(error);

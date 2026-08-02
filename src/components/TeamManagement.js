@@ -7,6 +7,7 @@ import {
   Briefcase, Hash, CreditCard, Building, Landmark, AlertTriangle, Search, HeartPulse
 } from 'lucide-react';
 import supabase from '../services/supabase';
+import ConfirmModal from './ConfirmModal';
 
 // --- HELPERS ---
 const maskPhone = (value) => {
@@ -100,6 +101,7 @@ const TeamManagement = ({ showToast }) => {
 
   const [editingMember, setEditingMember] = useState(null);
   const [memberToReset, setMemberToReset] = useState(null);
+  const [memberParaStatus, setMemberParaStatus] = useState(null);
   const [resetPassword, setResetPassword] = useState('');
   
   const [newMember, setNewMember] = useState({ 
@@ -261,15 +263,20 @@ const TeamManagement = ({ showToast }) => {
     }
   };
 
-  const toggleStatus = async (member) => {
-      const novoStatus = !member.ativo;
-      if (!window.confirm(`Deseja ${novoStatus ? 'ATIVAR' : 'BLOQUEAR'} ${member.nome}?`)) return;
+  const toggleStatus = (member) => {
+      setMemberParaStatus(member);
+  };
+
+  const confirmToggleStatus = async () => {
+      if (!memberParaStatus) return;
+      const novoStatus = !memberParaStatus.ativo;
 
       try {
-        await supabase.from('profiles').update({ ativo: novoStatus }).eq('id', member.id);
+        await supabase.from('profiles').update({ ativo: novoStatus }).eq('id', memberParaStatus.id);
         if (showToast) showToast(`Status alterado.`, 'sucesso');
         loadData(true);
       } catch (error) { console.error(error); }
+      finally { setMemberParaStatus(null); }
   };
 
   const openResetModal = (member) => {
@@ -701,6 +708,17 @@ const TeamManagement = ({ showToast }) => {
           </div>
         </div>, document.body
       )}
+
+      <ConfirmModal
+        isOpen={!!memberParaStatus}
+        onClose={() => setMemberParaStatus(null)}
+        onConfirm={confirmToggleStatus}
+        title={memberParaStatus?.ativo ? "Bloquear Membro?" : "Ativar Membro?"}
+        message={`Deseja ${memberParaStatus?.ativo ? 'BLOQUEAR' : 'ATIVAR'} ${memberParaStatus?.nome}?`}
+        confirmText={memberParaStatus?.ativo ? "Sim, bloquear" : "Sim, ativar"}
+        cancelText="Cancelar"
+        type={memberParaStatus?.ativo ? "danger" : "info"}
+      />
 
     </div>
   );

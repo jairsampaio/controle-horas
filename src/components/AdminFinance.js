@@ -8,7 +8,7 @@ import {
 import supabase from '../services/supabase';
 import { formatCurrency } from '../utils/formatters';
 
-const AdminFinance = () => {
+const AdminFinance = ({ showToast }) => {
   const [faturas, setFaturas] = useState([]);
   const [tenants, setTenants] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -84,7 +84,10 @@ const AdminFinance = () => {
 
   const handleSalvarFatura = async (e) => {
     e.preventDefault();
-    if (!novaFatura.tenant_id) return alert('Selecione uma consultoria!');
+    if (!novaFatura.tenant_id) {
+      if (showToast) showToast('Selecione uma consultoria!', 'erro');
+      return;
+    }
 
     try {
       // CORREÇÃO: Mapeia tenant_id do form para consultoria_id do banco
@@ -101,13 +104,13 @@ const AdminFinance = () => {
       
       if (error) throw error;
       
-      alert('Cobrança lançada com sucesso!');
+      if (showToast) showToast('Cobrança lançada com sucesso!', 'sucesso');
       setModalOpen(false);
       setNovaFatura({ ...novaFatura, referencia: '', obs: '' });
       carregarFinanceiro();
     } catch (error) {
       console.error(error);
-      alert('Erro ao lançar cobrança: ' + error.message);
+      if (showToast) showToast('Erro ao lançar cobrança: ' + error.message, 'erro');
     }
   };
 
@@ -123,7 +126,7 @@ const AdminFinance = () => {
       if (error) throw error;
       carregarFinanceiro();
     } catch (error) {
-      alert('Erro ao atualizar status.');
+      if (showToast) showToast('Erro ao atualizar status.', 'erro');
     }
   };
 
@@ -147,8 +150,8 @@ const AdminFinance = () => {
                 >
                     <CheckCircle size={18} />
                 </button>
-                <button 
-                    onClick={() => alert(`Lembrete enviado para ${fatura.consultoria?.nome}!`)}
+                <button
+                    onClick={() => { if (showToast) showToast(`Lembrete enviado para ${fatura.consultoria?.nome}!`, 'sucesso'); }}
                     className="p-2 bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-100 transition-colors"
                     title="Enviar Lembrete"
                 >

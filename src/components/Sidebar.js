@@ -33,6 +33,7 @@ const Sidebar = ({
   onOpenConfig,
   userEmail,
   userProfile,
+  showToast,
 }) => {
   const [userRole, setUserRole] = useState(null);
   const [userName, setUserName] = useState("");
@@ -233,13 +234,13 @@ const Sidebar = ({
         msg += " Use a nova senha no próximo login.";
       }
 
-      alert(msg);
+      if (showToast) showToast(msg, "sucesso");
 
       setNewPassword("");
 
       setShowProfileModal(false);
     } catch (error) {
-      alert("Erro ao atualizar: " + error.message);
+      if (showToast) showToast("Erro ao atualizar: " + error.message, "erro");
     } finally {
       setLoadingProfile(false);
     }
