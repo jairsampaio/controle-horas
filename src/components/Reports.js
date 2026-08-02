@@ -22,6 +22,8 @@ import * as XLSX from "xlsx";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 
+import ErrorState from "./ErrorState";
+
 const Reports = () => {
   // =========================================================
   // ACESSO
@@ -35,6 +37,7 @@ const Reports = () => {
   // ESTADOS
   // =========================================================
   const [loading, setLoading] = useState(false);
+  const [erro, setErro] = useState(null);
   const [canais, setCanais] = useState([]);
   const [clientes, setClientes] = useState([]);
 
@@ -235,6 +238,7 @@ const Reports = () => {
     }
 
     setLoading(true);
+    setErro(null);
 
     try {
       // 1. Demandas da própria consultoria
@@ -428,6 +432,8 @@ const Reports = () => {
       });
     } catch (error) {
       console.error("Erro ao gerar relatório:", error);
+
+      setErro(error.message || "Não foi possível gerar o relatório.");
 
       setDados([]);
 
@@ -1034,6 +1040,8 @@ const Reports = () => {
         <div className="text-center py-20">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600 mx-auto" />
         </div>
+      ) : erro ? (
+        <ErrorState message={erro} onRetry={gerarRelatorio} />
       ) : (
         <>
           {/* ================================================= */}

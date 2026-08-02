@@ -7,12 +7,14 @@ import {
 } from 'lucide-react';
 import supabase from '../services/supabase';
 import { formatCurrency } from '../utils/formatters';
+import ErrorState from './ErrorState';
 
 const AdminFinance = ({ showToast }) => {
   const [faturas, setFaturas] = useState([]);
   const [tenants, setTenants] = useState([]);
   const [loading, setLoading] = useState(true);
   const [metrics, setMetrics] = useState({ recebido: 0, pendente: 0, vencido: 0, projecao: 0 });
+  const [erro, setErro] = useState(null);
   const [modalOpen, setModalOpen] = useState(false);
   const [filtro, setFiltro] = useState('');
   
@@ -31,6 +33,7 @@ const AdminFinance = ({ showToast }) => {
 
   const carregarFinanceiro = async () => {
     setLoading(true);
+    setErro(null);
     try {
       // 1. Busca Faturas (Corrigido para usar a relação correta se existir, ou join manual)
       // Nota: O select abaixo assume que existe uma FK 'consultoria_id' em 'saas_faturas' apontando para 'consultorias'
@@ -77,6 +80,10 @@ const AdminFinance = ({ showToast }) => {
 
     } catch (error) {
       console.error("Erro financeiro:", error);
+      setErro(error.message || "Não foi possível carregar os dados financeiros.");
+      setFaturas([]);
+      setTenants([]);
+      setMetrics({ recebido: 0, pendente: 0, vencido: 0, projecao: 0 });
     } finally {
       setLoading(false);
     }
@@ -196,164 +203,170 @@ const AdminFinance = ({ showToast }) => {
         </button>
       </div>
 
-      {/* KPI GRID */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <div className="bg-gradient-to-br from-indigo-600 to-indigo-800 p-6 rounded-3xl text-white shadow-xl shadow-indigo-200 dark:shadow-none relative overflow-hidden">
-           <div className="absolute top-0 right-0 p-4 opacity-10"><DollarSign size={100} /></div>
-           <p className="text-indigo-200 font-medium text-sm uppercase tracking-wider mb-1">Receita Realizada</p>
-           <h3 className="text-3xl font-black">{formatCurrency(metrics.recebido)}</h3>
-           <div className="mt-4 flex items-center gap-2 text-xs font-medium bg-white/10 w-fit px-2 py-1 rounded-lg backdrop-blur-sm">
-              <TrendingUp size={14} /> +12%
-           </div>
-        </div>
+      {erro ? (
+        <ErrorState message={erro} onRetry={carregarFinanceiro} />
+      ) : (
+        <>
+          {/* KPI GRID */}
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <div className="bg-gradient-to-br from-indigo-600 to-indigo-800 p-6 rounded-3xl text-white shadow-xl shadow-indigo-200 dark:shadow-none relative overflow-hidden">
+               <div className="absolute top-0 right-0 p-4 opacity-10"><DollarSign size={100} /></div>
+               <p className="text-indigo-200 font-medium text-sm uppercase tracking-wider mb-1">Receita Realizada</p>
+               <h3 className="text-3xl font-black">{formatCurrency(metrics.recebido)}</h3>
+               <div className="mt-4 flex items-center gap-2 text-xs font-medium bg-white/10 w-fit px-2 py-1 rounded-lg backdrop-blur-sm">
+                  <TrendingUp size={14} /> +12%
+               </div>
+            </div>
 
-        <div className="bg-white dark:bg-gray-800 p-6 rounded-3xl border border-gray-100 dark:border-gray-700 shadow-sm relative overflow-hidden">
-           <div className="flex justify-between items-start mb-4">
-              <div className="p-3 bg-blue-50 dark:bg-blue-900/20 text-blue-600 rounded-2xl"><Clock size={24} /></div>
-              <span className="text-xs font-bold bg-gray-100 dark:bg-gray-700 text-gray-500 px-2 py-1 rounded-lg">Previsto</span>
-           </div>
-           <p className="text-gray-400 text-xs font-bold uppercase">A Receber</p>
-           <h3 className="text-2xl font-bold text-gray-800 dark:text-white mt-1">{formatCurrency(metrics.pendente)}</h3>
-        </div>
+            <div className="bg-white dark:bg-gray-800 p-6 rounded-3xl border border-gray-100 dark:border-gray-700 shadow-sm relative overflow-hidden">
+               <div className="flex justify-between items-start mb-4">
+                  <div className="p-3 bg-blue-50 dark:bg-blue-900/20 text-blue-600 rounded-2xl"><Clock size={24} /></div>
+                  <span className="text-xs font-bold bg-gray-100 dark:bg-gray-700 text-gray-500 px-2 py-1 rounded-lg">Previsto</span>
+               </div>
+               <p className="text-gray-400 text-xs font-bold uppercase">A Receber</p>
+               <h3 className="text-2xl font-bold text-gray-800 dark:text-white mt-1">{formatCurrency(metrics.pendente)}</h3>
+            </div>
 
-        <div className="bg-white dark:bg-gray-800 p-6 rounded-3xl border border-red-100 dark:border-red-900/30 shadow-sm relative overflow-hidden">
-           <div className="flex justify-between items-start mb-4">
-              <div className="p-3 bg-red-50 dark:bg-red-900/20 text-red-500 rounded-2xl"><AlertCircle size={24} /></div>
-              {metrics.vencido > 0 && <span className="text-xs font-bold bg-red-100 text-red-600 px-2 py-1 rounded-lg animate-pulse">Atenção</span>}
-           </div>
-           <p className="text-gray-400 text-xs font-bold uppercase">Vencido</p>
-           <h3 className="text-2xl font-bold text-red-600 dark:text-red-400 mt-1">{formatCurrency(metrics.vencido)}</h3>
-        </div>
+            <div className="bg-white dark:bg-gray-800 p-6 rounded-3xl border border-red-100 dark:border-red-900/30 shadow-sm relative overflow-hidden">
+               <div className="flex justify-between items-start mb-4">
+                  <div className="p-3 bg-red-50 dark:bg-red-900/20 text-red-500 rounded-2xl"><AlertCircle size={24} /></div>
+                  {metrics.vencido > 0 && <span className="text-xs font-bold bg-red-100 text-red-600 px-2 py-1 rounded-lg animate-pulse">Atenção</span>}
+               </div>
+               <p className="text-gray-400 text-xs font-bold uppercase">Vencido</p>
+               <h3 className="text-2xl font-bold text-red-600 dark:text-red-400 mt-1">{formatCurrency(metrics.vencido)}</h3>
+            </div>
 
-        <div className="bg-white dark:bg-gray-800 p-6 rounded-3xl border border-gray-100 dark:border-gray-700 shadow-sm relative overflow-hidden">
-           <div className="flex justify-between items-start mb-4">
-              <div className="p-3 bg-green-50 dark:bg-green-900/20 text-green-600 rounded-2xl"><BarChart2 size={24} /></div>
-           </div>
-           <p className="text-gray-400 text-xs font-bold uppercase">Projeção Total</p>
-           <h3 className="text-2xl font-bold text-green-600 dark:text-green-400 mt-1">{formatCurrency(metrics.projecao)}</h3>
-        </div>
-      </div>
+            <div className="bg-white dark:bg-gray-800 p-6 rounded-3xl border border-gray-100 dark:border-gray-700 shadow-sm relative overflow-hidden">
+               <div className="flex justify-between items-start mb-4">
+                  <div className="p-3 bg-green-50 dark:bg-green-900/20 text-green-600 rounded-2xl"><BarChart2 size={24} /></div>
+               </div>
+               <p className="text-gray-400 text-xs font-bold uppercase">Projeção Total</p>
+               <h3 className="text-2xl font-bold text-green-600 dark:text-green-400 mt-1">{formatCurrency(metrics.projecao)}</h3>
+            </div>
+          </div>
 
-      {/* ÁREA PRINCIPAL: LISTA/TABELA */}
-      <div className="bg-white dark:bg-gray-800 rounded-3xl shadow-sm border border-gray-100 dark:border-gray-700 overflow-hidden flex flex-col">
-        
-        {/* Barra de Busca */}
-        <div className="p-6 border-b border-gray-100 dark:border-gray-700 flex flex-col md:flex-row gap-4 items-center justify-between bg-gray-50/50 dark:bg-gray-900/50">
-           <h3 className="font-bold text-gray-700 dark:text-gray-200 text-lg flex items-center gap-2">
-              <PieChart size={20} className="text-indigo-500"/> Histórico
-           </h3>
-           <div className="relative w-full md:w-80 group">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 group-focus-within:text-indigo-500 transition-colors" size={18} />
-              <input 
-                type="text" 
-                placeholder="Buscar cliente..." 
-                value={filtro}
-                onChange={(e) => setFiltro(e.target.value)}
-                className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-sm focus:ring-2 focus:ring-indigo-500 outline-none transition-all shadow-sm"
-              />
-           </div>
-        </div>
+          {/* ÁREA PRINCIPAL: LISTA/TABELA */}
+          <div className="bg-white dark:bg-gray-800 rounded-3xl shadow-sm border border-gray-100 dark:border-gray-700 overflow-hidden flex flex-col">
 
-        {/* --- CONTEÚDO --- */}
-        <div className="bg-gray-50 dark:bg-gray-900 p-4 md:p-0">
-            {loading ? (
-                <div className="p-12 text-center text-gray-400">Carregando dados...</div>
-            ) : faturasFiltradas.length === 0 ? (
-                <div className="p-12 text-center text-gray-400">Nenhum registro encontrado.</div>
-            ) : (
-                <>
-                    {/* VISÃO MOBILE */}
-                    <div className="space-y-4 md:hidden">
-                        {faturasFiltradas.map((fatura) => {
-                            const isAtrasado = fatura.status === 'pendente' && fatura.data_vencimento < new Date().toISOString().split('T')[0];
-                            return (
-                                <div key={fatura.id} className="bg-white dark:bg-gray-800 p-5 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 flex flex-col gap-3">
-                                    <div className="flex justify-between items-start">
-                                        <div>
-                                            <h4 className="font-bold text-gray-800 dark:text-white">{fatura.consultoria?.nome || 'Cliente Removido'}</h4>
-                                            <p className="text-xs text-gray-500">{fatura.referencia || '-'}</p>
+            {/* Barra de Busca */}
+            <div className="p-6 border-b border-gray-100 dark:border-gray-700 flex flex-col md:flex-row gap-4 items-center justify-between bg-gray-50/50 dark:bg-gray-900/50">
+               <h3 className="font-bold text-gray-700 dark:text-gray-200 text-lg flex items-center gap-2">
+                  <PieChart size={20} className="text-indigo-500"/> Histórico
+               </h3>
+               <div className="relative w-full md:w-80 group">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 group-focus-within:text-indigo-500 transition-colors" size={18} />
+                  <input
+                    type="text"
+                    placeholder="Buscar cliente..."
+                    value={filtro}
+                    onChange={(e) => setFiltro(e.target.value)}
+                    className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-sm focus:ring-2 focus:ring-indigo-500 outline-none transition-all shadow-sm"
+                  />
+               </div>
+            </div>
+
+            {/* --- CONTEÚDO --- */}
+            <div className="bg-gray-50 dark:bg-gray-900 p-4 md:p-0">
+                {loading ? (
+                    <div className="p-12 text-center text-gray-400">Carregando dados...</div>
+                ) : faturasFiltradas.length === 0 ? (
+                    <div className="p-12 text-center text-gray-400">Nenhum registro encontrado.</div>
+                ) : (
+                    <>
+                        {/* VISÃO MOBILE */}
+                        <div className="space-y-4 md:hidden">
+                            {faturasFiltradas.map((fatura) => {
+                                const isAtrasado = fatura.status === 'pendente' && fatura.data_vencimento < new Date().toISOString().split('T')[0];
+                                return (
+                                    <div key={fatura.id} className="bg-white dark:bg-gray-800 p-5 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 flex flex-col gap-3">
+                                        <div className="flex justify-between items-start">
+                                            <div>
+                                                <h4 className="font-bold text-gray-800 dark:text-white">{fatura.consultoria?.nome || 'Cliente Removido'}</h4>
+                                                <p className="text-xs text-gray-500">{fatura.referencia || '-'}</p>
+                                            </div>
+                                            <div className="text-right">
+                                                <p className="font-bold text-gray-900 dark:text-white">{formatCurrency(fatura.valor)}</p>
+                                                <p className={`text-xs ${isAtrasado ? 'text-red-500 font-bold' : 'text-gray-400'}`}>
+                                                    {new Date(fatura.data_vencimento).toLocaleDateString()}
+                                                </p>
+                                            </div>
                                         </div>
-                                        <div className="text-right">
-                                            <p className="font-bold text-gray-900 dark:text-white">{formatCurrency(fatura.valor)}</p>
-                                            <p className={`text-xs ${isAtrasado ? 'text-red-500 font-bold' : 'text-gray-400'}`}>
-                                                {new Date(fatura.data_vencimento).toLocaleDateString()}
-                                            </p>
-                                        </div>
-                                    </div>
-                                    
-                                    <div className="flex justify-between items-center pt-3 border-t border-gray-100 dark:border-gray-700">
-                                        <div>
-                                            {fatura.status === 'pago' ? (
-                                                <span className="text-xs font-bold text-green-600 bg-green-50 px-2 py-1 rounded-full">Pago</span>
-                                            ) : fatura.status === 'cancelado' ? (
-                                                <span className="text-xs font-bold text-gray-500 bg-gray-100 px-2 py-1 rounded-full">Cancelado</span>
-                                            ) : isAtrasado ? (
-                                                <span className="text-xs font-bold text-red-600 bg-red-50 px-2 py-1 rounded-full">Atrasado</span>
-                                            ) : (
-                                                <span className="text-xs font-bold text-yellow-600 bg-yellow-50 px-2 py-1 rounded-full">Aberto</span>
-                                            )}
-                                        </div>
-                                        {renderActions(fatura)}
-                                    </div>
-                                </div>
-                            );
-                        })}
-                    </div>
 
-                    {/* VISÃO DESKTOP */}
-                    <div className="hidden md:block overflow-x-auto bg-white dark:bg-gray-900">
-                        <table className="w-full text-sm text-left">
-                            <thead className="bg-gray-50 dark:bg-gray-900/50 text-gray-500 dark:text-gray-400 font-bold border-b border-gray-100 dark:border-gray-700">
-                                <tr>
-                                    <th className="px-6 py-4">Status</th>
-                                    <th className="px-6 py-4">Cliente</th>
-                                    <th className="px-6 py-4">Vencimento</th>
-                                    <th className="px-6 py-4">Referência</th>
-                                    <th className="px-6 py-4 text-right">Valor</th>
-                                    <th className="px-6 py-4 text-center">Ações</th>
-                                </tr>
-                            </thead>
-                            <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
-                                {faturasFiltradas.map((fatura) => {
-                                    const isAtrasado = fatura.status === 'pendente' && fatura.data_vencimento < new Date().toISOString().split('T')[0];
-                                    return (
-                                        <tr key={fatura.id} className="hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors group">
-                                            <td className="px-6 py-4">
+                                        <div className="flex justify-between items-center pt-3 border-t border-gray-100 dark:border-gray-700">
+                                            <div>
                                                 {fatura.status === 'pago' ? (
-                                                    <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400">
-                                                        <span className="w-1.5 h-1.5 rounded-full bg-green-500"></span> Pago
-                                                    </span>
+                                                    <span className="text-xs font-bold text-green-600 bg-green-50 px-2 py-1 rounded-full">Pago</span>
                                                 ) : fatura.status === 'cancelado' ? (
-                                                    <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-gray-100 dark:bg-gray-700 text-gray-500">
-                                                        <span className="w-1.5 h-1.5 rounded-full bg-gray-400"></span> Cancelado
-                                                    </span>
+                                                    <span className="text-xs font-bold text-gray-500 bg-gray-100 px-2 py-1 rounded-full">Cancelado</span>
                                                 ) : isAtrasado ? (
-                                                    <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400">
-                                                        <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse"></span> Atrasado
-                                                    </span>
+                                                    <span className="text-xs font-bold text-red-600 bg-red-50 px-2 py-1 rounded-full">Atrasado</span>
                                                 ) : (
-                                                    <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400">
-                                                        <span className="w-1.5 h-1.5 rounded-full bg-yellow-500"></span> Aberto
-                                                    </span>
+                                                    <span className="text-xs font-bold text-yellow-600 bg-yellow-50 px-2 py-1 rounded-full">Aberto</span>
                                                 )}
-                                            </td>
-                                            <td className="px-6 py-4 font-bold text-gray-800 dark:text-white">{fatura.consultoria?.nome}</td>
-                                            <td className="px-6 py-4 text-gray-600 dark:text-gray-400 font-mono text-xs">{new Date(fatura.data_vencimento).toLocaleDateString()}</td>
-                                            <td className="px-6 py-4 text-gray-500 dark:text-gray-400">{fatura.referencia || '-'}</td>
-                                            <td className="px-6 py-4 text-right font-bold text-gray-800 dark:text-white font-mono">{formatCurrency(fatura.valor)}</td>
-                                            <td className="px-6 py-4 text-center opacity-0 group-hover:opacity-100 transition-opacity">
-                                                {renderActions(fatura)}
-                                            </td>
-                                        </tr>
-                                    );
-                                })}
-                            </tbody>
-                        </table>
-                    </div>
-                </>
-            )}
-        </div>
-      </div>
+                                            </div>
+                                            {renderActions(fatura)}
+                                        </div>
+                                    </div>
+                                );
+                            })}
+                        </div>
+
+                        {/* VISÃO DESKTOP */}
+                        <div className="hidden md:block overflow-x-auto bg-white dark:bg-gray-900">
+                            <table className="w-full text-sm text-left">
+                                <thead className="bg-gray-50 dark:bg-gray-900/50 text-gray-500 dark:text-gray-400 font-bold border-b border-gray-100 dark:border-gray-700">
+                                    <tr>
+                                        <th className="px-6 py-4">Status</th>
+                                        <th className="px-6 py-4">Cliente</th>
+                                        <th className="px-6 py-4">Vencimento</th>
+                                        <th className="px-6 py-4">Referência</th>
+                                        <th className="px-6 py-4 text-right">Valor</th>
+                                        <th className="px-6 py-4 text-center">Ações</th>
+                                    </tr>
+                                </thead>
+                                <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
+                                    {faturasFiltradas.map((fatura) => {
+                                        const isAtrasado = fatura.status === 'pendente' && fatura.data_vencimento < new Date().toISOString().split('T')[0];
+                                        return (
+                                            <tr key={fatura.id} className="hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors group">
+                                                <td className="px-6 py-4">
+                                                    {fatura.status === 'pago' ? (
+                                                        <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400">
+                                                            <span className="w-1.5 h-1.5 rounded-full bg-green-500"></span> Pago
+                                                        </span>
+                                                    ) : fatura.status === 'cancelado' ? (
+                                                        <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-gray-100 dark:bg-gray-700 text-gray-500">
+                                                            <span className="w-1.5 h-1.5 rounded-full bg-gray-400"></span> Cancelado
+                                                        </span>
+                                                    ) : isAtrasado ? (
+                                                        <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400">
+                                                            <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse"></span> Atrasado
+                                                        </span>
+                                                    ) : (
+                                                        <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400">
+                                                            <span className="w-1.5 h-1.5 rounded-full bg-yellow-500"></span> Aberto
+                                                        </span>
+                                                    )}
+                                                </td>
+                                                <td className="px-6 py-4 font-bold text-gray-800 dark:text-white">{fatura.consultoria?.nome}</td>
+                                                <td className="px-6 py-4 text-gray-600 dark:text-gray-400 font-mono text-xs">{new Date(fatura.data_vencimento).toLocaleDateString()}</td>
+                                                <td className="px-6 py-4 text-gray-500 dark:text-gray-400">{fatura.referencia || '-'}</td>
+                                                <td className="px-6 py-4 text-right font-bold text-gray-800 dark:text-white font-mono">{formatCurrency(fatura.valor)}</td>
+                                                <td className="px-6 py-4 text-center opacity-0 group-hover:opacity-100 transition-opacity">
+                                                    {renderActions(fatura)}
+                                                </td>
+                                            </tr>
+                                        );
+                                    })}
+                                </tbody>
+                            </table>
+                        </div>
+                    </>
+                )}
+            </div>
+          </div>
+        </>
+      )}
 
       {/* MODAL NOVA COBRANÇA */}
       {modalOpen && createPortal(
