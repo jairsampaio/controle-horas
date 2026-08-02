@@ -348,22 +348,28 @@ const Sidebar = ({
               label="Gestão de Demandas"
             />
 
-            <MenuButton
-              id="channels"
-              icon={Building2}
-              label="Canais / Parceiros"
-            />
-
-            <MenuButton id="clientes" icon={Users} label="Clientes" />
-
             <MenuButton id="agenda" icon={Calendar} label="Agenda da Equipe" />
 
-            {/* ADMIN / DONO / SUPER ADMIN */}
             <MenuButton
               id="reports"
               icon={BarChart3}
               label="Relatórios"
               allowedRoles={["admin", "dono", "super_admin"]}
+            />
+          </div>
+
+          {/* CADASTROS */}
+          <div className="pb-2 mb-2 border-b border-gray-100 dark:border-gray-800">
+            <p className="px-4 text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-2">
+              Cadastros
+            </p>
+
+            <MenuButton id="clientes" icon={Users} label="Clientes" />
+
+            <MenuButton
+              id="channels"
+              icon={Building2}
+              label="Canais / Parceiros"
             />
 
             <MenuButton

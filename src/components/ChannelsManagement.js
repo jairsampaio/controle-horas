@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { createPortal } from 'react-dom'; 
-import { Plus, Trash2, Edit2, Save, RotateCcw, Building2, Eye, EyeOff, Search, AlertCircle } from 'lucide-react'; 
+import { createPortal } from 'react-dom';
+import { Plus, Trash2, Edit2, RotateCcw, Building2, Eye, EyeOff, Search, AlertCircle } from 'lucide-react';
 import supabase from '../services/supabase';
-import ConfirmModal from './ConfirmModal'; 
+import ConfirmModal from './ConfirmModal';
+import ChannelModal from './ChannelModal';
 
 const ChannelsManagement = ({
   userId,
@@ -15,16 +16,16 @@ const ChannelsManagement = ({
 }) => {
   const [canais, setCanais] = useState([]);
   const [loading, setLoading] = useState(false);
-  const [mostrarInativos, setMostrarInativos] = useState(false); 
+  const [mostrarInativos, setMostrarInativos] = useState(false);
   const [busca, setBusca] = useState('');
-  
+
   // Estado para armazenar o ID da consultoria
   const [consultoriaId, setConsultoriaId] = useState(null);
 
-  // Estados do Formulário
-  const [nome, setNome] = useState('');
-  const [ativo, setAtivo] = useState(true);
-  const [editingId, setEditingId] = useState(null);
+  // Estados do Formulário / Modal
+  const [showModal, setShowModal] = useState(false);
+  const [editingCanal, setEditingCanal] = useState(null);
+  const [formData, setFormData] = useState({ nome: '', ativo: true });
 
   // Estados para o Modal de Confirmação
   const [showConfirm, setShowConfirm] = useState(false);
@@ -82,24 +83,20 @@ const ChannelsManagement = ({
   }, [carregarCanais]);
 
   const resetForm = () => {
-    setNome('');
-    setAtivo(true);
-    setEditingId(null);
+    setFormData({ nome: '', ativo: true });
+    setEditingCanal(null);
   };
 
   const handleEditar = (canal) => {
-    setEditingId(canal.id);
-    setNome(canal.nome);
-    setAtivo(canal.ativo);
-    // Rola para o topo (mobile friendly)
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+    setEditingCanal(canal);
+    setFormData({ nome: canal.nome, ativo: canal.ativo });
+    setShowModal(true);
   };
 
   // --- 3. SALVAR (Incluindo consultoria_id) ---
-  const handleSalvar = async (e) => {
-    e.preventDefault();
-    if (!nome.trim()) return;
-    
+  const handleSalvar = async () => {
+    if (!formData.nome.trim()) return;
+
     // Validação de segurança: Nunca salvar sem vincular à consultoria
     if (!userId || !consultoriaId) {
         if(showToast) showToast('Erro crítico: Consultoria não identificada.', 'erro');
@@ -107,16 +104,16 @@ const ChannelsManagement = ({
     }
 
     const payload = {
-      nome: nome,
-      ativo: ativo,
+      nome: formData.nome,
+      ativo: formData.ativo,
       user_id: userId, // Log de quem criou/editou
       consultoria_id: consultoriaId // Vínculo obrigatório
     };
 
     let error;
 
-    if (editingId) {
-      const { error: updateError } = await supabase.from('canais').update(payload).eq('id', editingId);
+    if (editingCanal) {
+      const { error: updateError } = await supabase.from('canais').update(payload).eq('id', editingCanal.id);
       error = updateError;
     } else {
       const { error: insertError } = await supabase.from('canais').insert([payload]);
@@ -127,7 +124,8 @@ const ChannelsManagement = ({
       console.error(error);
       if(showToast) showToast('Erro ao salvar: ' + error.message, 'erro');
     } else {
-      if(showToast) showToast(editingId ? 'Canal atualizado!' : 'Canal criado!', 'sucesso');
+      if(showToast) showToast(editingCanal ? 'Canal atualizado!' : 'Canal criado!', 'sucesso');
+      setShowModal(false);
       resetForm();
       carregarCanais();
     }
@@ -149,13 +147,13 @@ const ChannelsManagement = ({
 
     if (!error) {
         if(showToast) showToast('Canal inativado.', 'sucesso');
-        if (editingId === canalAlvo.id) resetForm();
+        if (editingCanal?.id === canalAlvo.id) resetForm();
         carregarCanais();
     } else {
         if(showToast) showToast('Erro ao inativar.', 'erro');
     }
     setCanalAlvo(null);
-    setShowConfirm(false); 
+    setShowConfirm(false);
   };
 
   const handleReativar = async (id) => {
@@ -182,79 +180,25 @@ const ChannelsManagement = ({
           </h1>
           <p className="text-gray-500 dark:text-gray-400 text-sm">Gerencie as origens dos seus serviços (Indicações, Parcerias, etc).</p>
         </div>
+
+        {isAdmin && (
+          <button
+            onClick={() => {
+              resetForm();
+              setShowModal(true);
+            }}
+            className="bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-400 px-3 md:px-4 py-2 rounded-lg text-sm font-bold hover:bg-indigo-100 dark:hover:bg-indigo-900/50 transition-colors flex items-center gap-2"
+            title="Cadastrar Novo"
+          >
+            <Plus size={18} />
+            <span>Cadastrar</span>
+          </button>
+        )}
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          
-          {/* COLUNA 1: FORMULÁRIO (STICKY) */}
-          {isAdmin && (
-            <div className="lg:col-span-1">
-                <div className={`p-6 rounded-2xl shadow-sm border transition-colors sticky top-6
-                    ${editingId
-                        ? 'bg-orange-50 dark:bg-orange-900/10 border-orange-200 dark:border-orange-800'
-                        : 'bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700'}`}>
+      <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-200 dark:border-gray-700 flex flex-col min-h-[400px]">
 
-                    <h3 className={`text-lg font-bold mb-4 flex items-center gap-2
-                        ${editingId ? 'text-orange-700 dark:text-orange-400' : 'text-gray-700 dark:text-gray-200'}`}>
-                        {editingId ? <Edit2 size={20} /> : <Plus size={20} />}
-                        {editingId ? 'Editar Canal' : 'Novo Canal'}
-                    </h3>
-
-                    <form onSubmit={handleSalvar} className="space-y-4">
-                        <div>
-                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Nome do Canal</label>
-                            <input
-                                type="text"
-                                placeholder="Ex: Indicação Dr. Silva"
-                                value={nome}
-                                onChange={(e) => setNome(e.target.value)}
-                                className="w-full border rounded-lg px-4 py-2.5 outline-none focus:ring-2 focus:ring-indigo-500 bg-white dark:bg-gray-900 border-gray-300 dark:border-gray-600 text-gray-900 dark:text-white transition-all"
-                                required
-                            />
-                        </div>
-
-                        <div className="flex items-center gap-2 p-3 bg-gray-50 dark:bg-gray-900/50 rounded-lg border border-gray-100 dark:border-gray-700">
-                            <input
-                                type="checkbox"
-                                id="checkAtivo"
-                                checked={ativo}
-                                onChange={e => setAtivo(e.target.checked)}
-                                className="w-5 h-5 text-indigo-600 rounded focus:ring-indigo-500 cursor-pointer"
-                            />
-                            <label htmlFor="checkAtivo" className="text-sm text-gray-700 dark:text-gray-300 font-medium select-none cursor-pointer">
-                                Canal Ativo (Visível)
-                            </label>
-                        </div>
-
-                        <div className="flex gap-3 pt-2">
-                            {editingId && (
-                                <button
-                                type="button"
-                                onClick={resetForm}
-                                className="flex-1 bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 text-gray-700 dark:text-gray-300 py-2.5 rounded-xl text-sm font-bold hover:bg-gray-50 dark:hover:bg-gray-600 transition-colors flex justify-center items-center gap-2"
-                                >
-                                <RotateCcw size={16} /> Cancelar
-                                </button>
-                            )}
-
-                            <button
-                                type="submit"
-                                className={`flex-1 text-white py-2.5 rounded-xl text-sm font-bold flex justify-center items-center gap-2 transition-all shadow-lg active:scale-95
-                                    ${editingId ? 'bg-orange-500 hover:bg-orange-600 shadow-orange-200' : 'bg-indigo-600 hover:bg-indigo-700 shadow-indigo-200 dark:shadow-none'}`}
-                            >
-                                <Save size={18} /> {editingId ? 'Salvar Alterações' : 'Cadastrar'}
-                            </button>
-                        </div>
-                    </form>
-                </div>
-            </div>
-          )}
-
-          {/* COLUNA 2: LISTA DE CANAIS */}
-          <div className={isAdmin ? "lg:col-span-2" : "lg:col-span-3"}>
-              <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-200 dark:border-gray-700 flex flex-col h-full min-h-[400px]">
-                  
-                  {/* Barra de Filtro */}
+          {/* Barra de Filtro */}
                   <div className="p-4 border-b border-gray-100 dark:border-gray-700 flex justify-between items-center gap-4">
                       <div className="relative flex-1">
                           <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
@@ -289,7 +233,7 @@ const ChannelsManagement = ({
                           </div>
                       ) : (
                           canaisFiltrados.map(canal => {
-                              const isEditing = canal.id === editingId;
+                              const isEditing = canal.id === editingCanal?.id;
                               const isInactive = !canal.ativo;
 
                               return (
@@ -346,8 +290,6 @@ const ChannelsManagement = ({
                           })
                       )}
                   </div>
-              </div>
-          </div>
       </div>
 
       {showConfirm && createPortal(
@@ -363,6 +305,15 @@ const ChannelsManagement = ({
         />,
         document.body
       )}
+
+      <ChannelModal
+        isOpen={showModal}
+        onClose={() => setShowModal(false)}
+        onSave={handleSalvar}
+        formData={formData}
+        setFormData={setFormData}
+        isEditing={!!editingCanal}
+      />
     </div>
   );
 };

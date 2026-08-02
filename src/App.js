@@ -996,7 +996,7 @@ const App = () => {
 
         clienteSalvo = data;
 
-        showToast("Cliente criado! Cadastre a equipe agora.", "sucesso");
+        showToast("Cliente criado! Cadastre os contatos agora.", "sucesso");
       }
 
       setShowClienteModal(false);

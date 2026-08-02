@@ -23,7 +23,7 @@ const ClientsTable = ({
   onReactivate,
 
   // Neste componente, isAdmin significa:
-  // pode criar, editar, inativar/reativar cliente e gerenciar a equipe (solicitantes).
+  // pode criar, editar, inativar/reativar cliente e gerenciar os contatos (solicitantes).
   // Portanto, Admin, Dono, GP e Super Admin recebem true.
   isAdmin,
 }) => {
@@ -94,7 +94,7 @@ const ClientsTable = ({
                  <button
                    onClick={() => onManageTeam(cliente)}
                    className="p-2 text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-900/20 rounded-lg active:scale-95 transition-transform"
-                   title="Gerenciar Equipe (Solicitantes)"
+                   title="Contatos"
                  >
                    <Users size={20}/>
                  </button>
@@ -190,7 +190,7 @@ const ClientsTable = ({
                   {isAdmin && (
                     <div className="flex justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
 
-                      <button onClick={() => onManageTeam(cliente)} className="text-gray-400 hover:text-indigo-600 dark:text-gray-500 dark:hover:text-indigo-400 p-1.5 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 rounded" title="Equipe / Solicitantes">
+                      <button onClick={() => onManageTeam(cliente)} className="text-gray-400 hover:text-indigo-600 dark:text-gray-500 dark:hover:text-indigo-400 p-1.5 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 rounded" title="Contatos">
                         <Users size={18} />
                       </button>
 

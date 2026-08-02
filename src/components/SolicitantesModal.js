@@ -130,7 +130,7 @@ const SolicitantesModal = ({ isOpen, onClose, cliente, userId, showToast }) => {
     if (error) {
       if (showToast) showToast('Erro: ' + error.message, 'erro');
     } else { 
-      if (showToast) showToast(editingId ? 'Dados atualizados!' : 'Solicitante cadastrado!', 'sucesso');
+      if (showToast) showToast(editingId ? 'Dados atualizados!' : 'Contato cadastrado!', 'sucesso');
       resetForm(); 
       carregarSolicitantes(); 
     }
@@ -156,7 +156,7 @@ const SolicitantesModal = ({ isOpen, onClose, cliente, userId, showToast }) => {
     const { error } = await supabase.from('solicitantes').update({ ativo: false }).eq('id', solicitanteAlvo.id);
     
     if (!error) { 
-      if (showToast) showToast('Solicitante inativado.', 'sucesso');
+      if (showToast) showToast('Contato inativado.', 'sucesso');
       if (editingId === solicitanteAlvo.id) resetForm(); 
       carregarSolicitantes(); 
     }
@@ -167,7 +167,7 @@ const SolicitantesModal = ({ isOpen, onClose, cliente, userId, showToast }) => {
   const handleReativar = async (sol) => {
     const { error } = await supabase.from('solicitantes').update({ ativo: true }).eq('id', sol.id);
     if (!error) {
-        if (showToast) showToast('Solicitante reativado!', 'sucesso');
+        if (showToast) showToast('Contato reativado!', 'sucesso');
         carregarSolicitantes();
     }
   };
@@ -188,7 +188,7 @@ const SolicitantesModal = ({ isOpen, onClose, cliente, userId, showToast }) => {
             <div>
                 <h2 className="text-xl font-bold flex items-center gap-2">
                     {editingId ? <Edit2 size={20}/> : <UserCheck size={20}/>}
-                    {editingId ? 'Editando Solicitante' : 'Gestão de Solicitantes'}
+                    {editingId ? 'Editando Contato' : 'Contatos do Cliente'}
                 </h2>
                 <p className="text-xs opacity-90 truncate max-w-[250px] flex items-center gap-1 mt-1">
                     <User size={12}/> Cliente: <strong>{cliente?.nome}</strong>
@@ -209,7 +209,7 @@ const SolicitantesModal = ({ isOpen, onClose, cliente, userId, showToast }) => {
                 <div className="flex justify-between items-start">
                     <h3 className={`text-sm font-bold flex items-center gap-2 uppercase tracking-wide
                         ${editingId ? 'text-orange-700 dark:text-orange-400' : 'text-gray-600 dark:text-gray-400'}`}>
-                        {editingId ? 'Dados do Solicitante' : 'Novo Cadastro'}
+                        {editingId ? 'Dados do Contato' : 'Novo Cadastro'}
                     </h3>
                     
                     <div className="flex items-center gap-2">
@@ -308,7 +308,7 @@ const SolicitantesModal = ({ isOpen, onClose, cliente, userId, showToast }) => {
             <div className="space-y-4">
                 <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 border-b border-gray-100 dark:border-gray-700 pb-3">
                     <h3 className="text-sm font-bold text-gray-700 dark:text-gray-300 flex items-center gap-2">
-                        Lista de Solicitantes
+                        Lista de Contatos
                         <span className="bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 text-xs px-2 py-0.5 rounded-full font-mono">
                             {filteredSolicitantes.length}
                         </span>
@@ -347,7 +347,7 @@ const SolicitantesModal = ({ isOpen, onClose, cliente, userId, showToast }) => {
                     {!loading && filteredSolicitantes.length === 0 && (
                         <div className="text-center py-8 border-2 border-dashed border-gray-100 dark:border-gray-700 rounded-lg">
                             <User size={32} className="mx-auto text-gray-300 mb-2"/>
-                            <p className="text-sm text-gray-400">Nenhum solicitante encontrado.</p>
+                            <p className="text-sm text-gray-400">Nenhum contato encontrado.</p>
                         </div>
                     )}
                     
@@ -427,7 +427,7 @@ const SolicitantesModal = ({ isOpen, onClose, cliente, userId, showToast }) => {
         isOpen={showConfirm}
         onClose={() => setShowConfirm(false)}
         onConfirm={confirmarInativacao}
-        title="Inativar Solicitante?"
+        title="Inativar Contato?"
         message={`Deseja realmente inativar "${solicitanteAlvo?.nome}"? Ele não poderá ser selecionado em novas demandas.`}
         confirmText="Sim, inativar"
         cancelText="Cancelar"
