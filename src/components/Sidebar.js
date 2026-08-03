@@ -8,7 +8,6 @@ import {
   LogOut,
   X,
   ShieldCheck,
-  Wallet,
   FileText,
   Building2,
   Lightbulb,
@@ -142,7 +141,7 @@ const Sidebar = ({
     }
 
     if (isSuperAdmin) {
-      tabs.push("admin-tenants", "admin-finance", "admin-plans");
+      tabs.push("admin-tenants", "admin-plans");
     }
 
     return tabs;
@@ -391,13 +390,6 @@ const Sidebar = ({
                 id="admin-tenants"
                 icon={ShieldCheck}
                 label="Gestão de Assinantes"
-                allowedRoles={["super_admin"]}
-              />
-
-              <MenuButton
-                id="admin-finance"
-                icon={Wallet}
-                label="Financeiro SaaS"
                 allowedRoles={["super_admin"]}
               />
 

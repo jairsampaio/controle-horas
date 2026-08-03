@@ -14,7 +14,6 @@ import {
   Eye,
   EyeOff,
   ShieldCheck,
-  Wallet,
   LayoutList,
   Kanban,
   Target,
@@ -42,7 +41,6 @@ import ChannelsManagement from "./components/ChannelsManagement";
 import Sidebar from "./components/Sidebar";
 import AdminTenants from "./components/AdminTenants";
 import AdminModal from "./components/AdminModal";
-import AdminFinance from "./components/AdminFinance";
 import AdminPlans from "./components/AdminPlans";
 import TeamManagement from "./components/TeamManagement";
 import AccessDenied from "./components/AccessDenied";
@@ -171,7 +169,7 @@ const App = () => {
     }
 
     if (isSuperAdmin) {
-      tabsPermitidas.push("admin-tenants", "admin-finance", "admin-plans");
+      tabsPermitidas.push("admin-tenants", "admin-plans");
     }
 
     if (!tabsPermitidas.includes(activeTab)) {
@@ -1793,13 +1791,6 @@ const App = () => {
                 </>
               )}
 
-              {activeTab === "admin-finance" && isSuperAdmin && (
-                <>
-                  <Wallet className="text-yellow-600 dark:text-yellow-400" />
-                  Financeiro
-                </>
-              )}
-
               {activeTab === "admin-plans" && isSuperAdmin && (
                 <>
                   <FileText className="text-yellow-600 dark:text-yellow-400" />
@@ -2420,10 +2411,6 @@ const App = () => {
                     onViewDetails={(id) => setSelectedTenantId(id)}
                     showToast={showToast}
                   />
-                )}
-
-                {activeTab === "admin-finance" && isSuperAdmin && (
-                  <AdminFinance showToast={showToast} />
                 )}
 
                 {activeTab === "admin-plans" && isSuperAdmin && (
