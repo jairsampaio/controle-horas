@@ -657,8 +657,22 @@ const App = () => {
     getSession();
 
     const { data: authListener } = supabase.auth.onAuthStateChange(
-      (event, session) => {
-        setSession(session);
+      (event, newSession) => {
+        setSession((prevSession) => {
+          const tokenAnterior = prevSession?.access_token ?? null;
+          const tokenNovo = newSession?.access_token ?? null;
+
+          // O GoTrue notifica SIGNED_IN toda vez que a aba volta ao foco,
+          // mesmo sem o token ter mudado de verdade (visibilitychange interno
+          // do auth-js). Se o token é o mesmo, devolve a MESMA referência
+          // para o React não re-renderizar e o efeito de recarregar dados
+          // (dep [session]) não disparar à toa.
+          if (tokenAnterior === tokenNovo) {
+            return prevSession;
+          }
+
+          return newSession;
+        });
 
         if (event === "SIGNED_IN") {
           setAccessDeniedType(null);
