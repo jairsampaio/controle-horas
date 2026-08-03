@@ -41,7 +41,6 @@ import ChannelsManagement from "./components/ChannelsManagement";
 import Sidebar from "./components/Sidebar";
 import AdminTenants from "./components/AdminTenants";
 import AdminModal from "./components/AdminModal";
-import AdminPlans from "./components/AdminPlans";
 import TeamManagement from "./components/TeamManagement";
 import AccessDenied from "./components/AccessDenied";
 import DemandList from "./components/DemandList";
@@ -169,7 +168,7 @@ const App = () => {
     }
 
     if (isSuperAdmin) {
-      tabsPermitidas.push("admin-tenants", "admin-plans");
+      tabsPermitidas.push("admin-tenants");
     }
 
     if (!tabsPermitidas.includes(activeTab)) {
@@ -1791,12 +1790,6 @@ const App = () => {
                 </>
               )}
 
-              {activeTab === "admin-plans" && isSuperAdmin && (
-                <>
-                  <FileText className="text-yellow-600 dark:text-yellow-400" />
-                  Planos & Preços
-                </>
-              )}
             </h1>
           </div>
 
@@ -2413,9 +2406,6 @@ const App = () => {
                   />
                 )}
 
-                {activeTab === "admin-plans" && isSuperAdmin && (
-                  <AdminPlans showToast={showToast} />
-                )}
               </>
             )}
           </div>

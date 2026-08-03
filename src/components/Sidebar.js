@@ -8,7 +8,6 @@ import {
   LogOut,
   X,
   ShieldCheck,
-  FileText,
   Building2,
   Lightbulb,
   User,
@@ -141,7 +140,7 @@ const Sidebar = ({
     }
 
     if (isSuperAdmin) {
-      tabs.push("admin-tenants", "admin-plans");
+      tabs.push("admin-tenants");
     }
 
     return tabs;
@@ -393,12 +392,6 @@ const Sidebar = ({
                 allowedRoles={["super_admin"]}
               />
 
-              <MenuButton
-                id="admin-plans"
-                icon={FileText}
-                label="Planos & Preços"
-                allowedRoles={["super_admin"]}
-              />
             </div>
           )}
         </nav>
